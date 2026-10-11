@@ -1,0 +1,22 @@
+title: Docker
+description: Logs and CPU, memory and network usage of every container of the local Docker (or Podman) daemon.
+detect:
+  process: [dockerd]
+params:
+  socket:
+    default: /var/run/docker.sock
+    description: The daemon's API socket.
+config:
+  docker:
+    enabled: true
+    socket: "${socket}"
+rules:
+  - name: alerts
+    interval: 1m
+    rules:
+      - alert: ContainerMemoryNearLimit
+        expr: container_memory_usage_bytes / (container_memory_limit_bytes > 0) > 0.9 and container_memory_limit_bytes < 1e15
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: 'Container {{ $labels.container }} on {{ $labels.agent }} uses {{ $value | humanizePercentage }} of its memory limit'

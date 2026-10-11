@@ -1,0 +1,92 @@
+# vigil cluster agent: ONE per cluster, next to the per-node DaemonSet in
+# k8s-agent.yaml (apply that first; it creates the namespace and the secret
+# is shared). It reports the state of the cluster's objects (nodes,
+# deployments, stateful sets, daemon sets, jobs, volume claims, pods no
+# node has taken) and the cluster's events. It needs no privileges and no
+# host access; it only reads the Kubernetes API.
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: vigil-cluster-agent, namespace: vigil}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: {name: vigil-cluster-agent}
+rules:
+  - apiGroups: [""]
+    resources: [nodes, pods, events, persistentvolumeclaims]
+    verbs: [list]
+  - apiGroups: [apps]
+    resources: [deployments, statefulsets, daemonsets]
+    verbs: [list]
+  - apiGroups: [batch]
+    resources: [jobs, cronjobs]
+    verbs: [list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: {name: vigil-cluster-agent}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: vigil-cluster-agent}
+subjects:
+  - {kind: ServiceAccount, name: vigil-cluster-agent, namespace: vigil}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: vigil-cluster-agent, namespace: vigil}
+data:
+  agent.yaml: |
+    server:
+      url: https://vigil.example.internal:8080
+      # This pod has no disk that outlives it, so it cannot keep an enrolled
+      # token. Give it a token of its own: Fleet > Add agent with the
+      # agent_id below, then
+      #   kubectl -n vigil patch secret vigil-agent -p '{"stringData":{"cluster-token":"vgl_..."}}'
+      # Without one it uses the shared ingest token, if the secret has it
+      # (then leave cluster-token out).
+      token: ${VIGIL_CLUSTER_TOKEN}${VIGIL_INGEST_TOKEN}   # only one of the two is set
+      ca_pin: ${VIGIL_CA_PIN}
+    # One id per cluster; the same cluster label as the DaemonSet.
+    agent_id: my-cluster-state
+    spool_dir: /var/lib/vigil/spool
+    labels:
+      cluster: my-cluster
+    # What follows applies until a profile on the server matches this agent
+    # (it reports the fact kubernetes_role="cluster").
+    host_metrics: false
+    cluster:
+      enabled: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: vigil-cluster-agent, namespace: vigil}
+spec:
+  replicas: 1                # exactly one: two would report everything twice
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: vigil-cluster-agent}
+  template:
+    metadata:
+      labels: {app: vigil-cluster-agent}
+    spec:
+      serviceAccountName: vigil-cluster-agent
+      containers:
+        - name: agent
+          image: vigil:dev       # replace with your registry/image
+          args: ["agent", "-config", "/etc/vigil/agent.yaml"]
+          env:
+            - name: VIGIL_INGEST_TOKEN
+              valueFrom: {secretKeyRef: {name: vigil-agent, key: token, optional: true}}
+            - name: VIGIL_CLUSTER_TOKEN
+              valueFrom: {secretKeyRef: {name: vigil-agent, key: cluster-token, optional: true}}
+            - name: VIGIL_CA_PIN
+              valueFrom: {secretKeyRef: {name: vigil-agent, key: ca-pin, optional: true}}
+          resources:
+            requests: {cpu: 20m, memory: 32Mi}
+            limits: {memory: 256Mi}
+          volumeMounts:
+            - {name: config, mountPath: /etc/vigil}
+            - {name: spool, mountPath: /var/lib/vigil}
+      volumes:
+        - name: config
+          configMap: {name: vigil-cluster-agent}
+        - name: spool
+          emptyDir: {}

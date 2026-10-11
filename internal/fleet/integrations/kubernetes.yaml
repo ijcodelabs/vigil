@@ -1,0 +1,94 @@
+title: Kubernetes node
+description: For agents running as a DaemonSet. Metrics of pods that ask to be scraped, CPU and memory of every container, pod state and restarts, and the logs of every pod on the node.
+detect:
+  process: [kubelet, k3s, k3s-server, k3s-agent]
+params:
+  interval:
+    default: "30s"
+    description: How often container usage and pod state are read.
+config:
+  scrape:
+    kubernetes:
+      enabled: true
+    kubelet:
+      enabled: true
+      interval: "${interval}"
+  logs:
+    kubernetes:
+      enabled: true
+rules:
+  - name: alerts
+    interval: 1m
+    rules:
+      - alert: PodCrashLooping
+        expr: kube_pod_container_status_waiting_reason{reason="CrashLoopBackOff"} == 1
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: 'Container {{ $labels.container }} of {{ $labels.namespace }}/{{ $labels.pod }} keeps crashing'
+      - alert: ContainerRestarting
+        expr: increase(kube_pod_container_status_restarts_total[30m]) > 3
+        labels: {severity: warning}
+        annotations:
+          summary: 'Container {{ $labels.container }} of {{ $labels.namespace }}/{{ $labels.pod }} restarted {{ $value | humanize }} times in 30 minutes'
+      - alert: PodNotReady
+        expr: kube_pod_container_status_ready == 0 and on (agent, namespace, pod) kube_pod_status_phase{phase="Running"} == 1
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: 'Container {{ $labels.container }} of {{ $labels.namespace }}/{{ $labels.pod }} is running but not ready'
+      - alert: PodStuckPending
+        expr: kube_pod_status_phase{phase="Pending"} == 1
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: 'Pod {{ $labels.namespace }}/{{ $labels.pod }} has been pending for 10 minutes'
+      - alert: ContainerOutOfMemory
+        expr: increase(container_oom_events_total[10m]) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: 'Container {{ $labels.container }} of {{ $labels.namespace }}/{{ $labels.pod }} was killed for using too much memory'
+      - alert: ContainerCPUThrottled
+        expr: rate(container_cpu_cfs_throttled_periods_total[5m]) / rate(container_cpu_cfs_periods_total[5m]) > 0.5
+        for: 15m
+        labels: {severity: info}
+        annotations:
+          summary: 'Container {{ $labels.container }} of {{ $labels.namespace }}/{{ $labels.pod }} is held back by its CPU limit {{ $value | humanizePercentage }} of the time'
+dashboard:
+  title: Kubernetes
+  variables:
+    - {name: cluster, label: cluster, match: kube_pod_status_phase}
+    - {name: namespace, label: namespace, match: kube_pod_status_phase}
+  panels:
+    - {title: Pods running, type: stat, w: 3, h: 2, queries: [{expr: 'count(kube_pod_status_phase{phase="Running",cluster=~"$cluster",namespace=~"$namespace"}) or vector(0)'}]}
+    - {title: Pods pending, type: stat, w: 3, h: 2, warn: 1, queries: [{expr: 'count(kube_pod_status_phase{phase="Pending",cluster=~"$cluster",namespace=~"$namespace"}) or vector(0)'}]}
+    - {title: Containers not ready, type: stat, w: 3, h: 2, warn: 1, queries: [{expr: 'count(kube_pod_container_status_ready{cluster=~"$cluster",namespace=~"$namespace"} == 0) or vector(0)'}]}
+    - {title: Restarts in the last hour, type: stat, w: 3, h: 2, warn: 1, crit: 10, queries: [{expr: 'sum(increase(kube_pod_container_status_restarts_total{cluster=~"$cluster",namespace=~"$namespace"}[1h])) or vector(0)'}]}
+    - title: CPU by pod
+      type: timeseries
+      w: 6
+      h: 3
+      unit: cores
+      min: 0
+      queries: [{expr: 'topk(10, sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{cluster=~"$cluster",namespace=~"$namespace",pod!=""}[2m])))', legend: '{{namespace}}/{{pod}}'}]
+    - title: Memory by pod
+      type: timeseries
+      w: 6
+      h: 3
+      unit: bytes
+      min: 0
+      queries: [{expr: 'topk(10, sum by (namespace, pod) (container_memory_usage_bytes{cluster=~"$cluster",namespace=~"$namespace",pod!=""}))', legend: '{{namespace}}/{{pod}}'}]
+    - title: Network received by pod
+      type: timeseries
+      w: 6
+      h: 3
+      unit: bytes/s
+      min: 0
+      queries: [{expr: 'topk(10, sum by (namespace, pod) (rate(container_network_receive_bytes_total{cluster=~"$cluster",namespace=~"$namespace",pod!=""}[2m])))', legend: '{{namespace}}/{{pod}}'}]
+    - title: Memory against limit
+      type: table
+      w: 6
+      h: 3
+      unit: ratio
+      queries: [{expr: 'sort_desc(container_memory_usage_bytes{cluster=~"$cluster",namespace=~"$namespace",pod!=""} / (container_memory_limit_bytes > 0 < 1e15))'}]
+    - {title: Latest error lines from pods, type: logs, w: 12, h: 4, limit: 50, queries: [{expr: 'source:kubernetes cluster:~"$cluster" namespace:~"$namespace" (level:~"(?i)^(err|crit|fatal)" or error)'}]}

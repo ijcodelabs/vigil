@@ -1,0 +1,8 @@
+# Hosts with a GPU: the alert rules and the dashboard. The metrics need
+# nothing switched on; an agent reports the GPUs of its host by itself.
+select:
+  - gpu=~".+"
+priority: 15
+integrations:
+  gpu: {}
+config: {}

@@ -1,0 +1,14 @@
+[Unit]
+Description=vigil relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/vigil relay -config /etc/vigil/relay.yaml
+DynamicUser=yes
+StateDirectory=vigil-relay
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

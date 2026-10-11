@@ -1,0 +1,54 @@
+title: Redis
+description: Memory, clients and command rate from redis_exporter.
+detect:
+  process: [redis-server, valkey-server]
+  image: [redis, valkey]
+params:
+  metrics_target:
+    default: "localhost:9121"
+    description: Address of redis_exporter.
+config:
+  scrape:
+    static:
+      - job: redis
+        targets: ["${metrics_target}"]
+        drop: ['^go_', '^process_']
+rules:
+  - name: alerts
+    interval: 1m
+    rules:
+      - alert: RedisDown
+        expr: redis_up == 0 or up{job="redis"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: 'Redis on {{ $labels.agent }} is not answering'
+      - alert: RedisMemoryNearLimit
+        expr: redis_memory_used_bytes / (redis_memory_max_bytes > 0) > 0.9
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: 'Redis on {{ $labels.agent }} uses {{ $value | humanizePercentage }} of its memory limit'
+dashboard:
+  title: Redis
+  variables:
+    - {name: agent, label: agent, match: redis_up}
+  panels:
+    - {title: Up, type: stat, w: 3, h: 2, queries: [{expr: 'min(redis_up{agent=~"$agent"})'}]}
+    - {title: Memory used, type: stat, w: 3, h: 2, unit: bytes, queries: [{expr: 'sum(redis_memory_used_bytes{agent=~"$agent"})'}]}
+    - {title: Clients, type: stat, w: 3, h: 2, queries: [{expr: 'sum(redis_connected_clients{agent=~"$agent"})'}]}
+    - {title: Commands per second, type: stat, w: 3, h: 2, unit: ops/s, queries: [{expr: 'sum(rate(redis_commands_processed_total{agent=~"$agent"}[2m]))'}]}
+    - title: Commands per second
+      type: timeseries
+      w: 6
+      h: 3
+      unit: ops/s
+      min: 0
+      queries: [{expr: 'sum by (agent) (rate(redis_commands_processed_total{agent=~"$agent"}[2m]))', legend: '{{agent}}'}]
+    - title: Memory used
+      type: timeseries
+      w: 6
+      h: 3
+      unit: bytes
+      min: 0
+      queries: [{expr: 'redis_memory_used_bytes{agent=~"$agent"}', legend: '{{agent}}'}]

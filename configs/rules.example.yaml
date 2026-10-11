@@ -1,0 +1,110 @@
+# Rule file: Prometheus' format, plus `type: logs` for LogsQL groups.
+# Load it with:
+#   curl -X PUT -H "Authorization: Bearer $VIGIL_ADMIN_TOKEN" \
+#        --data-binary @configs/rules.example.yaml http://localhost:8080/api/v1/rules/config
+# The upload replaces the whole rule file. It is refused, with the reason, if
+# anything in it is wrong; the rules already running then stay as they are.
+groups:
+  - name: hosts
+    interval: 30s
+    rules:
+      - alert: HostDown
+        expr: vigil_agent_up == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: 'Agent {{ $labels.agent }} stopped reporting'
+
+      - alert: TargetDown
+        expr: up == 0
+        for: 3m
+        labels: {severity: warning}
+        annotations:
+          summary: '{{ $labels.job }} target {{ $labels.instance }} cannot be scraped'
+
+      - alert: DiskAlmostFull
+        expr: 100 * (1 - host_filesystem_free_bytes / host_filesystem_size_bytes) > 90
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: '{{ $labels.mountpoint }} on {{ $labels.agent }} is {{ $value | humanize }}% full'
+
+      - alert: MemoryLow
+        expr: host_memory_available_bytes / host_memory_total_bytes < 0.05
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: '{{ $labels.agent }} has {{ $value | humanizePercentage }} memory available'
+
+      - alert: CPUBusy
+        expr: 1 - sum by (agent) (rate(host_cpu_seconds_total{mode="idle"}[5m])) / sum by (agent) (rate(host_cpu_seconds_total[5m])) > 0.9
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: 'CPU on {{ $labels.agent }} at {{ $value | humanizePercentage }} for 15 minutes'
+
+      - alert: ServiceFailed
+        expr: systemd_units{state="failed"} > 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: '{{ $value }} systemd units failed on {{ $labels.agent }}'
+
+      - alert: ProbeFailing
+        expr: probe_success == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: '{{ $labels.probe }} does not answer when checked from {{ $labels.agent }}'
+
+      - alert: CertificateExpiresSoon
+        expr: probe_tls_cert_expiry_seconds < 14 * 86400
+        labels: {severity: warning}
+        annotations:
+          summary: 'The certificate of {{ $labels.probe }} expires in {{ $value | humanizeDuration }}'
+
+      - alert: ProcessNotRunning
+        expr: process_group_count == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: '{{ $labels.group }} is not running on {{ $labels.agent }}'
+
+      - alert: HostUnderMemoryPressure
+        expr: host_pressure_ratio{resource="memory", kind="some"} > 0.2
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: '{{ $labels.agent }} spends {{ $value | humanizePercentage }} of its time stalled waiting for memory'
+
+      - alert: AgentDroppingData
+        expr: increase(vigil_agent_dropped_total[10m]) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: '{{ $labels.agent }} is dropping data ({{ $labels.reason }})'
+
+      # Recording rules store a query's result as a new metric.
+      - record: agent:cpu_usage:ratio
+        expr: 1 - sum by (agent) (rate(host_cpu_seconds_total{mode="idle"}[5m])) / sum by (agent) (rate(host_cpu_seconds_total[5m]))
+
+  # Log rules: LogsQL that ends in `| stats ...`; every row returned is an alert.
+  - name: logs
+    type: logs
+    interval: 1m
+    rules:
+      - alert: ErrorBurst
+        expr: '_time:5m error | stats by (agent, app) count() as errors | filter errors:>50'
+        labels: {severity: warning}
+        annotations:
+          summary: '{{ $value }} error lines from {{ $labels.app }} on {{ $labels.agent }} in 5 minutes'
+
+      - alert: NginxSilent
+        expr: '_time:10m app:nginx | stats count() as lines | filter lines:0'
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: 'No nginx log lines for 10 minutes'
+
+      # A log-derived metric.
+      - record: app:log_errors:count5m
+        expr: '_time:5m error | stats by (app) count() as errors'

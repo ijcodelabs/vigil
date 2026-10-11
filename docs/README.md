@@ -1,0 +1,58 @@
+# vigil
+
+vigil is one monitoring system for metrics, logs, alerts, runtime security
+events and dashboards. It is a single Go binary that runs as an **agent** on
+every host or Kubernetes node and as the **server** in the middle.
+
+```
+ hosts / Kubernetes nodes                      server
+┌───────────────────────┐              ┌────────────────────────────┐
+│ vigil agent           │   push  ──▶  │ vigil server               │
+│  metrics, logs,       │              │  checks tokens, stores,    │
+│  runtime events       │  ◀── config  │  evaluates rules, alerts,  │
+│  queue on disk        │              │  serves the web interface  │
+└───────────────────────┘              └───────┬──────────┬─────────┘
+                                               ▼          ▼
+                                       VictoriaMetrics  VictoriaLogs
+```
+
+- Agents collect and **push** to the server; whatever they could not send
+  waits in a queue on disk. The server can also **pull** from hosts that run
+  no agent.
+- The server keeps metrics in VictoriaMetrics and logs in VictoriaLogs.
+  Nothing else talks to those two.
+- What agents collect is managed on the server, in **profiles** selected by
+  labels, so a host's own file only says who it is and where the server is.
+
+## Where to start
+
+| I want to… | Read |
+|---|---|
+| get a server and a first agent running | [Install](install.md) |
+| have an AI assistant install it for me | [Install with an AI assistant](install-by-ai.md) |
+| decide what an agent collects | [Agent configuration](configs.md) |
+| manage many agents | [Fleet: profiles and integrations](fleet.md) |
+| monitor Kubernetes | [Kubernetes](kubernetes.md) |
+| look at data | [Explore](explore.md), [Dashboards](dashboards.md) |
+| see how your applications do: requests, errors, latency, traces | [Services and traces](apm.md) |
+| watch GPUs and what AI use costs | [GPUs and AI machines](gpu.md), [AI costs](finops.md) |
+| be told when something is wrong | [Alerts](alerts.md) |
+| see what processes do, and catch intrusions | [Runtime events](security.md) |
+| know what a metric means | [Metric reference](metrics.md) |
+| script against it | [API](api.md) |
+| find out why something does not work | [Troubleshooting](troubleshooting.md) |
+
+## Words used here
+
+- **Agent**: `vigil agent`, running on a host. It has an id (its host name
+  by default).
+- **Labels**: what you say a host is, in its own file: `env: prod`,
+  `role: db`. Added to everything it sends.
+- **Facts**: what an agent finds out about its host itself: `os`, `kernel`,
+  `kubernetes`, and so on.
+- **Profile**: a piece of agent configuration on the server, with a selector
+  saying which agents it applies to.
+- **Integration**: everything needed to monitor one technology (nginx,
+  PostgreSQL, Kubernetes, …): what to collect, alert rules, a dashboard.
+- **Detection**: a security rule that matched something a process did.
+- **Capture**: the recorded activity of a host around a detection.

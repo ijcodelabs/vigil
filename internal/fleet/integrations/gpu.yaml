@@ -1,0 +1,114 @@
+title: GPUs
+description: Alert rules and a dashboard for graphics processors. The metrics themselves need nothing switched on - an agent reports the GPUs of its host by itself (NVIDIA through nvidia-smi, AMD through sysfs).
+detect:
+  process: [nvidia-persistenced, nvidia-smi, nv-hostengine, dcgm-exporter]
+params:
+  hot_celsius:
+    default: "88"
+    description: A GPU hotter than this for ten minutes raises a warning.
+  idle_hours:
+    default: "6"
+    description: A GPU that held memory but computed almost nothing for this many hours is reported as idle.
+config: {}
+rules:
+  - name: alerts
+    interval: 1m
+    rules:
+      - alert: GpuUnreadable
+        expr: gpu_collector_up == 0
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: 'The GPUs of {{ $labels.agent }} cannot be read: the {{ $labels.vendor }} tool fails, as it does when a card has dropped off the bus'
+      - alert: GpuMissing
+        expr: gpu_count < max_over_time(gpu_count[1d])
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: '{{ $labels.agent }} reports {{ $value }} GPUs, fewer than earlier today'
+      - alert: GpuMemoryErrors
+        expr: increase(gpu_ecc_errors_total{type="uncorrected"}[1h]) > 0
+        labels: {severity: critical}
+        annotations:
+          summary: 'GPU {{ $labels.gpu }} of {{ $labels.agent }} had uncorrectable memory errors in the last hour'
+      - alert: GpuHot
+        expr: gpu_temperature_celsius > ${hot_celsius}
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: 'GPU {{ $labels.gpu }} of {{ $labels.agent }} is at {{ $value }} °C'
+      - alert: GpuIdle
+        expr: |
+          avg_over_time(gpu_utilization_ratio[${idle_hours}h]) < 0.03
+          and min_over_time(gpu_memory_used_bytes[${idle_hours}h]) > 1e9
+        labels: {severity: info}
+        annotations:
+          summary: 'GPU {{ $labels.gpu }} of {{ $labels.agent }} has held memory for ${idle_hours} hours while computing almost nothing'
+  - name: logs
+    type: logs
+    interval: 1m
+    rules:
+      - alert: GpuDriverError
+        expr: '_time:5m unit:kernel "NVRM: Xid" | stats by (agent) count() as errors | filter errors:>0'
+        labels: {severity: warning}
+        annotations:
+          summary: 'The NVIDIA driver on {{ $labels.agent }} reported {{ $value }} Xid errors in 5 minutes (kernel log)'
+dashboard:
+  title: GPUs
+  variables:
+    - {name: agent, label: agent, match: gpu_info}
+  panels:
+    - {title: GPUs, type: stat, w: 2, h: 2, queries: [{expr: 'sum(gpu_count{agent=~"$agent"})'}]}
+    - {title: Busy now, type: stat, w: 2, h: 2, queries: [{expr: 'count(gpu_utilization_ratio{agent=~"$agent"} > 0.05) or vector(0)'}]}
+    - {title: Average utilization, type: stat, w: 2, h: 2, unit: ratio, queries: [{expr: 'avg(gpu_utilization_ratio{agent=~"$agent"})'}]}
+    - {title: Memory in use, type: stat, w: 2, h: 2, unit: ratio, queries: [{expr: 'sum(gpu_memory_used_bytes{agent=~"$agent"}) / sum(gpu_memory_total_bytes{agent=~"$agent"})'}]}
+    - {title: Power draw (W), type: stat, w: 2, h: 2, queries: [{expr: 'sum(gpu_power_watts{agent=~"$agent"})'}]}
+    - {title: Hottest (°C), type: stat, w: 2, h: 2, warn: 85, queries: [{expr: 'max(gpu_temperature_celsius{agent=~"$agent"})'}]}
+    - title: Utilization
+      type: timeseries
+      w: 6
+      h: 3
+      unit: ratio
+      min: 0
+      queries: [{expr: 'gpu_utilization_ratio{agent=~"$agent"}', legend: '{{agent}} gpu {{gpu}}'}]
+    - title: Memory used
+      type: timeseries
+      w: 6
+      h: 3
+      unit: bytes
+      min: 0
+      queries: [{expr: 'gpu_memory_used_bytes{agent=~"$agent"}', legend: '{{agent}} gpu {{gpu}}'}]
+    - title: Temperature (°C)
+      type: timeseries
+      w: 6
+      h: 3
+      queries: [{expr: 'gpu_temperature_celsius{agent=~"$agent"}', legend: '{{agent}} gpu {{gpu}}'}]
+    - title: Power (W)
+      type: timeseries
+      w: 6
+      h: 3
+      min: 0
+      queries: [{expr: 'gpu_power_watts{agent=~"$agent"}', legend: '{{agent}} gpu {{gpu}}'}]
+    - title: Who holds GPU memory
+      type: table
+      w: 6
+      h: 4
+      unit: bytes
+      queries: [{expr: 'sort_desc(sum by (agent, gpu, process, user, container) (gpu_process_memory_bytes{agent=~"$agent"}))', legend: '{{agent}} gpu {{gpu}}: {{process}} {{user}} {{container}}'}]
+    - title: Utilization over the last 24 hours, lowest first
+      type: table
+      w: 6
+      h: 4
+      unit: ratio
+      queries: [{expr: 'sort(avg_over_time(gpu_utilization_ratio{agent=~"$agent"}[24h]))', legend: '{{agent}} gpu {{gpu}}'}]
+    - title: Energy used in the shown time (kWh)
+      type: stat
+      w: 3
+      h: 2
+      queries: [{expr: 'sum(sum_over_time(gpu_power_watts{agent=~"$agent"}[$__range]) * 15) / 3.6e6'}]
+    - title: Memory errors in the shown time
+      type: stat
+      w: 3
+      h: 2
+      warn: 1
+      queries: [{expr: 'sum(increase(gpu_ecc_errors_total{agent=~"$agent"}[$__range])) or vector(0)'}]

@@ -1,0 +1,40 @@
+# Central node: vigil server + VictoriaMetrics + VictoriaLogs + VictoriaTraces.
+# Set VIGIL_INGEST_TOKEN and VIGIL_ADMIN_TOKEN in a .env file next to this one.
+services:
+  vigil:
+    build: ..
+    command: ["server", "-config", "/etc/vigil/server.yaml"]
+    environment:
+      VIGIL_INGEST_TOKEN: ${VIGIL_INGEST_TOKEN:?set VIGIL_INGEST_TOKEN}
+      VIGIL_ADMIN_TOKEN: ${VIGIL_ADMIN_TOKEN:?set VIGIL_ADMIN_TOKEN}
+    volumes:
+      - ../configs/server.example.yaml:/etc/vigil/server.yaml:ro
+      - vigil:/var/lib/vigil
+    ports: ["8080:8080"]
+    depends_on: [victoriametrics, victorialogs, victoriatraces]
+    restart: unless-stopped
+
+  # Storage is reachable only on the compose network; all access goes through vigil.
+  victoriametrics:
+    image: docker.io/victoriametrics/victoria-metrics:v1.153.0
+    command: ["-storageDataPath=/storage", "-retentionPeriod=30d"]
+    volumes: ["vm:/storage"]
+    restart: unless-stopped
+
+  victorialogs:
+    image: docker.io/victoriametrics/victoria-logs:v1.53.0
+    command: ["-storageDataPath=/vlogs", "-retentionPeriod=14d"]
+    volumes: ["vlogs:/vlogs"]
+    restart: unless-stopped
+
+  victoriatraces:
+    image: docker.io/victoriametrics/victoria-traces:v0.12.0
+    command: ["-storageDataPath=/vtraces", "-retentionPeriod=7d"]
+    volumes: ["vtraces:/vtraces"]
+    restart: unless-stopped
+
+volumes:
+  vigil:
+  vm:
+  vlogs:
+  vtraces:

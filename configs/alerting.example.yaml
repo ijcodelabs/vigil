@@ -1,0 +1,50 @@
+# Who gets told about which alert. This is Alertmanager's configuration
+# format, unchanged: https://prometheus.io/docs/alerting/latest/configuration/
+# Load it with:
+#   curl -X PUT -H "Authorization: Bearer $VIGIL_ADMIN_TOKEN" \
+#        --data-binary @configs/alerting.example.yaml http://localhost:8080/api/v1/alerting/config
+global:
+  smtp_smarthost: smtp.example.com:587
+  smtp_from: vigil@example.com
+  smtp_auth_username: vigil@example.com
+  smtp_auth_password: change-me
+
+route:
+  receiver: team-email              # default contact
+  group_by: [alertname, agent]
+  group_wait: 30s                   # collect related alerts before the first message
+  group_interval: 5m
+  repeat_interval: 4h               # remind while still firing
+  routes:
+    - matchers: [severity="critical"]
+      receiver: oncall
+    - matchers: [alertname="NginxSilent"]
+      receiver: web-team-slack
+      mute_time_intervals: [nights]
+
+receivers:
+  - name: team-email
+    email_configs:
+      - to: ops@example.com
+        send_resolved: true
+  - name: oncall
+    email_configs:
+      - to: oncall@example.com
+    webhook_configs:
+      - url: https://hooks.example.com/pager
+  - name: web-team-slack
+    slack_configs:
+      - api_url: https://hooks.slack.com/services/CHANGE/ME
+        channel: '#web-alerts'
+        send_resolved: true
+
+# A down host should not also page for everything running on it.
+inhibit_rules:
+  - source_matchers: [alertname="HostDown"]
+    target_matchers: [severity="warning"]
+    equal: [agent]
+
+time_intervals:
+  - name: nights
+    time_intervals:
+      - times: [{start_time: '22:00', end_time: '24:00'}, {start_time: '00:00', end_time: '06:00'}]

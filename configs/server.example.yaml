@@ -1,0 +1,59 @@
+# vigil server — the central node.
+listen: ":8080"
+data_dir: /var/lib/vigil
+external_url: http://vigil.example.internal:8080   # used for links in notifications
+
+# Encryption. Without this section the server speaks plain HTTP.
+# self_signed: the server makes its own certificate authority in
+# data_dir/pki; agents check it by the fingerprint shown under
+# Fleet > Enrolment (ca_pin). Or give a certificate of your own.
+# tls:
+#   self_signed: true
+#   # names: [vigil.example.internal, 10.0.0.5]   # extra names for the certificate
+#   # cert_file: /etc/vigil/tls/fullchain.pem
+#   # key_file: /etc/vigil/tls/key.pem
+
+# Behind a reverse proxy: whose X-Forwarded-For to believe, so that sign-in
+# limits apply to the real clients and not to the proxy.
+# trusted_proxies: [172.18.0.10]
+
+storage:
+  metrics_url: http://victoriametrics:8428
+  logs_url: http://victorialogs:9428
+  traces_url: http://victoriatraces:10428      # optional: VictoriaTraces, for traces
+
+# Shared token any agent may push with. Leave it out to accept only the
+# per-agent tokens created on the Fleet page.
+ingest_token: ${VIGIL_INGEST_TOKEN}
+# For scripts and amtool, and the first sign-in to the web interface
+# (user "admin") until a user account exists.
+admin_token: ${VIGIL_ADMIN_TOKEN}
+
+# captures_max_bytes: 2147483648      # disk budget for stored captures; oldest go first
+
+# What one agent may send (averaged over a minute), and how many batches
+# are stored at once. These are the defaults.
+# limits:
+#   samples_per_second: 20000
+#   log_bytes_per_second: 4194304
+#   max_in_flight: 512
+#   agents:
+#     big-db-01: {samples_per_second: 100000}
+
+# Prices, for turning usage into cost (docs: finops). Per million tokens by
+# model-name prefix, and per GPU hour by card model. Examples of the format:
+# costs:
+#   tokens:
+#     - {model: gpt-4o-mini, input: 0.15, output: 0.60}
+#   gpu_hours:
+#     - {model: "NVIDIA A100", price: 3.20}
+#     - {model: "", price: 1.00}
+
+heartbeat_timeout: 60s                # agent counts as down after this silence
+
+# Pull mode: scrape hosts that run no agent, straight from the server.
+interval: 15s
+scrape:
+  static: []
+  #  - job: legacy
+  #    targets: ["10.0.0.12:9100", "10.0.0.13:9100"]

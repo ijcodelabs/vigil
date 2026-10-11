@@ -1,0 +1,201 @@
+# vigil agent — runs on every host or Kubernetes node.
+server:
+  url: http://vigil.example.internal:8080
+  token: ${VIGIL_INGEST_TOKEN}      # expanded from the environment
+  # Instead of token: an enrolment token (Fleet > Enrolment). The agent
+  # exchanges it once for a token of its own, kept in spool_dir/agent-token.
+  # enroll_token: ${VIGIL_ENROLL_TOKEN}
+  # For a server with its own certificate authority, its fingerprint:
+  # ca_pin: sha256:...
+  # Or a certificate file to trust instead of the system's authorities:
+  # ca_file: /etc/vigil/ca.pem
+
+# agent_id: web-01                  # defaults to the hostname
+# remote_config: true               # the server's Fleet page may replace everything from
+                                    # "labels" down; set false to always use this file
+interval: 15s
+spool_dir: /var/lib/vigil/spool     # unsent batches wait here
+spool_max_bytes: 536870912          # oldest batches are dropped beyond this
+
+labels:                             # what this host is: added to everything it sends, and
+  env: prod                         # what the server's profiles select agents by
+  role: web
+
+host_metrics: true                  # CPU, memory, disks, network of this host
+
+scrape:
+  static:
+    - job: node
+      targets: ["localhost:9100"]
+    - job: app
+      targets: ["localhost:8443"]
+      scheme: https
+      path: /internal/metrics
+      tls_insecure_skip_verify: true
+      interval: 60s                 # this job only; default is the interval above
+      timeout: 5s
+      bearer_token: ${APP_METRICS_TOKEN}   # or basic_auth: {username: ..., password: ...}
+      drop: ['^go_', '^process_']   # regular expressions on metric names; `keep` is the opposite
+      labels:
+        team: payments
+  kubernetes:
+    enabled: false                  # pods annotated prometheus.io/scrape: "true"
+    # node: ""                      # defaults to $NODE_NAME; empty = whole cluster
+
+# Checks made from this host: does the address answer? For https the time
+# left on the certificate is reported too.
+probes: []
+#  - name: shop
+#    http: https://shop.example.com/health
+#    interval: 30s
+#    expect_status: [200]            # default: any 2xx
+#  - name: database-port
+#    tcp: db.internal:5432
+
+# CPU, memory and count of groups of processes. A group nothing matches is
+# reported with a count of 0, which is how "not running" is alerted on.
+processes: []
+#  - name: nginx                     # processes named nginx
+#  - name: order-service
+#    cmdline: 'java .*order-service' # or: a regular expression on the command line
+
+# State of systemd service units. Host installs only: needs systemctl.
+systemd:
+  enabled: false
+  # units: [nginx.service, "postgresql*"]   # report these individually; failed units are always counted
+
+# A local endpoint for applications instrumented with OpenTelemetry (OTLP
+# over HTTP, protobuf). Point them at it with
+#   OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+#   OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+# Metrics, logs and traces; traces feed the Services pages (docs: apm).
+otlp:
+  enabled: false
+  # listen: 127.0.0.1:4318
+  # traces:
+  #   sample: 1                     # share of traces stored in full; failed spans always are
+  #   slower_than: 1s               # always store spans at least this slow
+
+# What this host may send at most. Anything over is dropped here and counted
+# in vigil_agent_dropped_total.
+limits:
+  max_series: 100000
+  max_log_bytes_per_second: 2097152
+
+# Containers of the local Docker daemon: logs and CPU/memory/network metrics.
+# Per container: label vigil.logs=false opts out, vigil.logs.template=<name>
+# picks a template.
+docker:
+  enabled: false
+  # socket: /var/run/docker.sock
+  # logs: true
+  # metrics: true
+  # template: ""                    # default template for container logs
+  # container_templates:            # by container or image name; * and ? allowed
+  #   "haproxy*": haproxy_http
+
+logs:
+  # A template says how one kind of log is read: what to join, parse,
+  # extract, keep and hide. Sources below refer to templates by name.
+  templates:
+    nginx_access:
+      parse: regex                  # named groups become fields
+      pattern: '^(?P<client>\S+) \S+ \S+ \[(?P<time>[^\]]+)\] "(?P<method>\S+) (?P<path>\S+) [^"]*" (?P<status>\d+) (?P<bytes>\d+)'
+      timestamp: {field: time, layout: '02/Jan/2006:15:04:05 -0700'}
+      labels: [method, status]      # searchable stream labels; keep these low-cardinality
+      drop: ['GET /healthz']        # regexes; matching lines are discarded
+    app_json:
+      parse: json                   # nested keys become a.b.c
+      message_field: msg
+      timestamp: {field: ts, layout: rfc3339}   # or unix, unix_ms, or a Go layout
+      labels: [level]
+      mask:                         # applied before anything else
+        - {pattern: '"password":"[^"]*"', replace: '"password":"***"'}
+    java:
+      multiline: {start: '^\d{4}-\d{2}-\d{2}'}   # other lines join the entry above them
+    keyvalue:
+      parse: logfmt
+      keep: ['level=(warn|error)']  # if set, only matching lines are shipped
+
+  files:
+    - name: nginx_access            # optional here; lets a server profile change this source
+      paths: [/var/log/nginx/access.log]
+      template: nginx_access
+      labels: {app: nginx}
+    - paths: [/opt/app/logs/*.log]
+      exclude: ['debug-*']
+      template: java
+      # from_beginning: true        # default: files present at startup are read from their end
+
+  journald:
+    enabled: false                  # needs journalctl on the host
+    # units: [nginx.service, sshd.service]
+    # template: ""                  # for every unit without one of its own
+    # unit_templates: {"shop*.service": java}   # by unit name; joins stack traces per unit
+
+  kubernetes:
+    enabled: false                  # pod logs under /var/log/pods on this node
+    # container_templates: {nginx: nginx_access}
+
+# Runtime events: what processes do, straight from the kernel, with rules
+# evaluated on this host. Needs Linux 5.8 or newer with BTF, and root.
+# On hosts that cannot run it the agent says so once and carries on.
+# `vigil events` prints the live event stream, which helps when writing rules.
+security:
+  enabled: false
+  # Opens of files under these absolute paths are reported (at most 16).
+  watch_paths: [/etc/shadow, /etc/sudoers, /etc/ssh/, /root/.ssh/, /etc/cron, /etc/ld.so.preload]
+  # A rule with `capture: true` saves the host's activity around the event:
+  capture_before: 30s
+  capture_after: 30s
+  capture_cooldown: 5m              # per rule, between captures
+
+  # `when` is a CEL expression (https://cel.dev) over the event:
+  #   type         exec, exit, connect, listen, open, setuid
+  #   comm, exe, args, cmdline, pid, ppid, uid, euid
+  #   parent_comm, parent_exe
+  #   container, container_id      ("" for processes on the host itself)
+  #   path, write                  (open)      addr, port     (connect, listen)
+  #   old_euid, new_euid           (setuid)    exit_code, signal  (exit)
+  # `summary` may use {field} placeholders. A rule reports at most
+  # `max_per_minute` detections (default 10).
+  rules:
+    - name: shell_in_container
+      when: type == "exec" && container != "" && exe in ["/bin/sh", "/bin/bash", "/bin/dash", "/bin/ash", "/bin/zsh", "/bin/busybox"]
+            && !(parent_comm in ["runc", "containerd-shim", "conmon", "crun", "docker-init", "tini"])
+      severity: warning
+      summary: "{exe} started in container {container} by {parent_comm}"
+      capture: true
+
+    - name: sensitive_file_read
+      when: type == "open" && path.startsWith("/etc/shadow") && !(comm in ["sshd", "sshd-session", "login", "su", "sudo", "passwd", "unix_chkpwd", "systemd-userwor", "cron"])
+      severity: critical
+      summary: "{comm} (uid {uid}) opened {path}"
+      capture: true
+
+    - name: system_config_changed
+      when: type == "open" && write && (path.startsWith("/etc/sudoers") || path.startsWith("/etc/ssh/") || path.startsWith("/root/.ssh/") || path.startsWith("/etc/ld.so.preload"))
+      severity: critical
+      summary: "{comm} opened {path} for writing"
+      capture: true
+
+    - name: became_root
+      when: type == "setuid" && new_euid == 0 && old_euid != 0 && !(comm in ["sudo", "su", "sshd", "sshd-session", "cron", "login", "polkit-agent-he", "pkexec"])
+      severity: critical
+      summary: "{comm} changed from user {old_euid} to root"
+      capture: true
+
+    - name: run_from_temp_dir
+      when: type == "exec" && (exe.startsWith("/tmp/") || exe.startsWith("/dev/shm/") || exe.startsWith("/var/tmp/"))
+      severity: warning
+      summary: "{exe} was run from a temporary directory by {parent_comm}"
+
+    - name: download_tool_in_container
+      when: type == "exec" && container != "" && comm in ["curl", "wget", "nc", "ncat", "socat"]
+      severity: info
+      summary: "{cmdline} in container {container}"
+
+    - name: unexpected_listener
+      when: type == "listen" && port < 1024 && !(comm in ["sshd", "nginx", "haproxy", "systemd", "named", "chronyd"])
+      severity: warning
+      summary: "{comm} started listening on port {port}"

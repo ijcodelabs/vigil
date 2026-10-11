@@ -1,0 +1,22 @@
+# Production hosts report more often and watch for intrusions.
+select:
+  - env="prod"
+priority: 10
+# Changes to this profile reach one agent first, then a quarter of them,
+# then everyone; each step must be healthy for ten minutes.
+rollout:
+  steps: [1, 25%]
+  wait: 10m
+config:
+  interval: 15s
+  security:
+    enabled: true
+    watch_paths: [/etc/shadow, /etc/sudoers, /etc/ssh/, /root/.ssh/]
+    rules:
+      # container == "": the host's own file. A path is as the process sees
+      # it, and containers read their own /etc/shadow all the time.
+      - name: sensitive_file_read
+        when: type == "open" && container == "" && path.startsWith("/etc/shadow") && !(comm in ["sshd", "sshd-session", "login", "su", "sudo", "passwd", "unix_chkpwd", "systemd-userwor", "cron", "chage", "(systemd)"])
+        severity: critical
+        summary: "{comm} (uid {uid}) opened {path}"
+        capture: true

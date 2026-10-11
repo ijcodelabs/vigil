@@ -1,0 +1,170 @@
+{
+  "id": "hosts",
+  "title": "Hosts",
+  "variables": [
+    {
+      "name": "agent",
+      "label": "agent",
+      "match": "host_load1"
+    }
+  ],
+  "panels": [
+    {
+      "title": "Agents reporting",
+      "type": "stat",
+      "w": 3,
+      "h": 2,
+      "unit": "",
+      "queries": [
+        {
+          "expr": "sum(vigil_agent_up)"
+        }
+      ]
+    },
+    {
+      "title": "Agents down",
+      "type": "stat",
+      "w": 3,
+      "h": 2,
+      "unit": "",
+      "queries": [
+        {
+          "expr": "count(vigil_agent_up == 0) or vector(0)"
+        }
+      ],
+      "warn": 1,
+      "crit": 1
+    },
+    {
+      "title": "Alerts firing",
+      "type": "stat",
+      "w": 3,
+      "h": 2,
+      "unit": "",
+      "queries": [
+        {
+          "expr": "count(ALERTS{alertstate=\"firing\"}) or vector(0)"
+        }
+      ],
+      "warn": 1
+    },
+    {
+      "title": "Fullest filesystem",
+      "type": "stat",
+      "w": 3,
+      "h": 2,
+      "unit": "percent",
+      "queries": [
+        {
+          "expr": "max(100 * (1 - host_filesystem_free_bytes{agent=~\"$agent\"} / host_filesystem_size_bytes))"
+        }
+      ],
+      "warn": 80,
+      "crit": 90
+    },
+    {
+      "title": "CPU used",
+      "type": "timeseries",
+      "w": 6,
+      "h": 3,
+      "unit": "percent",
+      "queries": [
+        {
+          "expr": "100 * (1 - sum by (agent) (rate(host_cpu_seconds_total{mode=\"idle\",agent=~\"$agent\"}[2m])) / sum by (agent) (rate(host_cpu_seconds_total{agent=~\"$agent\"}[2m])))",
+          "legend": "{{agent}}"
+        }
+      ],
+      "min": 0
+    },
+    {
+      "title": "Memory used",
+      "type": "timeseries",
+      "w": 6,
+      "h": 3,
+      "unit": "percent",
+      "queries": [
+        {
+          "expr": "100 * (1 - host_memory_available_bytes{agent=~\"$agent\"} / host_memory_total_bytes)",
+          "legend": "{{agent}}"
+        }
+      ],
+      "min": 0
+    },
+    {
+      "title": "Load (1 minute)",
+      "type": "timeseries",
+      "w": 6,
+      "h": 3,
+      "unit": "",
+      "queries": [
+        {
+          "expr": "host_load1{agent=~\"$agent\"}",
+          "legend": "{{agent}}"
+        }
+      ],
+      "min": 0
+    },
+    {
+      "title": "Filesystem used",
+      "type": "timeseries",
+      "w": 6,
+      "h": 3,
+      "unit": "percent",
+      "queries": [
+        {
+          "expr": "100 * (1 - host_filesystem_free_bytes{agent=~\"$agent\"} / host_filesystem_size_bytes)",
+          "legend": "{{agent}} {{mountpoint}}"
+        }
+      ],
+      "min": 0
+    },
+    {
+      "title": "Network traffic",
+      "type": "timeseries",
+      "w": 6,
+      "h": 3,
+      "unit": "bytes/s",
+      "queries": [
+        {
+          "expr": "sum by (agent) (rate(host_network_receive_bytes_total{agent=~\"$agent\"}[2m]))",
+          "legend": "{{agent}} in"
+        },
+        {
+          "expr": "sum by (agent) (rate(host_network_transmit_bytes_total{agent=~\"$agent\"}[2m]))",
+          "legend": "{{agent}} out"
+        }
+      ],
+      "min": 0
+    },
+    {
+      "title": "Disk throughput",
+      "type": "timeseries",
+      "w": 6,
+      "h": 3,
+      "unit": "bytes/s",
+      "queries": [
+        {
+          "expr": "sum by (agent) (rate(host_disk_read_bytes_total{agent=~\"$agent\"}[2m]))",
+          "legend": "{{agent}} read"
+        },
+        {
+          "expr": "sum by (agent) (rate(host_disk_written_bytes_total{agent=~\"$agent\"}[2m]))",
+          "legend": "{{agent}} write"
+        }
+      ],
+      "min": 0
+    },
+    {
+      "title": "Fullest filesystems",
+      "type": "table",
+      "w": 12,
+      "h": 3,
+      "unit": "percent",
+      "queries": [
+        {
+          "expr": "topk(10, 100 * (1 - host_filesystem_free_bytes{agent=~\"$agent\"} / host_filesystem_size_bytes))"
+        }
+      ]
+    }
+  ]
+}

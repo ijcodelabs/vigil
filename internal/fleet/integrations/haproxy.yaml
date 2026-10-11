@@ -1,0 +1,183 @@
+title: HAProxy
+description: Requests, responses, sessions and the health of every frontend, backend and server, from HAProxy's own Prometheus endpoint.
+detect:
+  process: [haproxy]
+  image: [haproxy]
+params:
+  metrics_target:
+    default: "localhost:8404"
+    description: 'Address of a frontend with "http-request use-service prometheus-exporter" (HAProxy 2.0 or newer).'
+  metrics_path:
+    default: /metrics
+    description: Path of the Prometheus endpoint on that frontend.
+  log_container:
+    default: "haproxy*"
+    description: 'Containers (by name or image name, * allowed) whose output is HAProxy''s log in the "option httplog" format. Used where container logs are collected.'
+config:
+  docker:
+    container_templates:
+      "${log_container}": haproxy_http
+  logs:
+    templates:
+      # option httplog:
+      #   client:port [time] frontend backend/server TR/Tw/Tc/Tr/Ta status bytes
+      #   req_cookie res_cookie termination_state conns queues "request"
+      # Lines in another format (startup messages, tcp logs) pass through as they are.
+      haproxy_http:
+        parse: regex
+        pattern: '^(?P<client>\S+):\d+ \[[^\]]+\] (?P<frontend>\S+) (?P<backend>[^/\s]+)/(?P<server>\S+) -?\d+/-?\d+/-?\d+/(?P<response_ms>-?\d+)/\+?(?P<total_ms>-?\d+) (?P<status>-?\d+) \+?(?P<bytes>\d+) \S+ \S+ (?P<termination>\S+) \S+ \S+ "(?P<method>[A-Z]+) (?P<path>[^ ?"]*)[^"]*"'
+        add: {app: haproxy}
+  scrape:
+    static:
+      - job: haproxy
+        targets: ["${metrics_target}"]
+        path: "${metrics_path}"
+        # One series per server and possible check result, nearly all zero;
+        # haproxy_server_status says the same in six.
+        drop: ['^haproxy_server_check_status$', '^haproxy_backend_agg_']
+rules:
+  - name: alerts
+    interval: 1m
+    rules:
+      - alert: HaproxyDown
+        expr: up{job="haproxy"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: 'HAProxy on {{ $labels.agent }} is not answering'
+      - alert: HaproxyBackendDown
+        expr: haproxy_backend_status{state="DOWN"} == 1
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: 'HAProxy backend {{ $labels.proxy }} on {{ $labels.agent }} has no server left'
+      - alert: HaproxyServerDown
+        expr: haproxy_server_status{state="DOWN"} == 1
+        for: 2m
+        labels: {severity: warning}
+        annotations:
+          summary: 'Server {{ $labels.server }} of HAProxy backend {{ $labels.proxy }} on {{ $labels.agent }} is down'
+      - alert: HaproxyBackendErrors
+        expr: |
+          sum by (agent, proxy) (rate(haproxy_backend_http_responses_total{code="5xx"}[5m]))
+            / sum by (agent, proxy) (rate(haproxy_backend_http_responses_total[5m])) > 0.05
+          and sum by (agent, proxy) (rate(haproxy_backend_http_responses_total[5m])) > 1
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: '{{ $value | humanizePercentage }} of the responses of HAProxy backend {{ $labels.proxy }} on {{ $labels.agent }} are 5xx'
+      - alert: HaproxyRequestsQueued
+        expr: haproxy_backend_current_queue > 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: '{{ $value }} requests wait for a free server in HAProxy backend {{ $labels.proxy }} on {{ $labels.agent }}'
+      - alert: HaproxySessionsNearLimit
+        expr: haproxy_frontend_current_sessions / (haproxy_frontend_limit_sessions > 0) > 0.8
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: 'HAProxy frontend {{ $labels.proxy }} on {{ $labels.agent }} uses {{ $value | humanizePercentage }} of its session limit'
+  - name: logs
+    type: logs
+    interval: 1m
+    rules:
+      - alert: HaproxyServerErrorsLogged
+        expr: '_time:5m app:haproxy status:~"5.." | stats by (agent, backend) count() as errors | filter errors:>50'
+        labels: {severity: warning}
+        annotations:
+          summary: '{{ $value }} responses with a 5xx status from HAProxy backend {{ $labels.backend }} on {{ $labels.agent }} in 5 minutes'
+dashboard:
+  title: HAProxy
+  variables:
+    - {name: agent, label: agent, match: haproxy_process_build_info}
+    - {name: backend, label: proxy, match: haproxy_backend_status}
+  panels:
+    - {title: Up, type: stat, w: 2, h: 2, queries: [{expr: 'min(up{job="haproxy",agent=~"$agent"})'}]}
+    - {title: Requests per second, type: stat, w: 2, h: 2, unit: ops/s, queries: [{expr: 'sum(rate(haproxy_frontend_http_requests_total{agent=~"$agent"}[2m]))'}]}
+    - title: 5xx share
+      type: stat
+      w: 2
+      h: 2
+      unit: ratio
+      warn: 0.01
+      queries: [{expr: 'sum(rate(haproxy_frontend_http_responses_total{agent=~"$agent",code="5xx"}[5m])) / sum(rate(haproxy_frontend_http_responses_total{agent=~"$agent"}[5m]))'}]
+    - {title: Sessions, type: stat, w: 2, h: 2, queries: [{expr: 'sum(haproxy_frontend_current_sessions{agent=~"$agent"})'}]}
+    - {title: Backends down, type: stat, w: 2, h: 2, warn: 1, queries: [{expr: 'sum(haproxy_backend_status{agent=~"$agent",state="DOWN"})'}]}
+    - {title: Servers down, type: stat, w: 2, h: 2, warn: 1, queries: [{expr: 'sum(haproxy_server_status{agent=~"$agent",state="DOWN"})'}]}
+    - title: Responses by status
+      type: timeseries
+      w: 6
+      h: 3
+      unit: ops/s
+      min: 0
+      fill: true
+      queries: [{expr: 'sum by (code) (rate(haproxy_frontend_http_responses_total{agent=~"$agent"}[2m]))', legend: '{{code}}'}]
+    - title: Requests per second by backend
+      type: timeseries
+      w: 6
+      h: 3
+      unit: ops/s
+      min: 0
+      queries: [{expr: 'sum by (proxy) (rate(haproxy_backend_http_requests_total{agent=~"$agent",proxy=~"$backend"}[2m])) > 0', legend: '{{proxy}}'}]
+    - title: Response time by backend (average of the last 1024 requests)
+      type: timeseries
+      w: 6
+      h: 3
+      unit: seconds
+      min: 0
+      queries: [{expr: 'haproxy_backend_response_time_average_seconds{agent=~"$agent",proxy=~"$backend"} > 0', legend: '{{proxy}}'}]
+    - title: 5xx per second by backend
+      type: timeseries
+      w: 6
+      h: 3
+      unit: ops/s
+      min: 0
+      queries: [{expr: 'sum by (proxy) (rate(haproxy_backend_http_responses_total{agent=~"$agent",proxy=~"$backend",code="5xx"}[2m]))', legend: '{{proxy}}'}]
+    - title: Sessions by backend
+      type: timeseries
+      w: 6
+      h: 3
+      min: 0
+      queries: [{expr: 'haproxy_backend_current_sessions{agent=~"$agent",proxy=~"$backend"}', legend: '{{proxy}}'}]
+    - title: Traffic
+      type: timeseries
+      w: 6
+      h: 3
+      unit: bytes/s
+      min: 0
+      queries:
+        - {expr: 'sum(rate(haproxy_frontend_bytes_in_total{agent=~"$agent"}[2m]))', legend: in}
+        - {expr: 'sum(rate(haproxy_frontend_bytes_out_total{agent=~"$agent"}[2m]))', legend: out}
+    - title: Trouble reaching servers (per second)
+      type: timeseries
+      w: 6
+      h: 3
+      unit: ops/s
+      min: 0
+      queries:
+        - {expr: 'sum by (proxy) (rate(haproxy_backend_connection_errors_total{agent=~"$agent",proxy=~"$backend"}[2m])) > 0', legend: '{{proxy}} connection errors'}
+        - {expr: 'sum by (proxy) (rate(haproxy_backend_response_errors_total{agent=~"$agent",proxy=~"$backend"}[2m])) > 0', legend: '{{proxy}} response errors'}
+        - {expr: 'sum by (proxy) (rate(haproxy_backend_retry_warnings_total{agent=~"$agent",proxy=~"$backend"}[2m])) > 0', legend: '{{proxy}} retries'}
+    - title: Denied by rules (per second)
+      type: timeseries
+      w: 6
+      h: 3
+      unit: ops/s
+      min: 0
+      queries:
+        - {expr: 'sum by (proxy) (rate(haproxy_frontend_requests_denied_total{agent=~"$agent"}[2m]))', legend: '{{proxy}} requests'}
+        - {expr: 'sum by (proxy) (rate(haproxy_frontend_denied_connections_total{agent=~"$agent"}[2m]))', legend: '{{proxy}} connections'}
+    - title: Slowest paths in the log (average, last 15 minutes)
+      type: table
+      source: logs
+      w: 6
+      h: 4
+      queries: [{expr: '_time:15m app:haproxy agent:~"$agent" backend:~"$backend" total_ms:* | stats by (backend, path) avg(total_ms) as avg_ms, count() as requests | filter requests:>2 | sort by (avg_ms desc) | limit 15'}]
+    - title: Paths answering 4xx and 5xx (last 15 minutes)
+      type: table
+      source: logs
+      w: 6
+      h: 4
+      queries: [{expr: '_time:15m app:haproxy agent:~"$agent" status:~"[45].." | stats by (status, backend, path) count() as responses | sort by (responses desc) | limit 15'}]
+    - {title: Latest 5xx and aborted requests, type: logs, w: 12, h: 4, limit: 50, queries: [{expr: 'app:haproxy agent:~"$agent" (status:~"5.." or status:"-1")'}]}

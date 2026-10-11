@@ -1,0 +1,97 @@
+title: Kubernetes cluster
+description: For the one cluster agent per cluster (a Deployment). State of nodes, deployments, stateful sets, daemon sets, jobs and volume claims, pods no node has taken, and the cluster's events.
+params:
+  interval:
+    default: "30s"
+    description: How often the cluster's objects are read.
+config:
+  host_metrics: false
+  cluster:
+    enabled: true
+    interval: "${interval}"
+rules:
+  - name: alerts
+    interval: 1m
+    rules:
+      - alert: NodeNotReady
+        expr: kube_node_status_condition{condition="Ready"} == 0
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: 'Node {{ $labels.node }} of cluster {{ $labels.cluster }} is not ready'
+      - alert: NodeUnderPressure
+        expr: kube_node_status_condition{condition=~"MemoryPressure|DiskPressure|PIDPressure"} == 1
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: 'Node {{ $labels.node }} reports {{ $labels.condition }}'
+      - alert: DeploymentReplicasUnavailable
+        expr: kube_deployment_status_replicas_unavailable > 0 and kube_deployment_spec_paused == 0
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: '{{ $value }} replicas of deployment {{ $labels.namespace }}/{{ $labels.deployment }} are unavailable'
+      - alert: StatefulSetNotReady
+        expr: kube_statefulset_status_replicas_ready < kube_statefulset_replicas
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: 'Stateful set {{ $labels.namespace }}/{{ $labels.statefulset }} has {{ $value }} ready replicas, fewer than asked for'
+      - alert: DaemonSetUnavailable
+        expr: kube_daemonset_status_number_unavailable > 0
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: 'Daemon set {{ $labels.namespace }}/{{ $labels.daemonset }} is missing on {{ $value }} nodes'
+      - alert: JobFailed
+        expr: kube_job_status_failed > 0
+        labels: {severity: warning}
+        annotations:
+          summary: 'Job {{ $labels.namespace }}/{{ $labels.job_name }} failed'
+      - alert: PodUnschedulable
+        expr: kube_pod_status_unschedulable == 1
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: 'Pod {{ $labels.namespace }}/{{ $labels.pod }} cannot be placed on any node'
+      - alert: VolumeClaimPending
+        expr: kube_persistentvolumeclaim_status_phase{phase="Pending"} == 1
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: 'Volume claim {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} is still pending'
+dashboard:
+  title: Kubernetes cluster
+  variables:
+    - {name: cluster, label: cluster, match: kube_node_info}
+    - {name: namespace, label: namespace, match: kube_deployment_spec_replicas}
+  panels:
+    - {title: Nodes ready, type: stat, w: 3, h: 2, queries: [{expr: 'sum(kube_node_status_condition{condition="Ready",cluster=~"$cluster"})'}]}
+    - {title: Nodes not ready, type: stat, w: 3, h: 2, crit: 1, queries: [{expr: 'count(kube_node_status_condition{condition="Ready",cluster=~"$cluster"} == 0) or vector(0)'}]}
+    - {title: Deployments with replicas missing, type: stat, w: 3, h: 2, warn: 1, queries: [{expr: 'count(kube_deployment_status_replicas_unavailable{cluster=~"$cluster",namespace=~"$namespace"} > 0) or vector(0)'}]}
+    - {title: Pods no node will take, type: stat, w: 3, h: 2, warn: 1, queries: [{expr: 'count(kube_pod_status_unschedulable{cluster=~"$cluster",namespace=~"$namespace"}) or vector(0)'}]}
+    - title: Deployments
+      type: table
+      w: 6
+      h: 4
+      queries: [{expr: 'kube_deployment_status_replicas_available{cluster=~"$cluster",namespace=~"$namespace"}', legend: available}]
+    - title: Replicas unavailable
+      type: timeseries
+      w: 6
+      h: 4
+      min: 0
+      queries: [{expr: 'kube_deployment_status_replicas_unavailable{cluster=~"$cluster",namespace=~"$namespace"} > 0', legend: '{{namespace}}/{{deployment}}'}]
+    - title: Failed jobs
+      type: table
+      w: 6
+      h: 3
+      queries: [{expr: 'kube_job_status_failed{cluster=~"$cluster",namespace=~"$namespace"} > 0'}]
+    - title: Warning events
+      type: timeseries
+      source: logs
+      w: 6
+      h: 3
+      min: 0
+      fill: true
+      queries: [{expr: 'source:kubernetes-events type:Warning cluster:~"$cluster" namespace:~"$namespace" | stats by (reason) count() as events', legend: '{{reason}}'}]
+    - {title: Latest warning events, type: logs, w: 12, h: 4, limit: 50, queries: [{expr: 'source:kubernetes-events type:Warning cluster:~"$cluster" namespace:~"$namespace"'}]}

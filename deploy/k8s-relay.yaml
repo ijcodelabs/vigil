@@ -1,0 +1,56 @@
+# vigil relay: the one thing in this cluster that talks to the server.
+# Apply after k8s-agent.yaml (it creates the namespace), and set server.url
+# in both agent manifests to http://vigil-relay.vigil.svc:8080.
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: vigil-relay, namespace: vigil}
+data:
+  relay.yaml: |
+    listen: ":8080"
+    relay_id: my-cluster            # shown next to this cluster's agents
+    data_dir: /tmp
+    server:
+      url: https://vigil.example.internal:8080
+      ca_pin: ${VIGIL_CA_PIN}       # from the vigil-agent secret, if the server has its own authority
+    # No tls section: agents reach the relay over the cluster network in
+    # plain HTTP. The connection out to the server is encrypted.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: vigil-relay, namespace: vigil}
+spec:
+  replicas: 2                       # a relay holds no state; more than one is fine
+  selector: {matchLabels: {app: vigil-relay}}
+  template:
+    metadata:
+      labels: {app: vigil-relay}
+      annotations: {prometheus.io/scrape: "true", prometheus.io/port: "8080"}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 65534}
+      containers:
+        - name: relay
+          image: vigil:dev          # replace with your registry/image
+          args: ["relay", "-config", "/etc/vigil/relay.yaml"]
+          env:
+            - name: VIGIL_CA_PIN
+              valueFrom: {secretKeyRef: {name: vigil-agent, key: ca-pin, optional: true}}
+          ports: [{containerPort: 8080}]
+          readinessProbe: {httpGet: {path: /healthz, port: 8080}}
+          resources:
+            requests: {cpu: 20m, memory: 32Mi}
+            limits: {memory: 256Mi}
+          volumeMounts:
+            - {name: config, mountPath: /etc/vigil}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: config
+          configMap: {name: vigil-relay}
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: vigil-relay, namespace: vigil}
+spec:
+  selector: {app: vigil-relay}
+  ports: [{port: 8080, targetPort: 8080}]

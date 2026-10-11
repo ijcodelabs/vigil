@@ -1,0 +1,245 @@
+{
+  "id": "ai-costs",
+  "title": "AI costs",
+  "variables": [
+    {
+      "name": "service",
+      "label": "service",
+      "match": "genai_tokens_total"
+    }
+  ],
+  "panels": [
+    {
+      "title": "Token cost in the shown time",
+      "type": "stat",
+      "w": 3,
+      "h": 2,
+      "unit": "",
+      "queries": [
+        {
+          "expr": "sum(increase(genai_tokens_total{service=~\"$service\"}[$__range]) * on (model, type) group_left genai_token_price)"
+        }
+      ]
+    },
+    {
+      "title": "At this rate, per day",
+      "type": "stat",
+      "w": 3,
+      "h": 2,
+      "unit": "",
+      "queries": [
+        {
+          "expr": "sum(rate(genai_tokens_total{service=~\"$service\"}[1h]) * on (model, type) group_left genai_token_price) * 86400"
+        }
+      ]
+    },
+    {
+      "title": "Model calls in the shown time",
+      "type": "stat",
+      "w": 3,
+      "h": 2,
+      "unit": "",
+      "queries": [
+        {
+          "expr": "sum(increase(genai_requests_total{service=~\"$service\"}[$__range]))"
+        }
+      ]
+    },
+    {
+      "title": "Cost per call",
+      "type": "stat",
+      "w": 3,
+      "h": 2,
+      "unit": "",
+      "queries": [
+        {
+          "expr": "sum(increase(genai_tokens_total{service=~\"$service\"}[$__range]) * on (model, type) group_left genai_token_price) / sum(increase(genai_requests_total{service=~\"$service\"}[$__range]))"
+        }
+      ]
+    },
+    {
+      "title": "Cost per hour, by model",
+      "type": "timeseries",
+      "w": 6,
+      "h": 3,
+      "unit": "",
+      "min": 0,
+      "queries": [
+        {
+          "expr": "sum by (model) (rate(genai_tokens_total{service=~\"$service\"}[15m]) * on (model, type) group_left genai_token_price) * 3600",
+          "legend": "{{model}}"
+        }
+      ],
+      "fill": true
+    },
+    {
+      "title": "Tokens per minute, by kind",
+      "type": "timeseries",
+      "w": 6,
+      "h": 3,
+      "unit": "",
+      "min": 0,
+      "queries": [
+        {
+          "expr": "sum by (type) (rate(genai_tokens_total{service=~\"$service\"}[5m])) * 60",
+          "legend": "{{type}}"
+        }
+      ]
+    },
+    {
+      "title": "Cost by service, in the shown time",
+      "type": "table",
+      "w": 6,
+      "h": 4,
+      "unit": "",
+      "queries": [
+        {
+          "expr": "sort_desc(sum by (service) (increase(genai_tokens_total{service=~\"$service\"}[$__range]) * on (model, type) group_left genai_token_price))",
+          "legend": "{{service}}"
+        }
+      ]
+    },
+    {
+      "title": "Cost by model, in the shown time",
+      "type": "table",
+      "w": 6,
+      "h": 4,
+      "unit": "",
+      "queries": [
+        {
+          "expr": "sort_desc(sum by (provider, model) (increase(genai_tokens_total{service=~\"$service\"}[$__range]) * on (model, type) group_left genai_token_price))",
+          "legend": "{{provider}} {{model}}"
+        }
+      ]
+    },
+    {
+      "title": "Calls per minute, by model",
+      "type": "timeseries",
+      "w": 6,
+      "h": 3,
+      "unit": "",
+      "min": 0,
+      "queries": [
+        {
+          "expr": "sum by (model) (rate(genai_requests_total{service=~\"$service\"}[5m])) * 60",
+          "legend": "{{model}}"
+        }
+      ]
+    },
+    {
+      "title": "Average seconds per call, by model",
+      "type": "timeseries",
+      "w": 6,
+      "h": 3,
+      "unit": "seconds",
+      "min": 0,
+      "queries": [
+        {
+          "expr": "sum by (model) (rate(genai_request_duration_seconds_sum{service=~\"$service\"}[5m])) / sum by (model) (rate(genai_request_duration_seconds_count{service=~\"$service\"}[5m]))",
+          "legend": "{{model}}"
+        }
+      ]
+    },
+    {
+      "title": "Tokens per call, by service and model",
+      "type": "table",
+      "w": 6,
+      "h": 4,
+      "unit": "",
+      "queries": [
+        {
+          "expr": "sort_desc(sum by (service, model) (increase(genai_tokens_total{service=~\"$service\"}[$__range])) / sum by (service, model) (increase(genai_requests_total{service=~\"$service\"}[$__range])))",
+          "legend": "{{service}} {{model}}"
+        }
+      ]
+    },
+    {
+      "title": "Models in use WITHOUT a price (not in the costs above)",
+      "type": "table",
+      "w": 6,
+      "h": 4,
+      "unit": "",
+      "queries": [
+        {
+          "expr": "count by (provider, model) (genai_tokens_total{service=~\"$service\"}) unless on (model) genai_token_price",
+          "legend": "{{provider}} {{model}}"
+        }
+      ]
+    },
+    {
+      "title": "GPU cost per hour, all GPUs",
+      "type": "stat",
+      "w": 3,
+      "h": 2,
+      "unit": "",
+      "queries": [
+        {
+          "expr": "sum(gpu_info * on (model) group_left gpu_hour_price)"
+        }
+      ]
+    },
+    {
+      "title": "GPU cost in the shown time",
+      "type": "stat",
+      "w": 3,
+      "h": 2,
+      "unit": "",
+      "queries": [
+        {
+          "expr": "sum(avg_over_time(gpu_info[$__range]) * on (model) group_left gpu_hour_price) * $__range_s / 3600"
+        }
+      ]
+    },
+    {
+      "title": "Of that, spent on idle GPU time",
+      "type": "stat",
+      "w": 3,
+      "h": 2,
+      "unit": "",
+      "queries": [
+        {
+          "expr": "sum((1 - avg_over_time(gpu_utilization_ratio[$__range])) * on (agent, gpu) group_left (model) gpu_info * on (model) group_left gpu_hour_price) * $__range_s / 3600"
+        }
+      ],
+      "warn": 1
+    },
+    {
+      "title": "GPU hours used, of hours paid for",
+      "type": "stat",
+      "w": 3,
+      "h": 2,
+      "unit": "ratio",
+      "queries": [
+        {
+          "expr": "avg(avg_over_time(gpu_utilization_ratio[$__range]))"
+        }
+      ]
+    },
+    {
+      "title": "Idle GPU cost in the shown time, by GPU",
+      "type": "table",
+      "w": 6,
+      "h": 4,
+      "unit": "",
+      "queries": [
+        {
+          "expr": "sort_desc((1 - avg_over_time(gpu_utilization_ratio[$__range])) * on (agent, gpu) group_left (model) gpu_info * on (model) group_left gpu_hour_price * $__range_s / 3600)",
+          "legend": "{{agent}} gpu {{gpu}} ({{model}})"
+        }
+      ]
+    },
+    {
+      "title": "GPU models WITHOUT a price",
+      "type": "table",
+      "w": 6,
+      "h": 4,
+      "unit": "",
+      "queries": [
+        {
+          "expr": "count by (model) (gpu_info) unless on (model) gpu_hour_price",
+          "legend": "{{model}}"
+        }
+      ]
+    }
+  ]
+}

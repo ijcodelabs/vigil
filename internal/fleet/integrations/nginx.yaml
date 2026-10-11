@@ -1,0 +1,79 @@
+title: nginx
+description: Access and error logs, and connection and request metrics from nginx-prometheus-exporter.
+detect:
+  process: [nginx]
+  image: [nginx]
+params:
+  metrics_target:
+    default: "localhost:9113"
+    description: Address of nginx-prometheus-exporter.
+  access_log:
+    default: /var/log/nginx/access.log
+    description: Access log in nginx's default "combined" format.
+  error_log:
+    default: /var/log/nginx/error.log
+    description: Error log.
+config:
+  scrape:
+    static:
+      - job: nginx
+        targets: ["${metrics_target}"]
+  logs:
+    templates:
+      nginx_access:
+        parse: regex
+        pattern: '^(?P<client>\S+) \S+ (?P<user>\S+) \[(?P<time>[^\]]+)\] "(?P<method>\S+) (?P<path>\S+) [^"]*" (?P<status>\d+) (?P<bytes>\d+)(?: "(?P<referer>[^"]*)" "(?P<agent_string>[^"]*)")?'
+        timestamp: {field: time, layout: '02/Jan/2006:15:04:05 -0700'}
+        labels: [status]
+      nginx_error:
+        parse: regex
+        pattern: '^(?P<time>\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}) \[(?P<level>\w+)\] (?P<message>.*)'
+        timestamp: {field: time, layout: '2006/01/02 15:04:05'}
+        labels: [level]
+    files:
+      - {name: nginx_access, paths: ["${access_log}"], template: nginx_access, labels: {app: nginx}}
+      - {name: nginx_error, paths: ["${error_log}"], template: nginx_error, labels: {app: nginx}}
+rules:
+  - name: alerts
+    interval: 1m
+    rules:
+      - alert: NginxDown
+        expr: nginx_up == 0 or up{job="nginx"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: 'nginx on {{ $labels.agent }} is not answering'
+  - name: logs
+    type: logs
+    interval: 1m
+    rules:
+      - alert: NginxServerErrors
+        expr: '_time:5m app:nginx status:~"5.." | stats by (agent) count() as errors | filter errors:>50'
+        labels: {severity: warning}
+        annotations:
+          summary: '{{ $value }} responses with a 5xx status from nginx on {{ $labels.agent }} in 5 minutes'
+dashboard:
+  title: nginx
+  variables:
+    - {name: agent, label: agent, match: nginx_up}
+  panels:
+    - {title: Up, type: stat, w: 3, h: 2, queries: [{expr: 'min(nginx_up{agent=~"$agent"})'}]}
+    - {title: Active connections, type: stat, w: 3, h: 2, queries: [{expr: 'sum(nginx_connections_active{agent=~"$agent"})'}]}
+    - {title: Requests per second, type: stat, w: 3, h: 2, unit: ops/s, queries: [{expr: 'sum(rate(nginx_http_requests_total{agent=~"$agent"}[2m]))'}]}
+    - {title: 5xx responses, type: stat, source: logs, w: 3, h: 2, warn: 1, queries: [{expr: 'app:nginx agent:~"$agent" status:~"5.." | stats count() as errors'}]}
+    - title: Requests per second
+      type: timeseries
+      w: 6
+      h: 3
+      unit: ops/s
+      min: 0
+      queries: [{expr: 'sum by (agent) (rate(nginx_http_requests_total{agent=~"$agent"}[2m]))', legend: '{{agent}}'}]
+    - title: Responses by status
+      type: timeseries
+      source: logs
+      w: 6
+      h: 3
+      min: 0
+      fill: true
+      queries: [{expr: 'app:nginx agent:~"$agent" status:* | stats by (status) count() as responses', legend: '{{status}}'}]
+    - {title: Latest errors, type: logs, w: 12, h: 4, limit: 50, queries: [{expr: 'app:nginx agent:~"$agent" (level:error or level:crit or status:~"5..")'}]}

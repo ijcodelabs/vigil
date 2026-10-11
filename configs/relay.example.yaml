@@ -1,0 +1,19 @@
+# vigil relay: agents send here, the relay passes it on to the server.
+listen: ":8080"
+# relay_id: site-zagreb             # shown next to its agents; defaults to the hostname
+
+server:
+  url: https://vigil.example.internal:8080
+  # ca_pin: sha256:...              # the server's fingerprint, if it has its own certificate authority
+  # ca_file: /etc/vigil/ca.pem
+
+# Encrypt what agents send to the relay. self_signed: the relay makes its
+# own certificate authority in data_dir/pki; agents get its fingerprint
+# (printed at start) as ca_pin.
+tls:
+  self_signed: true
+  # cert_file: /etc/vigil/tls/fullchain.pem
+  # key_file: /etc/vigil/tls/key.pem
+data_dir: /var/lib/vigil-relay
+
+# max_in_flight: 256                # requests passed on at once

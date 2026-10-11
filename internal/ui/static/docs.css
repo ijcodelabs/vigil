@@ -1,0 +1,16 @@
+/* Documentation pages. */
+.doc { max-width: 900px; line-height: 1.6; }
+.doc h1 { font-size: 26px; margin: 0 0 16px; }
+.doc h2 { font-size: 19px; margin: 34px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+.doc h3 { font-size: 15.5px; margin: 24px 0 8px; }
+.doc p, .doc ul, .doc ol { margin: 0 0 12px; }
+.doc li { margin-bottom: 4px; }
+.doc code { background: var(--panel-2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; }
+.doc pre { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; overflow-x: auto; margin: 0 0 14px; }
+.doc pre code { background: none; border: none; padding: 0; }
+.doc table { margin: 0 0 16px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; border-collapse: separate; border-spacing: 0; display: block; overflow-x: auto; width: fit-content; max-width: 100%; }
+.doc th { white-space: normal; }
+.doc td, .doc th { padding: 7px 12px; }
+.doc blockquote { margin: 0 0 14px; padding: 8px 14px; border-left: 3px solid var(--accent); background: var(--panel); border-radius: 0 6px 6px 0; }
+.doc blockquote p:last-child { margin: 0; }
+.doc hr { border: none; border-top: 1px solid var(--border); margin: 26px 0; }

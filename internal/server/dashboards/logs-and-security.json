@@ -1,0 +1,144 @@
+{
+  "id": "logs-and-security",
+  "title": "Logs and security",
+  "variables": [
+    {
+      "name": "agent",
+      "label": "agent",
+      "match": "vigil_agent_up"
+    }
+  ],
+  "panels": [
+    {
+      "title": "Log lines",
+      "type": "stat",
+      "source": "logs",
+      "w": 3,
+      "h": 2,
+      "queries": [
+        {
+          "expr": "agent:~\"$agent\" | stats count() as lines"
+        }
+      ]
+    },
+    {
+      "title": "Error lines",
+      "type": "stat",
+      "source": "logs",
+      "w": 3,
+      "h": 2,
+      "warn": 1,
+      "queries": [
+        {
+          "expr": "agent:~\"$agent\" level:~\"(?i)^(err|crit|fatal)\" | stats count() as lines"
+        }
+      ]
+    },
+    {
+      "title": "Detections",
+      "type": "stat",
+      "source": "logs",
+      "w": 3,
+      "h": 2,
+      "warn": 1,
+      "queries": [
+        {
+          "expr": "agent:~\"$agent\" source:security | stats count() as detections"
+        }
+      ]
+    },
+    {
+      "title": "Critical detections",
+      "type": "stat",
+      "source": "logs",
+      "w": 3,
+      "h": 2,
+      "crit": 1,
+      "queries": [
+        {
+          "expr": "agent:~\"$agent\" source:security severity:critical | stats count() as detections"
+        }
+      ]
+    },
+    {
+      "title": "Log lines by source",
+      "type": "timeseries",
+      "source": "logs",
+      "w": 6,
+      "h": 3,
+      "min": 0,
+      "fill": true,
+      "queries": [
+        {
+          "expr": "agent:~\"$agent\" | stats by (source) count() as lines",
+          "legend": "{{source}}"
+        }
+      ]
+    },
+    {
+      "title": "Error lines by agent",
+      "type": "timeseries",
+      "source": "logs",
+      "w": 6,
+      "h": 3,
+      "min": 0,
+      "queries": [
+        {
+          "expr": "agent:~\"$agent\" level:~\"(?i)^(err|crit|fatal)\" | stats by (agent) count() as lines",
+          "legend": "{{agent}}"
+        }
+      ]
+    },
+    {
+      "title": "Detections by rule",
+      "type": "timeseries",
+      "source": "logs",
+      "w": 6,
+      "h": 3,
+      "min": 0,
+      "fill": true,
+      "queries": [
+        {
+          "expr": "agent:~\"$agent\" source:security | stats by (rule) count() as detections",
+          "legend": "{{rule}}"
+        }
+      ]
+    },
+    {
+      "title": "Detections by rule, total",
+      "type": "table",
+      "source": "logs",
+      "w": 6,
+      "h": 3,
+      "queries": [
+        {
+          "expr": "agent:~\"$agent\" source:security | stats by (rule, severity) count() as detections"
+        }
+      ]
+    },
+    {
+      "title": "Latest detections",
+      "type": "logs",
+      "w": 12,
+      "h": 4,
+      "limit": 50,
+      "queries": [
+        {
+          "expr": "agent:~\"$agent\" source:security"
+        }
+      ]
+    },
+    {
+      "title": "Latest errors",
+      "type": "logs",
+      "w": 12,
+      "h": 4,
+      "limit": 50,
+      "queries": [
+        {
+          "expr": "agent:~\"$agent\" level:~\"(?i)^(err|crit|fatal)\""
+        }
+      ]
+    }
+  ]
+}

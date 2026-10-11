@@ -1,0 +1,21 @@
+# Database hosts: the Postgres exporter and its log, on Linux only.
+select:
+  - role=~"db|cache"
+  - os="linux"
+priority: 20
+config:
+  scrape:
+    static:
+      - job: postgres
+        targets: ["localhost:9187"]
+        interval: 30s
+        drop: ['^go_', '^process_']
+  logs:
+    templates:
+      postgres:
+        multiline: {start: '^\d{4}-\d{2}-\d{2}'}
+    files:
+      - name: postgres
+        paths: [/var/log/postgresql/*.log]
+        template: postgres
+        labels: {app: postgres}

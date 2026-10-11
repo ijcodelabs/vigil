@@ -1,0 +1,211 @@
+{
+  "id": "vigil-agents",
+  "title": "vigil agents",
+  "variables": [
+    {
+      "name": "agent",
+      "label": "agent",
+      "match": "vigil_agent_info"
+    }
+  ],
+  "panels": [
+    {
+      "title": "Agents reporting",
+      "type": "stat",
+      "w": 2,
+      "h": 2,
+      "unit": "",
+      "queries": [
+        {
+          "expr": "sum(vigil_agent_up{agent=~\"$agent\"})"
+        }
+      ]
+    },
+    {
+      "title": "Agents down",
+      "type": "stat",
+      "w": 2,
+      "h": 2,
+      "unit": "",
+      "queries": [
+        {
+          "expr": "count(vigil_agent_up{agent=~\"$agent\"} == 0) or vector(0)"
+        }
+      ],
+      "warn": 1
+    },
+    {
+      "title": "Series",
+      "type": "stat",
+      "w": 2,
+      "h": 2,
+      "unit": "",
+      "queries": [
+        {
+          "expr": "sum(vigil_agent_series{agent=~\"$agent\"})"
+        }
+      ]
+    },
+    {
+      "title": "CPU cores used by agents",
+      "type": "stat",
+      "w": 2,
+      "h": 2,
+      "unit": "cores",
+      "queries": [
+        {
+          "expr": "sum(rate(vigil_agent_cpu_seconds_total{agent=~\"$agent\"}[5m]))"
+        }
+      ]
+    },
+    {
+      "title": "Memory used by agents",
+      "type": "stat",
+      "w": 2,
+      "h": 2,
+      "unit": "bytes",
+      "queries": [
+        {
+          "expr": "sum(vigil_agent_memory_bytes{agent=~\"$agent\"})"
+        }
+      ]
+    },
+    {
+      "title": "Waiting to be sent",
+      "type": "stat",
+      "w": 2,
+      "h": 2,
+      "unit": "bytes",
+      "queries": [
+        {
+          "expr": "sum(vigil_agent_spool_bytes{agent=~\"$agent\"})"
+        }
+      ]
+    },
+    {
+      "title": "CPU used by the agent (share of one core)",
+      "type": "timeseries",
+      "w": 6,
+      "h": 3,
+      "unit": "ratio",
+      "min": 0,
+      "queries": [
+        {
+          "expr": "rate(vigil_agent_cpu_seconds_total{agent=~\"$agent\"}[5m])",
+          "legend": "{{agent}}"
+        }
+      ]
+    },
+    {
+      "title": "Memory held by the agent",
+      "type": "timeseries",
+      "w": 6,
+      "h": 3,
+      "unit": "bytes",
+      "min": 0,
+      "queries": [
+        {
+          "expr": "vigil_agent_memory_bytes{agent=~\"$agent\"}",
+          "legend": "{{agent}}"
+        }
+      ]
+    },
+    {
+      "title": "Series sent",
+      "type": "timeseries",
+      "w": 6,
+      "h": 3,
+      "unit": "",
+      "min": 0,
+      "queries": [
+        {
+          "expr": "vigil_agent_series{agent=~\"$agent\"}",
+          "legend": "{{agent}}"
+        }
+      ]
+    },
+    {
+      "title": "Waiting to be sent",
+      "type": "timeseries",
+      "w": 6,
+      "h": 3,
+      "unit": "bytes",
+      "min": 0,
+      "queries": [
+        {
+          "expr": "sum by (agent, signal) (vigil_agent_spool_bytes{agent=~\"$agent\"}) > 0",
+          "legend": "{{agent}} {{signal}}"
+        }
+      ]
+    },
+    {
+      "title": "Dropped by the agent (per second)",
+      "type": "timeseries",
+      "w": 6,
+      "h": 3,
+      "unit": "",
+      "min": 0,
+      "queries": [
+        {
+          "expr": "sum by (agent, reason) (rate(vigil_agent_dropped_total{agent=~\"$agent\"}[5m])) > 0",
+          "legend": "{{agent}} {{reason}}"
+        }
+      ]
+    },
+    {
+      "title": "Held back by the server (batches per minute)",
+      "type": "timeseries",
+      "w": 6,
+      "h": 3,
+      "unit": "",
+      "min": 0,
+      "queries": [
+        {
+          "expr": "sum by (agent, signal) (increase(vigil_agent_limited_batches_total{agent=~\"$agent\"}[1m])) > 0",
+          "legend": "{{agent}} {{signal}}"
+        }
+      ]
+    },
+    {
+      "title": "Goroutines",
+      "type": "timeseries",
+      "w": 6,
+      "h": 3,
+      "unit": "",
+      "min": 0,
+      "queries": [
+        {
+          "expr": "vigil_agent_goroutines{agent=~\"$agent\"}",
+          "legend": "{{agent}}"
+        }
+      ]
+    },
+    {
+      "title": "Open files",
+      "type": "timeseries",
+      "w": 6,
+      "h": 3,
+      "unit": "",
+      "min": 0,
+      "queries": [
+        {
+          "expr": "vigil_agent_open_files{agent=~\"$agent\"}",
+          "legend": "{{agent}}"
+        }
+      ]
+    },
+    {
+      "title": "Agents: version, uptime, cost",
+      "type": "table",
+      "w": 12,
+      "h": 4,
+      "unit": "",
+      "queries": [
+        {
+          "expr": "sort_desc(rate(vigil_agent_cpu_seconds_total{agent=~\"$agent\"}[5m]) * on (agent) group_left (version) vigil_agent_info{agent=~\"$agent\"})",
+          "legend": "{{agent}} {{version}} (cores)"
+        }
+      ]
+    }
+  ]
+}

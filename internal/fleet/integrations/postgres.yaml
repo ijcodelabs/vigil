@@ -1,0 +1,73 @@
+title: PostgreSQL
+description: Server log, and connection, transaction and replication metrics from postgres_exporter.
+detect:
+  process: [postgres, postmaster]
+  image: [postgres, postgresql]
+params:
+  metrics_target:
+    default: "localhost:9187"
+    description: Address of postgres_exporter.
+  log_path:
+    default: /var/log/postgresql/*.log
+    description: Server log files.
+config:
+  scrape:
+    static:
+      - job: postgres
+        targets: ["${metrics_target}"]
+        drop: ['^go_', '^process_', '^promhttp_']
+  logs:
+    templates:
+      postgres:
+        multiline: {start: '^\d{4}-\d{2}-\d{2} '}
+        parse: regex
+        pattern: '^(?P<time>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?) \S+ \[\d+\] (?:\S+ )?(?P<level>[A-Z]+): +(?P<message>(?s:.*))'
+        labels: [level]
+    files:
+      - {name: postgres, paths: ["${log_path}"], template: postgres, labels: {app: postgres}}
+rules:
+  - name: alerts
+    interval: 1m
+    rules:
+      - alert: PostgresDown
+        expr: pg_up == 0 or up{job="postgres"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: 'PostgreSQL on {{ $labels.agent }} is not answering'
+      - alert: PostgresConnectionsNearLimit
+        expr: sum by (agent) (pg_stat_database_numbackends) / on (agent) pg_settings_max_connections > 0.85
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: 'PostgreSQL on {{ $labels.agent }} uses {{ $value | humanizePercentage }} of its connections'
+      - alert: PostgresDeadlocks
+        expr: sum by (agent, datname) (increase(pg_stat_database_deadlocks[10m])) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: '{{ $value | humanize }} deadlocks in database {{ $labels.datname }} on {{ $labels.agent }} in 10 minutes'
+dashboard:
+  title: PostgreSQL
+  variables:
+    - {name: agent, label: agent, match: pg_up}
+  panels:
+    - {title: Up, type: stat, w: 3, h: 2, queries: [{expr: 'min(pg_up{agent=~"$agent"})'}]}
+    - {title: Connections, type: stat, w: 3, h: 2, queries: [{expr: 'sum(pg_stat_database_numbackends{agent=~"$agent"})'}]}
+    - {title: Connection limit, type: stat, w: 3, h: 2, queries: [{expr: 'min(pg_settings_max_connections{agent=~"$agent"})'}]}
+    - {title: Errors in the log, type: stat, source: logs, w: 3, h: 2, warn: 1, queries: [{expr: 'app:postgres agent:~"$agent" (level:ERROR or level:FATAL or level:PANIC) | stats count() as errors'}]}
+    - title: Transactions per second
+      type: timeseries
+      w: 6
+      h: 3
+      unit: ops/s
+      min: 0
+      queries:
+        - {expr: 'sum by (datname) (rate(pg_stat_database_xact_commit{agent=~"$agent"}[2m]))', legend: '{{datname}} commits'}
+        - {expr: 'sum by (datname) (rate(pg_stat_database_xact_rollback{agent=~"$agent"}[2m]))', legend: '{{datname}} rollbacks'}
+    - title: Connections by database
+      type: timeseries
+      w: 6
+      h: 3
+      min: 0
+      queries: [{expr: 'pg_stat_database_numbackends{agent=~"$agent",datname!=""}', legend: '{{datname}}'}]
+    - {title: Latest errors, type: logs, w: 12, h: 4, limit: 50, queries: [{expr: 'app:postgres agent:~"$agent" (level:ERROR or level:FATAL or level:PANIC)'}]}

@@ -1,0 +1,7 @@
+# The one cluster agent per cluster (the Deployment) gets the cluster
+# integration: nodes, workloads, jobs, unschedulable pods and events.
+select:
+  - kubernetes_role="cluster"
+priority: 5
+integrations:
+  kubernetes_cluster: {}

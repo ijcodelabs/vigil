@@ -1,0 +1,75 @@
+title: VictoriaMetrics
+description: Health and load of a VictoriaMetrics single-node instance, from its own /metrics page.
+detect:
+  process: [victoria-metrics, victoria-metrics-prod, vmsingle]
+  image: [victoria-metrics]
+params:
+  target:
+    default: "localhost:8428"
+    description: Address of the instance's HTTP port.
+config:
+  scrape:
+    static:
+      - job: victoriametrics
+        targets: ["${target}"]
+        drop: ['^go_gc_', '^go_sched_', '^go_mutex_', '^go_cpu_']
+rules:
+  - name: alerts
+    interval: 1m
+    rules:
+      - alert: VictoriaMetricsDown
+        expr: up{job="victoriametrics"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: 'VictoriaMetrics at {{ $labels.instance }} cannot be scraped'
+      - alert: VictoriaMetricsDiskAlmostFull
+        expr: vm_free_disk_space_bytes{job="victoriametrics"} / (vm_free_disk_space_bytes + on (agent, instance) sum by (agent, instance) (vm_data_size_bytes)) < 0.1
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: 'VictoriaMetrics at {{ $labels.instance }} has {{ $value | humanizePercentage }} of its disk left'
+      - alert: VictoriaMetricsRequestErrors
+        expr: sum by (agent, instance) (rate(vm_http_request_errors_total{job="victoriametrics"}[5m])) > 1
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: 'VictoriaMetrics at {{ $labels.instance }} answers {{ $value | humanize }} requests per second with an error'
+dashboard:
+  title: VictoriaMetrics
+  variables:
+    - {name: agent, label: agent, match: vm_app_uptime_seconds}
+  panels:
+    - {title: Up, type: stat, w: 3, h: 2, queries: [{expr: 'min(up{job="victoriametrics",agent=~"$agent"})'}]}
+    - {title: Uptime, type: stat, w: 3, h: 2, unit: seconds, queries: [{expr: 'min(vm_app_uptime_seconds{agent=~"$agent"})'}]}
+    - {title: Data on disk, type: stat, w: 3, h: 2, unit: bytes, queries: [{expr: 'sum(vm_data_size_bytes{agent=~"$agent"})'}]}
+    - {title: Free disk, type: stat, w: 3, h: 2, unit: bytes, queries: [{expr: 'min(vm_free_disk_space_bytes{agent=~"$agent"})'}]}
+    - title: Samples stored per second
+      type: timeseries
+      w: 6
+      h: 3
+      unit: ops/s
+      min: 0
+      queries: [{expr: 'sum by (type) (rate(vm_rows_inserted_total{agent=~"$agent"}[2m]))', legend: '{{type}}'}]
+    - title: HTTP requests per second
+      type: timeseries
+      w: 6
+      h: 3
+      unit: ops/s
+      min: 0
+      queries: [{expr: 'topk(8, sum by (path) (rate(vm_http_requests_total{agent=~"$agent"}[2m])))', legend: '{{path}}'}]
+    - title: Memory
+      type: timeseries
+      w: 6
+      h: 3
+      unit: bytes
+      min: 0
+      queries: [{expr: 'process_resident_memory_bytes{job="victoriametrics",agent=~"$agent"}', legend: '{{agent}}'}]
+    - title: Queries running
+      type: timeseries
+      w: 6
+      h: 3
+      min: 0
+      queries:
+        - {expr: 'vm_concurrent_select_current{agent=~"$agent"}', legend: running}
+        - {expr: 'vm_concurrent_select_capacity{agent=~"$agent"}', legend: limit}
