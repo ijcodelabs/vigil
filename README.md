@@ -5,6 +5,13 @@ dashboards: a single Go binary that runs as an agent on every host or
 Kubernetes node (`vigil agent`) and as the central server (`vigil server`),
 with VictoriaMetrics and VictoriaLogs as storage.
 
+![The Containers dashboard: running containers, memory and CPU in use, and charts per container](docs/img/containers.png)
+
+| | |
+|---|---|
+| [![A service page: request rate, duration, operations and dependencies](docs/img/service.png)](docs/img/service.png) **Services** from OpenTelemetry traces | [![A failed request as a trace, span by span](docs/img/trace.png)](docs/img/trace.png) **Traces**, span by span |
+| [![Log search with a histogram of matching lines](docs/img/logs.png)](docs/img/logs.png) **Logs** from files, journald and containers | [![The agent list with labels, profiles and what runs unmonitored](docs/img/fleet.png)](docs/img/fleet.png) **Fleet**: agents configured from the server |
+
 ## What it does
 
 - **Metrics**: host and container figures, Prometheus scraping (static
