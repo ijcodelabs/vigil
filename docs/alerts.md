@@ -145,6 +145,62 @@ receivers:
           {{ end }}
 ```
 
+### Slack
+
+In Slack, create an app with an **incoming webhook** for the channel
+(api.slack.com/apps → your app → Incoming Webhooks) and put its URL in a
+file on the server. The URL is the whole secret: anyone who has it can post
+to the channel.
+
+```yaml
+route:
+  receiver: slack-ops                  # everything goes to #ops-alerts ...
+  group_by: [alertname, agent]
+  routes:
+    - matchers: [severity="critical"]  # ... and what is critical to #oncall instead
+      receiver: slack-oncall
+
+receivers:
+  - name: slack-ops
+    slack_configs:
+      - api_url_file: /etc/vigil/slack-ops-webhook   # the file holds just the URL
+        send_resolved: true
+        username: vigil
+        title_link: '{{ reReplaceAll "/alertmanager$" "" .ExternalURL }}/#/alerts'
+        fallback: '{{ template "slack.default.title" . }}'   # the text of the push notification
+        text: |-
+          {{ range .Alerts }}{{ if eq .Status "resolved" }}:white_check_mark: {{ end }}*{{ .Labels.alertname }}*{{ with .Labels.agent }} on `{{ . }}`{{ end }}: {{ .Annotations.summary }}
+          {{ end }}
+  - name: slack-oncall
+    slack_configs:
+      - api_url_file: /etc/vigil/slack-oncall-webhook
+        send_resolved: true
+        username: vigil
+        title_link: '{{ reReplaceAll "/alertmanager$" "" .ExternalURL }}/#/alerts'
+        fallback: '{{ template "slack.default.title" . }}'   # the text of the push notification
+        text: |-
+          <!channel>
+          {{ range .Alerts }}{{ if eq .Status "resolved" }}:white_check_mark: {{ end }}*{{ .Labels.alertname }}*{{ with .Labels.agent }} on `{{ . }}`{{ end }}: {{ .Annotations.summary }}
+          {{ end }}
+```
+
+- Set `title_link`, `fallback` and `text` as above. Left alone, the title
+  and the push notification link to Alertmanager's own web page, which
+  vigil does not have, and the message has no text, only a title like
+  `[FIRING:2] DiskAlmostFull web-01`. The
+  link above opens vigil's Alerts page; it relies on `external_url` in the
+  server config being the address people use.
+- A webhook belongs to one channel, so a second channel is a second
+  webhook. `channel:` only has an effect with the old "legacy" webhooks and
+  with a bot token.
+- With a bot token instead (`app_token_file: /etc/vigil/slack-token` in
+  place of `api_url_file`, scope `chat:write`, the bot invited to the
+  channel) one token serves every channel, and each receiver names its own
+  with `channel: '#ops-alerts'`.
+- The bar next to the message is red while firing and green once resolved.
+  `<!channel>` notifies everyone in the channel; leave it out where that is
+  too loud.
+
 To check a contact without waiting for trouble, hand Alertmanager an alert
 yourself; it goes the same way a real one does:
 
