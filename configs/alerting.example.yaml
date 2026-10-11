@@ -34,9 +34,15 @@ receivers:
       - url: https://hooks.example.com/pager
   - name: web-team-slack
     slack_configs:
-      - api_url: https://hooks.slack.com/services/CHANGE/ME
-        channel: '#web-alerts'
+      - api_url_file: /etc/vigil/slack-web-webhook   # the file holds just the webhook URL
         send_resolved: true
+        username: vigil
+        # Without these three the message is a bare title linking to a page vigil does not have.
+        title_link: '{{ reReplaceAll "/alertmanager$" "" .ExternalURL }}/#/alerts'
+        fallback: '{{ template "slack.default.title" . }}'
+        text: |-
+          {{ range .Alerts }}{{ if eq .Status "resolved" }}:white_check_mark: {{ end }}*{{ .Labels.alertname }}*{{ with .Labels.agent }} on `{{ . }}`{{ end }}: {{ .Annotations.summary }}
+          {{ end }}
 
 # A down host should not also page for everything running on it.
 inhibit_rules:
