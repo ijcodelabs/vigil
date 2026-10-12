@@ -302,6 +302,9 @@ messages, sent to the contacts the alerts are routed to:
   alert with the silence's own labels would reach. The message is an alert
   named `AlertsSilenced` with severity `info`, so routing and templates
   treat it like any other.
+  A message template of your own can give it a heading that is not
+  "firing":
+  `{{ if eq .GroupLabels.alertname "AlertsSilenced" }}Silenced{{ else }}…{{ end }}`.
 - **When an alert ends while silenced**: a "resolved" message with the note
   that it ended while silenced, but only to contacts that had been told it
   was firing (and whose receiver has `send_resolved`). An alert that began

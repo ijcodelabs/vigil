@@ -132,6 +132,13 @@ func (a *Alertmanager) deliver(key string, receivers []string, resolved bool, al
 			ctx = notify.WithGroupLabels(ctx, alerts[0].Labels)
 			ctx = notify.WithNow(ctx, time.Now())
 			ctx = notify.WithRepeatInterval(ctx, 0)
+			// The notifiers log an error for a message that comes without the
+			// reason Alertmanager's own pipeline would have given it.
+			reason := notify.ReasonFirstNotification
+			if resolved {
+				reason = notify.ReasonAllAlertsResolved
+			}
+			ctx = notify.WithNotificationReason(ctx, reason)
 			if _, err := in.Notify(ctx, alerts...); err != nil {
 				a.log.Warn("notification about a silence was not delivered", "receiver", name, "integration", in.Name(), "err", err)
 			}

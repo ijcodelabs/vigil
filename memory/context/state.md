@@ -338,8 +338,11 @@ Last updated: 2026-10-12.
 - Silences go through `POST /alertmanager/api/v2/silences` in the server
   (`postSilence`), which signs them with the signed-in account.
   `notify_silences: false` switches the messages off.
-- Tested with webhook receivers only; never sent through a real Telegram,
-  Slack or mail receiver.
+- Sent through a real Telegram receiver on 2026-10-12: delivered, with an
+  error line in the server log about a missing "notification reason",
+  which the messages now carry. Slack and mail receivers: never tried.
+- A message template can tell the silence message apart by
+  `.GroupLabels.alertname` being `AlertsSilenced`.
 - Explore > Logs: "exclude" next to "filter" on a line's fields.
 
 ## Choosing what an agent sends: container logs (built 2026-10-12)
