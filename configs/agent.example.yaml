@@ -124,6 +124,13 @@ logs:
       parse: logfmt
       keep: ['level=(warn|error)']  # if set, only matching lines are shipped
 
+  # Lines not worth sending, by source: container, unit, pod or app (* and ?
+  # allowed) and a regular expression on the message; none means every line.
+  drop: []
+  #  - name: web-health
+  #    container: "web-*"
+  #    match: 'GET /healthz .* 200'
+
   files:
     - name: nginx_access            # optional here; lets a server profile change this source
       paths: [/var/log/nginx/access.log]

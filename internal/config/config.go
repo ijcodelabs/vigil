@@ -9,6 +9,7 @@ import (
 	"maps"
 	"net"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -125,8 +126,25 @@ type LogFiles struct {
 	FromBeginning bool              `yaml:"from_beginning"`
 }
 
+// LogDrop keeps lines from being sent: those of the sources it names whose
+// message matches. The selectors (container, unit, pod, app) may use * and ?
+// and must all match; at least one is needed. Match is a regular
+// expression on the message as it would be stored; empty means every line.
+// It is applied last, after the source's template, so it sees what a
+// search in the server would see.
+type LogDrop struct {
+	Name      string `yaml:"name"`
+	Container string `yaml:"container"`
+	Unit      string `yaml:"unit"`
+	Pod       string `yaml:"pod"`
+	App       string `yaml:"app"`
+	Match     string `yaml:"match"`
+	Enabled   *bool  `yaml:"enabled"`
+}
+
 type Logs struct {
 	Templates map[string]LogTemplate `yaml:"templates"`
+	Drop      []LogDrop              `yaml:"drop"`
 	Files     []LogFiles             `yaml:"files"`
 	Journald  struct {
 		Enabled  bool     `yaml:"enabled"`
@@ -457,6 +475,30 @@ func (c *Collection) Check() error {
 		return fmt.Errorf("limits cannot be negative")
 	}
 	names := map[string]bool{}
+	drops := map[string]bool{}
+	for i, d := range c.Logs.Drop {
+		if !itemNameRe.MatchString(d.Name) {
+			return fmt.Errorf("logs.drop[%d]: name is required (letters, digits, . _ -)", i)
+		}
+		if drops[d.Name] {
+			return fmt.Errorf("logs.drop %s is defined twice", d.Name)
+		}
+		drops[d.Name] = true
+		if Off(d.Enabled) {
+			continue
+		}
+		if d.Container == "" && d.Unit == "" && d.Pod == "" && d.App == "" {
+			return fmt.Errorf("logs.drop %s: say whose lines, with container, unit, pod or app", d.Name)
+		}
+		for _, pattern := range []string{d.Container, d.Unit, d.Pod, d.App} {
+			if _, err := path.Match(pattern, ""); err != nil {
+				return fmt.Errorf("logs.drop %s: %q is not a valid pattern", d.Name, pattern)
+			}
+		}
+		if _, err := regexp.Compile(d.Match); err != nil {
+			return fmt.Errorf("logs.drop %s: match: %v", d.Name, err)
+		}
+	}
 	for _, f := range c.Logs.Files {
 		if f.Name != "" && names[f.Name] {
 			return fmt.Errorf("log source %s is defined twice", f.Name)

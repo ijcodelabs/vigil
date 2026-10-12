@@ -189,7 +189,40 @@ docker:
 
 **Explore → Log volume** shows who writes the most and switches a
 container off with a click ([Explore](explore.md)). To send fewer lines of
-a container instead of none, give it a template with `drop` or `keep`.
+a container instead of none, see the next section.
+
+### Lines not worth sending
+
+```yaml
+logs:
+  drop:
+    - name: snapclient-refused
+      unit: "snapclient*"                    # whose lines: container, unit, pod or app
+      match: 'Connection refused|not connected'   # a regular expression on the message
+    - name: web-health
+      container: "web-*"
+      match: 'GET /healthz .* 200'
+    - name: no-dbus
+      unit: dbus.service                     # no match: every line of this unit
+```
+
+A rule names a source (`container`, `unit`, `pod` or `app`; `*` and `?`
+allowed, all given ones must match) and a regular expression that is looked
+for anywhere in the message. Matching lines are not sent. Without `match`
+the rule drops every line of that source.
+
+- Rules see a line as it would be stored, after its template has parsed
+  and masked it, so a search in Explore finds exactly what a rule would
+  drop: `unit:"snapclient.service" _msg:~"Connection refused"`.
+- Rules are named, so profiles add to each other's rules, and
+  `enabled: false` in a later profile switches one off.
+- **Explore → Logs** writes such a rule from a line you open ("Stop sending
+  lines like this"), after showing how many lines of the last hour it would
+  have dropped and kept.
+
+A template's own `drop` and `keep` do the same before parsing and belong
+to the template; use them when the rule is part of how a kind of log is
+read, and `logs.drop` when it is about one source being noisy.
 
 ### Check that something answers
 

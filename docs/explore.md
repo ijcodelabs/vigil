@@ -100,6 +100,12 @@ Arithmetic works between series with the same labels:
   lines with that value instead (it adds `-field:"value"`). Each undoes the
   other for the same value.
 - **Live tail** shows matching lines as they arrive, newest on top.
+- **Stop sending lines like this…** (admins, under the fields of an opened
+  line) makes a rule so that the line's agent no longer sends such lines.
+  It proposes a pattern from the line, with numbers and ids replaced by
+  what they may be; edit it down to what the unwanted lines have in common.
+  Before anything is saved it shows how many lines of that source in the
+  last hour the pattern would have dropped and kept, with examples of both.
 - The newest lines up to the chosen limit are shown.
 
 ### What a log line has
@@ -190,15 +196,19 @@ size per container, pod, systemd unit or application in the chosen time
 range, biggest first, with each one's share. **show lines** opens that
 source in Logs.
 
-For a container, an admin can **stop collecting** its logs on that agent:
+An admin can **stop collecting** the logs of a container, a systemd unit,
+a pod or an application on that agent:
 
 - The change is written into the profile of that one agent,
-  `agent-<name>`, as `docker.container_logs: {"<container>": false}`, and
-  saved like any profile: checked first, with a version you can go back to.
+  `agent-<name>`: for a container as `docker.container_logs`, for the
+  others as a `logs.drop` rule without a pattern. It is saved like any
+  profile: checked first, with a version you can go back to.
 - The agent picks it up within a minute. Lines already stored stay until
   they age out; the container's metrics are not affected.
 - What is switched off is listed under **Switched off**, with **collect
   again** to take it back.
+- **Lines that are dropped** lists every drop rule, also those made from
+  a line under Logs, with **remove**.
 
 If your profiles are files in git ([Fleet](fleet.md)), make the same change
 there: `vigil apply -prune` removes profiles the files do not have. A

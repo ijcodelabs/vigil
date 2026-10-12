@@ -1,9 +1,11 @@
 package logs
 
 import (
+	"regexp"
 	"testing"
 
 	"github.com/ijcodelabs/vigil/internal/dockerapi"
+	"github.com/ijcodelabs/vigil/internal/model"
 )
 
 func TestContainerTemplate(t *testing.T) {
@@ -53,5 +55,37 @@ func TestContainerLogsWanted(t *testing.T) {
 	only := &Docker{Collect: map[string]string{"*": "false", "shop-*": "true"}}
 	if only.wanted(dockerapi.Container{ID: "a", Names: []string{"/redis"}}) || !only.wanted(dockerapi.Container{ID: "b", Names: []string{"/shop-api"}}) {
 		t.Error(`"*": false with "shop-*": true should collect only shop-*`)
+	}
+}
+
+// Drop rules see an entry as it would be stored and name whose lines they mean.
+func TestDropRules(t *testing.T) {
+	m := &Manager{drops: []dropRule{
+		{where: map[string]string{"unit": "snapclient*"}, match: regexp.MustCompile(`Connection refused|not connected`)},
+		{where: map[string]string{"container": "chatty"}}, // every line
+		{where: map[string]string{"container": "web-*", "app": "nginx"}, match: regexp.MustCompile(`GET /healthz`)},
+	}}
+	entry := func(msg string, kv ...string) *model.LogEntry {
+		e := &model.LogEntry{Msg: msg, Stream: map[string]string{}, Fields: map[string]string{}}
+		for i := 0; i+1 < len(kv); i += 2 {
+			e.Stream[kv[i]] = kv[i+1]
+		}
+		return e
+	}
+	for _, c := range []struct {
+		e    *model.LogEntry
+		want bool
+	}{
+		{entry("[Error] (Controller) Error: Connection refused", "unit", "snapclient.service"), true},
+		{entry("[Notice] Connected to 10.0.0.3", "unit", "snapclient.service"), false},
+		{entry("Connection refused", "unit", "sshd.service"), false}, // another unit
+		{entry("anything at all", "container", "chatty"), true},
+		{entry("GET /healthz 200", "container", "web-1", "app", "nginx"), true},
+		{entry("GET /healthz 200", "container", "web-1"), false}, // both selectors must match
+		{entry("GET /cart 200", "container", "web-1", "app", "nginx"), false},
+	} {
+		if got := m.dropped(c.e); got != c.want {
+			t.Errorf("%q from %v: dropped %v, want %v", c.e.Msg, c.e.Stream, got, c.want)
+		}
 	}
 }
