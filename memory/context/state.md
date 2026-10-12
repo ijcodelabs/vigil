@@ -353,9 +353,20 @@ Last updated: 2026-10-12.
   through the normal profile save.
 - Verified live on Docker: a noisy container stopped arriving 12 s after
   the click and came back 18 s after "collect again".
-- Not built: the same for systemd units, files and Kubernetes pods; a
-  minimum level per source; a rate limit per container; "errors only" from
-  the page.
+- `logs.drop`: named rules (source by container, unit, pod or app; a
+  regular expression on the message, none meaning every line), applied in
+  the agent's central log loop to the entry as it would be stored, so the
+  log store can preview a rule exactly. Keyed by name across profiles.
+- Explore > Logs: "Stop sending lines like this" proposes a pattern from a
+  line (`suggestPattern`), previews it against the last hour of that
+  source, and saves it through `POST /api/v1/agents/{id}/log-drops`.
+  Log volume stops units, pods and apps with a rule without a pattern and
+  lists and removes the rules.
+- Verified live: a rule made from a health-check line dropped those lines
+  and kept the container's error lines; a unit was switched off and a rule
+  removed from the page.
+- Not built: a count of what each rule drops; log files as a source of a
+  rule; a minimum level per source; a rate limit per container.
 
 ## Next
 

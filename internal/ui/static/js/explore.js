@@ -25,6 +25,7 @@ function Volume({ params }) {
   const [range, setRange, win] = useRange(params);
   const [rows, setRows] = useState(null);
   const [off, setOff] = useState([]);
+  const [rules, setRules] = useState([]);
   const [admin, setAdmin] = useState(false);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -37,9 +38,10 @@ function Volume({ params }) {
     setParams(['explore', 'volume'], rangeParams(range));
     try {
       const query = `_time:[${new Date(from * 1000).toISOString()}, ${new Date(to * 1000).toISOString()}] * | stats by (agent, source, container, unit, pod, app) count() as lines, sum_len(_msg) as bytes`;
-      const [stats, switched, me] = await Promise.all([
+      const [stats, switched, drops, me] = await Promise.all([
         api('/api/v1/logs/stats_query', { method: 'POST', body: new URLSearchParams({ query, time: to }) }),
-        api('/api/v1/fleet/container-logs'), api('/api/v1/me')]);
+        api('/api/v1/fleet/container-logs'), api('/api/v1/fleet/log-drops'), api('/api/v1/me')]);
+      setRules(drops);
       const by = new Map();
       for (const s of stats.data.result || []) {
         const { __name__: stat, ...labels } = s.metric;
@@ -55,11 +57,16 @@ function Volume({ params }) {
   };
   useEffect(() => { run(); }, [JSON.stringify(range)]);
 
+  // A container is switched off where its logs are read (docker.container_logs);
+  // anything else by a drop rule without a pattern, which drops every line.
   const apply = async () => {
-    const { agent, container, collect } = confirm;
+    const { agent, kind, container, collect, rule } = confirm;
+    const to = `/api/v1/agents/${encodeURIComponent(agent)}`;
     try {
-      await api(`/api/v1/agents/${encodeURIComponent(agent)}/container-logs`, { method: 'POST', body: { container, collect } });
-      setNote(collect ? `Logs of ${container} on ${agent} are collected again once the agent has its new settings, within a minute.`
+      if (rule) await api(`${to}/log-drops/${encodeURIComponent(rule)}`, { method: 'DELETE' });
+      else if (kind === 'container') await api(`${to}/container-logs`, { method: 'POST', body: { container, collect } });
+      else await api(`${to}/log-drops`, { method: 'POST', body: { [kind]: container, match: '' } });
+      setNote(collect ? `Lines of ${container} on ${agent} are sent again once the agent has its new settings, within a minute.`
         : `Logs of ${container} on ${agent} stop arriving once the agent has its new settings, within a minute. What is stored stays.`);
       setConfirm(null); run();
     } catch (e) { setError(e.message); setConfirm(null); }
@@ -82,23 +89,32 @@ function Volume({ params }) {
         <td class="num mono">${fmtNum(r.lines)}</td><td class="num mono">${fmtUnit(r.bytes, 'bytes')}</td>
         <td class="num mono">${total ? (100 * r.bytes / total).toFixed(1) + '%' : ''}</td>
         <td style="text-align: right; white-space: nowrap"><a href=${search(r)}>show lines</a>
-          ${admin && r.container && html`<button class="link" style="margin-left: 12px" title="Stop collecting this container's logs on this agent"
-            onClick=${() => setConfirm({ agent: r.agent, container: r.container, collect: false })}>stop collecting</button>`}</td></tr>`; })}</tbody></table>`}
+          ${admin && name && html`<button class="link" style="margin-left: 12px" title="Stop collecting the logs of this ${kind} on this agent"
+            onClick=${() => setConfirm({ agent: r.agent, kind, container: name, collect: false })}>stop collecting</button>`}</td></tr>`; })}</tbody></table>`}
     </div>`}
     ${rows && html`<p class="muted">Sizes are the text of the lines as stored, in the time range above; ${fmtUnit(total, 'bytes')} in all.
-      Stopping a container here writes <code>docker.container_logs</code> into the profile of that one agent (<code>agent-NAME</code>); a pattern for several containers or agents goes into a profile by hand.</p>`}
+      Stopping a source here writes into the profile of that one agent (<code>agent-NAME</code>). To drop only some of its lines, open one of them under Logs and choose “Stop sending lines like this”.</p>`}
     ${off.length > 0 && html`<h3 style="margin: 18px 0 8px">Switched off</h3><div class="panel flush"><table>
       <thead><tr><th>Container</th><th>By profile</th><th>For agents</th><th></th></tr></thead>
       <tbody>${off.map(e => { const agent = e.profile.startsWith('agent-') && (e.select[0] || '').match(/^agent="(.*)"$/); return html`<tr>
         <td class="mono">${e.container}</td><td><a href="#/fleet/profiles">${e.profile}</a></td><td class="mono">${e.select.join(', ') || 'all'}</td>
-        <td style="text-align: right">${admin && agent && html`<button class="link" onClick=${() => setConfirm({ agent: agent[1], container: e.container, collect: true })}>collect again</button>`}</td></tr>`; })}</tbody></table></div>`}
-    ${confirm && html`<${Dialog} title=${confirm.collect ? 'Collect logs again' : 'Stop collecting logs'} onClose=${() => setConfirm(null)}>
-      <p>${confirm.collect ? 'Collect' : 'Stop collecting'} the logs of container <strong>${confirm.container}</strong> on agent <strong>${confirm.agent}</strong>${confirm.collect ? ' again' : ''}?</p>
-      <p class="muted">${confirm.collect ? 'This takes the entry out of' : 'This adds an entry to'} the profile <code>agent-${confirm.agent.toLowerCase()}</code>:</p>
-      <pre class="mono" style="margin: 8px 0">config:\n  docker:\n    container_logs:\n      "${confirm.container}": false</pre>
-      <p class="muted">Metrics of the container are not affected. If your profiles come from files in git, make the same change there, or the next <code>vigil apply -prune</code> removes this profile.</p>
+        <td style="text-align: right">${admin && agent && html`<button class="link" onClick=${() => setConfirm({ agent: agent[1], kind: 'container', container: e.container, collect: true })}>collect again</button>`}</td></tr>`; })}</tbody></table></div>`}
+    ${rules.length > 0 && html`<h3 style="margin: 18px 0 8px">Lines that are dropped</h3><div class="panel flush"><table>
+      <thead><tr><th>From</th><th>Lines matching</th><th>By profile</th><th>For agents</th><th></th></tr></thead>
+      <tbody>${rules.map(e => { const agent = e.profile.startsWith('agent-') && (e.select[0] || '').match(/^agent="(.*)"$/);
+        const src = ['container', 'unit', 'pod', 'app'].filter(k => e[k]).map(k => `${k} ${e[k]}`).join(', '); return html`<tr>
+        <td class="mono">${src}</td><td class="mono" style="overflow-wrap: anywhere">${e.match || html`<span class="muted">every line</span>`}</td>
+        <td><a href="#/fleet/profiles">${e.profile}</a></td><td class="mono">${(e.select || []).join(', ') || 'all'}</td>
+        <td style="text-align: right">${admin && agent && html`<button class="link" onClick=${() => setConfirm({ agent: agent[1], container: src, collect: true, rule: e.name })}>remove</button>`}</td></tr>`; })}</tbody></table></div>`}
+    ${confirm && html`<${Dialog} title=${confirm.rule ? 'Remove the rule' : confirm.collect ? 'Collect logs again' : 'Stop collecting logs'} onClose=${() => setConfirm(null)}>
+      <p>${confirm.rule ? 'Send the lines of' : confirm.collect ? 'Collect the logs of' : 'Stop collecting the logs of'} ${confirm.kind ? confirm.kind + ' ' : ''}<strong>${confirm.container}</strong> on agent <strong>${confirm.agent}</strong>${confirm.collect ? ' again' : ''}?</p>
+      <p class="muted">${confirm.collect ? 'This takes an entry out of' : 'This adds an entry to'} the profile <code>agent-${confirm.agent.toLowerCase()}</code>${confirm.collect ? '.' : ':'}</p>
+      ${!confirm.collect && html`<pre class="mono" style="margin: 8px 0">${confirm.kind === 'container'
+        ? `config:\n  docker:\n    container_logs:\n      "${confirm.container}": false`
+        : `config:\n  logs:\n    drop:\n      - ${confirm.kind}: "${confirm.container}"    # every line`}</pre>`}
+      <p class="muted">Metrics are not affected. If your profiles come from files in git, make the same change there, or the next <code>vigil apply -prune</code> removes this profile.</p>
       <div class="actions"><button type="button" onClick=${() => setConfirm(null)}>Cancel</button>
-        <button class="primary" onClick=${apply}>${confirm.collect ? 'Collect again' : 'Stop collecting'}</button></div>
+        <button class="primary" onClick=${apply}>${confirm.rule ? 'Remove' : confirm.collect ? 'Collect again' : 'Stop collecting'}</button></div>
     <//>`}`;
 }
 
@@ -301,7 +317,77 @@ export function parseLines(text) {
   return text.split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
 }
 
+// sourceOf says where a log line came from, as a drop rule would name it.
+const sourceOf = r => r.container ? ['container', r.container] : r.pod ? ['pod', r.pod] : r.unit ? ['unit', r.unit] : r.app ? ['app', r.app] : null;
+
+// suggestPattern turns one line into a regular expression for "lines like
+// this": the text taken literally, with what changes from line to line
+// (numbers, ids) replaced by what it may be.
+export function suggestPattern(msg) {
+  return String(msg || '').slice(0, 300).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, '\u0001')
+    .replace(/\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{8,}\b/gi, '\u0002')
+    .replace(/\d+/g, '\\d+')
+    .replaceAll('\u0001', '[0-9a-f-]+').replaceAll('\u0002', '[0-9a-f]+');
+}
+
+// DropDialog makes a rule that keeps lines like the given one from being
+// sent by its agent, and shows first what the rule would have done to the
+// last hour of that source.
+function DropDialog({ row, onClose, onSaved }) {
+  const [kind, name] = sourceOf(row);
+  const [pattern, setPattern] = useState(() => suggestPattern(row._msg));
+  const [preview, setPreview] = useState(null);
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const base = `_time:1h agent:${JSON.stringify(row.agent)} ${kind}:${JSON.stringify(name)}`;
+  useEffect(() => {
+    let live = true;
+    const timer = setTimeout(async () => {
+      const match = pattern ? ` _msg:~${JSON.stringify(pattern)}` : '';
+      const count = q => api('/api/v1/logs/stats_query', { method: 'POST', body: new URLSearchParams({ query: q + ' | stats count() as n' }) })
+        .then(r => Number(((r.data.result || [])[0] || { value: [0, 0] }).value[1]));
+      const lines = q => api('/api/v1/logs/query', { method: 'POST', body: new URLSearchParams({ query: q, limit: 3 }) }).then(t => parseLines(t).map(l => l._msg));
+      try {
+        const [total, dropped, gone, kept] = await Promise.all([count(base), count(base + match), lines(base + match),
+          pattern ? lines(`${base} -_msg:~${JSON.stringify(pattern)}`) : Promise.resolve([])]);
+        if (live) { setPreview({ total, dropped, gone, kept }); setError(null); }
+      } catch (e) { if (live) { setPreview(null); setError(e.message); } }
+    }, 400);
+    return () => { live = false; clearTimeout(timer); };
+  }, [pattern]);
+  const save = async e => {
+    e.preventDefault(); setBusy(true);
+    try {
+      await api(`/api/v1/agents/${encodeURIComponent(row.agent)}/log-drops`, { method: 'POST', body: { [kind]: name, match: pattern } });
+      onSaved(`Lines like this from ${name} on ${row.agent} stop arriving once the agent has its new settings, within a minute. The rule is in the profile agent-${row.agent.toLowerCase()}; Explore → Log volume lists it.`);
+    } catch (err) { setError(err.message); setBusy(false); }
+  };
+  const share = preview && preview.total ? (100 * preview.dropped / preview.total).toFixed(preview.dropped === preview.total ? 0 : 1) + '%' : '';
+  return html`<${Dialog} title="Drop lines like this" wide onClose=${onClose}><form onSubmit=${save}>
+    <p>Stop sending lines from ${kind} <strong>${name}</strong> on agent <strong>${row.agent}</strong> whose message matches:</p>
+    <textarea rows="3" spellcheck="false" aria-label="Regular expression" value=${pattern} onInput=${e => setPattern(e.target.value)}></textarea>
+    <p class="muted" style="font-size: 12.5px">A regular expression, matched anywhere in the message. It was made from the line you opened; shorten it to what all unwanted lines share. Empty means every line of this ${kind}.</p>
+    <${ErrorBox} error=${error} />
+    ${preview && html`<div class="panel" style="margin: 10px 0">
+      <p style="margin-top: 0">In the last hour this ${kind} sent <strong>${fmtNum(preview.total)}</strong> lines.
+        The rule would have dropped <strong>${fmtNum(preview.dropped)}</strong>${share && ` (${share})`} and kept <strong>${fmtNum(preview.total - preview.dropped)}</strong>.</p>
+      ${preview.gone.length > 0 && html`<div class="muted" style="font-size: 12.5px">Dropped, for example:</div>
+        ${preview.gone.map(m => html`<div class="mono" style="font-size: 12px; overflow-wrap: anywhere">${m}</div>`)}`}
+      ${preview.kept.length > 0 && html`<div class="muted" style="font-size: 12.5px; margin-top: 8px">Kept, for example:</div>
+        ${preview.kept.map(m => html`<div class="mono" style="font-size: 12px; overflow-wrap: anywhere">${m}</div>`)}`}
+      ${preview.dropped === 0 && html`<div class="error" style="margin: 8px 0 0">Nothing in the last hour matches: the rule would do nothing.</div>`}
+    </div>`}
+    <p class="muted" style="font-size: 12.5px">Lines already stored stay. The rule is written into the profile of this one agent and can be removed under Explore → Log volume.</p>
+    <div class="actions"><button type="button" onClick=${onClose}>Cancel</button><button class="primary" disabled=${busy || !preview}>Drop these lines</button></div>
+  </form><//>`;
+}
+
 function Logs({ params }) {
+  const [admin, setAdmin] = useState(false);
+  const [dropping, setDropping] = useState(null); // the line a drop rule is being made from
+  const [note, setNote] = useState(null);
+  useEffect(() => { api('/api/v1/me').then(me => setAdmin(me.role === 'admin'), () => {}); }, []);
   const [query, setQuery] = useState(params.get('q') || '*');
   const [range, setRange, win] = useRange(params);
   const [limit, setLimit] = useState(500);
@@ -390,10 +476,12 @@ function Logs({ params }) {
       <div class="row muted" style="font-size: 12px"><span>${new Date(hits.times[0]).toLocaleString()}</span><span class="spacer"></span>
         <span>${fmtNum(hits.total)} lines match</span><span class="spacer"></span><span>${new Date(hits.times[hits.times.length - 1]).toLocaleString()}</span></div>
     </div>`}
+    ${note && html`<div class="notice">${note}</div>`}
+    ${dropping && html`<${DropDialog} row=${dropping} onClose=${() => setDropping(null)} onSaved=${n => { setNote(n); setDropping(null); }} />`}
     ${rows && html`<div class="panel flush logs">
       ${live && html`<div class="empty" style="padding: 8px">Live: new lines appear at the top.</div>`}
       ${rows.length === 0 && !live && html`<div class="empty">No log lines match in this time range.</div>`}
-      ${rows.map(r => html`<${LogRow} key=${r._stream_id + r._time + r._msg} row=${r} onFilter=${addFilter} />`)}
+      ${rows.map(r => html`<${LogRow} key=${r._stream_id + r._time + r._msg} row=${r} onFilter=${addFilter} onDrop=${admin && setDropping} />`)}
       ${!live && rows.length >= limit && html`<div class="empty" style="padding: 10px">Showing the newest ${limit} lines. Narrow the query or raise the limit to see more.</div>`}
     </div>`}`;
 }
@@ -407,7 +495,7 @@ function mergeHits(h) {
   return { times, values, max: Math.max(1, ...values), total: values.reduce((a, b) => a + b, 0) };
 }
 
-function LogRow({ row, onFilter }) {
+function LogRow({ row, onFilter, onDrop }) {
   const [open, setOpen] = useState(false);
   const level = String(row.level || '').toLowerCase();
   const cls = /^(err|crit|alert|emerg|fatal)/.test(level) ? 'lvl-error' : /^warn/.test(level) ? 'lvl-warn' : '';
@@ -422,6 +510,8 @@ function LogRow({ row, onFilter }) {
           ? html`<a href=${`#/services/~trace/${v}?t=${Math.round(t.getTime() / 1000)}`} title="Open the trace this line belongs to">${v}</a>` : v}</td>
         <td style="white-space: nowrap"><button class="link" title="Show only lines with this value" onClick=${() => onFilter(k, v)}>filter</button>
           <button class="link" style="margin-left: 10px" title="Hide lines with this value" onClick=${() => onFilter(k, v, true)}>exclude</button></td></tr>`)}
-    </table></div>`}
+    </table>
+    ${onDrop && row.agent && sourceOf(row) && html`<div style="margin-top: 6px"><button class="link" title="Make a rule so the agent no longer sends lines like this one"
+      onClick=${() => onDrop(row)}>Stop sending lines like this…</button></div>`}</div>`}
   </div>`;
 }

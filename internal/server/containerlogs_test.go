@@ -50,3 +50,33 @@ func TestEditContainerLogs(t *testing.T) {
 		t.Errorf("a profile with other settings:\n%s", out)
 	}
 }
+
+// A drop rule is added to the profile's list and taken out again by name.
+func TestEditLogDrops(t *testing.T) {
+	start := "# Settings for the agent nas alone.\nselect: ['agent=\"nas\"']\npriority: 1000\n"
+	rule := &logDrop{Name: "snapclient-service-ab12cd", Unit: "snapclient.service", Match: `\[Error\] \(Connection\) .* refused`}
+	with, err := editLogDrops(start, rule, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := fleet.ParseProfile("agent-nas", with)
+	if err != nil {
+		t.Fatalf("the result is not a valid profile: %v\n%s", err, with)
+	}
+	item := p.Config["logs"].(map[string]any)["drop"].([]any)[0].(map[string]any)
+	if item["name"] != rule.Name || item["unit"] != rule.Unit || item["match"] != rule.Match {
+		t.Errorf("the rule read back: %v\n%s", item, with)
+	}
+	// The same rule again replaces itself; another one is added.
+	again, _ := editLogDrops(with, rule, "")
+	two, _ := editLogDrops(again, &logDrop{Name: "chatty-000000", Container: "chatty"}, "")
+	p, _ = fleet.ParseProfile("agent-nas", two)
+	if n := len(p.Config["logs"].(map[string]any)["drop"].([]any)); n != 2 {
+		t.Errorf("%d rules, want 2:\n%s", n, two)
+	}
+	one, _ := editLogDrops(two, nil, rule.Name)
+	none, _ := editLogDrops(one, nil, "chatty-000000")
+	if strings.Contains(one, "snapclient") || !strings.Contains(one, "chatty") || strings.Contains(none, "config") || !strings.Contains(none, "# Settings for the agent nas alone.") {
+		t.Errorf("after removing one:\n%s\nafter removing both:\n%s", one, none)
+	}
+}

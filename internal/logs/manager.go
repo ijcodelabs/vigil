@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"sync"
 	"time"
@@ -30,11 +31,60 @@ type Manager struct {
 	pos    *Positions
 	recs   chan Record
 	run    []func(context.Context)
+	drops  []dropRule
+}
+
+// dropRule is a compiled config.LogDrop.
+type dropRule struct {
+	where map[string]string // stream label or field -> pattern
+	match *regexp.Regexp    // nil: every line
+}
+
+// dropped says whether a rule keeps this entry from being sent. The rules
+// see the entry as it would be stored: after the template, before the
+// agent's own labels.
+func (m *Manager) dropped(e *model.LogEntry) bool {
+rules:
+	for _, r := range m.drops {
+		for key, pattern := range r.where {
+			v := e.Stream[key]
+			if v == "" {
+				v = e.Fields[key]
+			}
+			if ok, _ := path.Match(pattern, v); !ok || v == "" {
+				continue rules
+			}
+		}
+		if r.match == nil || r.match.MatchString(e.Msg) {
+			return true
+		}
+	}
+	return false
 }
 
 // NewManager builds the sources the config asks for. emit receives each
 // batch; positions only advance when it returns nil. docker may be nil.
 func NewManager(cfg *config.Collection, stateDir string, docker *dockerapi.Client, pods *kube.Client, emit func([]model.LogEntry) error, log *slog.Logger) (*Manager, error) {
+	var drops []dropRule
+	for _, d := range cfg.Logs.Drop {
+		if config.Off(d.Enabled) {
+			continue
+		}
+		r := dropRule{where: map[string]string{}}
+		for key, pattern := range map[string]string{"container": d.Container, "unit": d.Unit, "pod": d.Pod, "app": d.App} {
+			if pattern != "" {
+				r.where[key] = pattern
+			}
+		}
+		if d.Match != "" {
+			re, err := regexp.Compile(d.Match)
+			if err != nil {
+				return nil, fmt.Errorf("logs.drop %s: %w", d.Name, err)
+			}
+			r.match = re
+		}
+		drops = append(drops, r)
+	}
 	templates := map[string]*Template{}
 	for name, tc := range cfg.Logs.Templates {
 		t, err := Compile(name, tc)
@@ -56,7 +106,7 @@ func NewManager(cfg *config.Collection, stateDir string, docker *dockerapi.Clien
 	if err != nil {
 		return nil, fmt.Errorf("positions: %w", err)
 	}
-	m := &Manager{emit: emit, labels: cfg.Labels, log: log, pos: pos, recs: make(chan Record, 4096)}
+	m := &Manager{emit: emit, labels: cfg.Labels, log: log, pos: pos, recs: make(chan Record, 4096), drops: drops}
 
 	var files []FileSource
 	for i, f := range cfg.Logs.Files {
@@ -232,6 +282,9 @@ func (m *Manager) Run(ctx context.Context) {
 		batch, pending, size = nil, nil, 0
 	}
 	add := func(r Record) {
+		if r.Entry != nil && m.dropped(r.Entry) {
+			r.Entry = nil // not sent, but its position still counts as read
+		}
 		if r.Entry != nil {
 			for k, v := range m.labels {
 				r.Entry.Stream[k] = v
