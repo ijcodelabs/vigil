@@ -96,6 +96,27 @@ func (c *Client) HasTTY(ctx context.Context, id string) (bool, error) {
 	return v.Config.Tty, c.getJSON(ctx, "/containers/"+id+"/json", &v)
 }
 
+// RunState is what the daemon knows about whether a container runs.
+type RunState struct {
+	Running      bool
+	ExitCode     int
+	RestartCount int // restarts by the restart policy since the container was created
+}
+
+// RunState asks the daemon for a container's state. The list has the state
+// too, but not the exit code or the restart count.
+func (c *Client) RunState(ctx context.Context, id string) (RunState, error) {
+	var v struct {
+		State struct {
+			Running  bool
+			ExitCode int
+		}
+		RestartCount int
+	}
+	err := c.getJSON(ctx, "/containers/"+id+"/json", &v)
+	return RunState{Running: v.State.Running, ExitCode: v.State.ExitCode, RestartCount: v.RestartCount}, err
+}
+
 // Logs follows a container's output with timestamps, starting after since
 // (a unix time, optionally with a nanosecond fraction; "0" for everything).
 func (c *Client) Logs(ctx context.Context, id, since string) (io.ReadCloser, error) {

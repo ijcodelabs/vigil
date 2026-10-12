@@ -84,9 +84,67 @@ functions `humanize` (1234567 → 1.235M), `humanize1024`, `humanizeDuration`
 (seconds → 2h3m), `humanizePercentage` (0.153 → 15.3%), `toUpper`,
 `toLower`.
 
-`configs/rules.example.yaml` has rules for hosts, probes, services, logs and
-the agents themselves. Integrations bring their own rules, shown as
-`<integration>/<group>`.
+### Rules that come with vigil
+
+A server with an empty rule file still tells you when something is down.
+The group **builtin** always runs:
+
+| Alert | Fires when |
+|---|---|
+| `HostDown` | an agent has not reported for a minute |
+| `ProbeFailing` | a probe (HTTP, TCP) has failed for two minutes |
+| `CertificateExpiresSoon` | a probed certificate has less than 14 days left |
+| `AgentDroppingData` | an agent had to drop data it could not send or was not allowed to |
+
+Integrations bring their own rules, shown as `<integration>/<group>`, and
+run while a profile uses the integration:
+
+| What is down | Alert | Comes with |
+|---|---|---|
+| a Docker container | `ContainerDown`: it stopped with an exit code other than 0 and has not come back for two minutes. `ContainerRestarting`: more than three restarts in 15 minutes | Docker |
+| a pod | `PodNotReady`, `PodCrashLooping`, `PodStuckPending` | Kubernetes node |
+| a node | `NodeNotReady` | Kubernetes cluster |
+| a deployment, stateful set or daemon set | `DeploymentReplicasUnavailable`, `StatefulSetNotReady`, `DaemonSetUnavailable` | Kubernetes cluster |
+
+A container that ended with exit code 0 (a migration, a one-off job) does
+not alert, and neither does one that was removed. `ContainerDown` needs
+agents from the version that introduced it; older ones do not report
+stopped containers.
+
+To change a built-in rule, define an alert **of the same name** in the rule
+file; yours runs instead. A group named `builtin` in the rule file replaces
+all of them, and with `rules: []` switches them off:
+
+```yaml
+groups:
+  - name: hosts
+    rules:
+      - alert: HostDown                  # replaces the built-in HostDown
+        expr: vigil_agent_up == 0
+        for: 5m
+        labels: {severity: critical}
+```
+
+`GET /api/v1/rules/builtin` returns the built-in rules as they are in the
+running version, to copy from.
+
+### Rules in git
+
+The rule file is one document, so keep it in a repository and let a
+pipeline upload it:
+
+```bash
+curl -fsS -X PUT -H "Authorization: Bearer $VIGIL_ADMIN_TOKEN" \
+     --data-binary @rules.yaml https://vigil.example.com/api/v1/rules/config
+```
+
+The upload is refused, with the reason, if anything in it is wrong, so a
+bad commit fails the pipeline and the running rules stay. The repository
+then holds only what differs from the built-in rules, which change with the
+version of vigil you run.
+
+`configs/rules.example.yaml` has more rules for hosts, services, logs and
+the agents themselves.
 
 ## Who is told: contacts and routing
 

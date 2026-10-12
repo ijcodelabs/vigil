@@ -72,6 +72,10 @@ func (s *Server) applyRules(ctx context.Context) error {
 	for _, g := range file.Groups {
 		taken[g.Name] = true
 	}
+	if g, ok := builtinRuleGroup(file); ok {
+		file.Groups = append(file.Groups, g)
+		taken[g.Name] = true
+	}
 	f := &s.fleet
 	f.mu.Lock()
 	used, catalog := f.usedIntegrations(), f.catalog

@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,6 +25,44 @@ const (
 	settingAlerting = "alerting"
 	maxConfigBody   = 4 << 20
 )
+
+// builtinRules is the rule group every server runs; see the file's comment.
+//
+//go:embed builtin_rules.yaml
+var builtinRules string
+
+const builtinGroup = "builtin"
+
+// builtinRuleGroup returns the built-in group as it should run next to the
+// user's rule file: without the alerts the file defines itself, and not at
+// all when the file has a group of that name. The user's file is what is
+// kept in git, so it has the last word on both.
+func builtinRuleGroup(user *rules.File) (rules.Group, bool) {
+	own := map[string]bool{}
+	for _, g := range user.Groups {
+		if g.Name == builtinGroup {
+			return rules.Group{}, false
+		}
+		for _, r := range g.Rules {
+			if r.Alert != "" {
+				own[r.Alert] = true
+			}
+		}
+	}
+	f, err := rules.Parse(builtinRules)
+	if err != nil || len(f.Groups) != 1 {
+		panic(fmt.Sprintf("builtin_rules.yaml: %v", err)) // a build mistake; the test catches it
+	}
+	g := f.Groups[0]
+	kept := g.Rules[:0]
+	for _, r := range g.Rules {
+		if !own[r.Alert] {
+			kept = append(kept, r)
+		}
+	}
+	g.Rules = kept
+	return g, len(kept) > 0
+}
 
 // startAlerting brings up the embedded Alertmanager with the saved config.
 func (s *Server) startAlerting() error {
@@ -54,6 +93,10 @@ func (s *Server) loadRules(ctx context.Context) error {
 func (s *Server) alertingRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/rules/config", s.viewer(s.getSetting(settingRules, "groups: []\n")))
 	mux.HandleFunc("PUT /api/v1/rules/config", s.admin(s.putRules))
+	mux.HandleFunc("GET /api/v1/rules/builtin", s.viewer(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/yaml")
+		io.WriteString(w, builtinRules)
+	}))
 	mux.HandleFunc("GET /api/v1/alerting/config", s.admin(s.getSetting(settingAlerting, alerting.DefaultConfig)))
 	mux.HandleFunc("PUT /api/v1/alerting/config", s.admin(s.putAlerting))
 

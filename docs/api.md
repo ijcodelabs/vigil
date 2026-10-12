@@ -44,6 +44,7 @@ API) and `GET` `POST /api/v1/traces/query` (LogsQL over spans); see
 |---|---|
 | `GET` `PUT /api/v1/rules/config` | the rule file (YAML). `PUT` replaces it; refused with the reason if invalid |
 | `GET /api/v1/rules` | groups, each rule's health and alerts |
+| `GET /api/v1/rules/builtin` | the rules that come with vigil (YAML), as they are in the running version |
 | `GET /api/v1/alerts` | pending and firing alerts |
 | `GET` `PUT /api/v1/alerting/config` | the Alertmanager configuration (YAML); admin only |
 | `/alertmanager/api/v2/…` | Alertmanager's own API: silences, alert groups, receivers, status |
