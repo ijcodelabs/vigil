@@ -309,6 +309,8 @@ Last updated: 2026-10-12.
 - ContainerRestarting (Docker and Kubernetes) compares with the value 15 or
   30 minutes ago: the store's increase() counts a counter it first sees as
   risen from zero, which fired for every container on the trial host.
+- "In this state for" lists only checks that report now; before
+  2026-10-12 a check that had been removed stayed as a row for 30 days.
 - "In this state for" and "Failures in range" use MetricsQL
   (`tlast_change_over_time`, `decreases_over_time`), so those dashboards
   need VictoriaMetrics, not any Prometheus-compatible store.

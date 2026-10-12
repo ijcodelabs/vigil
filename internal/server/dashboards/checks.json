@@ -123,7 +123,7 @@
      "legend": "HTTP status"
     },
     {
-     "expr": "time() - tlast_change_over_time(probe_success{agent=~\"$agent\",probe=~\"$probe\",type=~\"$type\"}[30d])",
+     "expr": "(time() - tlast_change_over_time(probe_success{agent=~\"$agent\",probe=~\"$probe\",type=~\"$type\"}[30d])) and probe_success{agent=~\"$agent\",probe=~\"$probe\",type=~\"$type\"}",
      "legend": "In this state for",
      "unit": "seconds"
     },
