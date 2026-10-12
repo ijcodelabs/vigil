@@ -276,8 +276,13 @@ function Logs({ params }) {
     if (tail.current === ctl) stopTail();
   };
 
-  const addFilter = (k, v) => {
-    const q = `${query.trim() === '*' ? '' : query.trim() + ' '}${k}:${JSON.stringify(v)}`;
+  // "filter" narrows the query to lines with this value, "exclude" to lines
+  // without it. Either one replaces the other for the same value, so a
+  // click can be taken back with the opposite click.
+  const addFilter = (k, v, exclude) => {
+    const term = `${k}:${JSON.stringify(v)}`;
+    const rest = (' ' + query.trim() + ' ').split(` -${term} `).join(' ').split(` ${term} `).join(' ').trim();
+    const q = exclude ? `${rest || '*'} -${term}` : `${rest === '*' ? '' : rest + ' '}${term}`.trim();
     setQuery(q); run(q);
   };
 
@@ -328,7 +333,8 @@ function LogRow({ row, onFilter }) {
       ${Object.entries(row).filter(([k]) => !HIDDEN.has(k)).sort().map(([k, v]) => html`<tr>
         <td>${k}</td><td>${k === 'trace_id' && /^[0-9a-f]{16,32}$/.test(v)
           ? html`<a href=${`#/services/~trace/${v}?t=${Math.round(t.getTime() / 1000)}`} title="Open the trace this line belongs to">${v}</a>` : v}</td>
-        <td><button class="link" title="Add this to the query" onClick=${() => onFilter(k, v)}>filter</button></td></tr>`)}
+        <td style="white-space: nowrap"><button class="link" title="Show only lines with this value" onClick=${() => onFilter(k, v)}>filter</button>
+          <button class="link" style="margin-left: 10px" title="Hide lines with this value" onClick=${() => onFilter(k, v, true)}>exclude</button></td></tr>`)}
     </table></div>`}
   </div>`;
 }
