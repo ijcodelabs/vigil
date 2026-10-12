@@ -1,9 +1,22 @@
 # vigil
 
-One monitoring system for metrics, logs, alerts, runtime security events and
-dashboards: a single Go binary that runs as an agent on every host or
-Kubernetes node (`vigil agent`) and as the central server (`vigil server`),
-with VictoriaMetrics and VictoriaLogs as storage.
+Monitoring for servers and clusters in one Go binary: metrics, logs,
+alerts, site checks, traces and runtime security events, with the
+dashboards to look at them.
+
+It is for people who would otherwise wire an agent, a log shipper,
+Alertmanager, a dashboard tool and a runtime-security tool together. The
+same binary runs as the agent on every host or Kubernetes node
+(`vigil agent`) and as the central server (`vigil server`).
+VictoriaMetrics and VictoriaLogs store the data.
+
+A new server is useful before you configure anything: it alerts when a host
+goes silent, a container stops, a site stops answering or a certificate is
+about to expire, and it comes with dashboards for hosts, containers, site
+checks and logs.
+
+**Status: early.** It runs on its author's servers and a home lab, not on
+large fleets. Expect rough edges, and please say what you find.
 
 ![The Containers dashboard: running containers, memory and CPU in use, and charts per container](docs/img/containers.png)
 
@@ -15,18 +28,24 @@ with VictoriaMetrics and VictoriaLogs as storage.
 ## What it does
 
 - **Metrics**: host and container figures, Prometheus scraping (static
-  lists, Kubernetes pods by annotation), probes, process groups, systemd
-  units, OpenTelemetry (OTLP).
+  lists, Kubernetes pods by annotation), process groups, systemd units,
+  GPUs, OpenTelemetry (OTLP).
 - **Logs**: files, journald, Docker containers, Kubernetes pods and events,
-  with parsing templates.
-- **Alerts**: Prometheus-format rules on metrics and on logs; Alertmanager
-  built in for routing, contacts and silences.
+  with parsing templates. A log volume page shows who writes the most, and
+  lines not worth keeping are dropped by a rule you preview first.
+- **Site checks**: HTTP, TCP, TLS and ping from any agent, with the time
+  left on certificates and where the time of a request goes.
+- **Alerts**: Prometheus-format rules on metrics and on logs, with the
+  essential ones built in; Alertmanager inside for routing, contacts and
+  silences, and a message to the contacts when someone silences an alert.
+- **Traces**: OpenTelemetry traces with request rate, errors and duration
+  per service, and a view of each trace.
 - **Runtime events**: eBPF probes, security rules evaluated on the host, and
   captures of what happened around a detection.
 - **Fleet**: what agents collect is managed on the server in profiles
-  selected by labels, with integrations per technology and detection of
-  what runs unmonitored.
-- **Web interface**: Dashboards, Explore, Alerts, Captures, Fleet, Users.
+  selected by labels, which can be kept in git, with integrations per
+  technology and detection of what runs unmonitored.
+- **Web interface**: Dashboards, Explore, Services, Alerts, Captures, Fleet.
 
 ## Documentation
 
