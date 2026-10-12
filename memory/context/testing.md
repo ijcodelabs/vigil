@@ -86,3 +86,13 @@ A VictoriaTraces for local tests runs as `vigil-vt` in the test VM
 docker.io/victoriametrics/victoria-traces:v0.12.0 -storageDataPath=/vtraces`).
 `vigil tracegen` sends demo traces to an agent's OTLP endpoint. A trace is
 searchable a few seconds after it was sent, not at once.
+
+## A real host: Docker and systemd
+
+Podman's API stands in for Docker in the notes above. For the real thing
+use a virtual machine: the original developer's is a Lima machine
+configured by Ansible (kept outside the repository), Ubuntu 24.04 with
+Docker from Docker's repository and the server and agent as systemd units.
+Anything that reads the Docker API, journald or systemd is worth a run on
+such a host; kernel 6.8 there is also older than what the eBPF probes had
+been tried on.

@@ -271,7 +271,8 @@ Last updated: 2026-10-12.
   `container_restarts_total`. One more API call per container and interval.
   The Docker integration gained ContainerDown (stopped with a non-zero exit
   code for two minutes) and ContainerRestarting.
-- Verified live against Podman's Docker API: exit 3 and a kill (137) alert,
+- Verified live against Podman's Docker API and against Docker 29.9 on
+  Ubuntu 24.04 (agent and server as systemd units; HostDown fired there): exit 3 and a kill (137) alert,
   exit 0 does not, a restarted container clears within about two minutes, a
   restart loop is caught, HostDown goes pending for a stopped agent.
 - Known: `container_exit_code` stays visible for a few minutes after a

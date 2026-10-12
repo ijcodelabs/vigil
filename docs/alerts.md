@@ -107,7 +107,8 @@ run while a profile uses the integration:
 | a deployment, stateful set or daemon set | `DeploymentReplicasUnavailable`, `StatefulSetNotReady`, `DaemonSetUnavailable` | Kubernetes cluster |
 
 A container that ended with exit code 0 (a migration, a one-off job) does
-not alert, and neither does one that was removed. `ContainerDown` needs
+not alert. Removing a stopped container ends its alert, a few minutes
+after the removal. `ContainerDown` needs
 agents from the version that introduced it; older ones do not report
 stopped containers.
 
