@@ -308,6 +308,7 @@ func (s *Server) fleetRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/fleet/match", s.viewer(s.handleMatch))
 	s.rolloutRoutes(mux)
 	s.integrationRoutes(mux)
+	s.containerLogRoutes(mux)
 
 	// Agents report who they are and fetch their config here.
 	mux.HandleFunc("POST /api/v1/agent/config", s.ingest(s.handleAgentConfig))

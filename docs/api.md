@@ -61,6 +61,8 @@ curl -X PUT -H "Authorization: Bearer $T" --data-binary @rules.yaml https://vigi
 | `GET /api/v1/agents/{id}/config` | the agent's merged configuration and where each setting comes from |
 | `DELETE /api/v1/agents/{id}` | forget an agent |
 | `POST` `DELETE /api/v1/agents/{id}/token` | issue (returned once) or revoke its token |
+| `POST /api/v1/agents/{id}/container-logs` | `{"container": "name or pattern", "collect": false}`: stop (or, with `true`, resume) collecting a container's logs on that agent, by editing the profile `agent-<id>` |
+| `GET /api/v1/fleet/container-logs` | every `docker.container_logs` entry of every profile |
 | `GET` `POST /api/v1/fleet/enrollment` | enrolment tokens (admin). `POST {"name": "...", "valid_hours": 24, "max_uses": 0}` returns the token once; 0 means no limit |
 | `DELETE /api/v1/fleet/enrollment/{id}` | revoke one |
 | `GET /api/v1/server-info` | the server's address, version, and `ca_pin` if it has its own certificate authority |

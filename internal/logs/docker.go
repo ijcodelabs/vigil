@@ -33,10 +33,13 @@ type Docker struct {
 	// ByContainer maps a pattern for a container's or image's name to a
 	// template name; see config.Docker.ContainerTemplates.
 	ByContainer map[string]string
-	Labels      map[string]string
-	Pos         *Positions
-	Out         chan<- Record
-	Log         *slog.Logger
+	// Collect maps such a pattern to "true" or "false": whether the
+	// container's logs are wanted; see config.Docker.ContainerLogs.
+	Collect map[string]string
+	Labels  map[string]string
+	Pos     *Positions
+	Out     chan<- Record
+	Log     *slog.Logger
 
 	mu     sync.Mutex
 	active map[string]bool
@@ -71,7 +74,7 @@ func (d *Docker) sync(ctx context.Context, containers []dockerapi.Container, ini
 	defer d.mu.Unlock()
 	for _, c := range containers {
 		exists[dockerKeyPrefix+c.ID] = true
-		if c.State != "running" || d.active[c.ID] || c.Labels["vigil.logs"] == "false" {
+		if c.State != "running" || d.active[c.ID] || !d.wanted(c) {
 			continue
 		}
 		// The container's own label decides first, then the config's
@@ -223,6 +226,19 @@ func readDockerStream(r io.Reader, tty bool, fn func(stream, line string) bool) 
 
 // imageName is an image reference without registry, tag and digest:
 // "registry.example/library/haproxy:3.0@sha256:..." is "haproxy".
+// wanted says whether a container's logs are collected. Its own label
+// decides first (vigil.logs=false or true), then the config's patterns;
+// without either, they are.
+func (d *Docker) wanted(c dockerapi.Container) bool {
+	switch c.Labels["vigil.logs"] {
+	case "false":
+		return false
+	case "true":
+		return true
+	}
+	return matchTemplate(d.Collect, c.Name(), imageName(c.Image)) != "false"
+}
+
 func imageName(ref string) string {
 	ref, _, _ = strings.Cut(ref, "@")
 	ref = ref[strings.LastIndexByte(ref, '/')+1:]

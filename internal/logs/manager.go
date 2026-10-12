@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"path"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 
@@ -137,7 +138,11 @@ func NewManager(cfg *config.Collection, stateDir string, docker *dockerapi.Clien
 		if err != nil {
 			return nil, err
 		}
-		src := &Docker{Client: docker, Default: t, Templates: templates, ByContainer: cfg.Docker.ContainerTemplates, Labels: cfg.Docker.Labels,
+		collect := map[string]string{}
+		for pattern, on := range cfg.Docker.ContainerLogs {
+			collect[pattern] = strconv.FormatBool(on)
+		}
+		src := &Docker{Client: docker, Default: t, Templates: templates, ByContainer: cfg.Docker.ContainerTemplates, Collect: collect, Labels: cfg.Docker.Labels,
 			Pos: pos, Out: m.recs, Log: log}
 		m.run = append(m.run, src.Run)
 	}
