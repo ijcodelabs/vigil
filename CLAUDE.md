@@ -15,3 +15,21 @@ something they say stops being true.
 - Code style: `gofmt`, comments that say why, tests next to the code.
 - UI changes are checked in a browser against a running server.
 - User-facing behaviour is documented in `docs/` (shown by the server under `/docs/`); update the page when the behaviour changes.
+
+## What does not belong in this repository
+
+The repository is public, and so are its notes in `memory/context/`.
+
+- No key, token or password, real or left over from a test. Examples use
+  placeholders and `*_file` settings; CI scans every commit (gitleaks).
+- Nothing that names a real deployment: host names, addresses, domains,
+  people, clients. Write "the trial host", `shop-api`, `example.com`, and
+  the documentation address ranges.
+- No security weakness that is known and not fixed yet. It is fixed first
+  or reported the way `SECURITY.md` describes; a note about it comes after.
+- What is built, why it was built that way, what is not built and what is
+  planned are welcome: that is what lets someone else continue.
+
+Whoever runs vigil somewhere keeps the notes about that deployment with the
+deployment, not here.
+
