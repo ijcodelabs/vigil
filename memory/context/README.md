@@ -11,3 +11,7 @@ delete what stops being true.
 | [decisions.md](decisions.md) | Design decisions and the reasons behind them |
 | [direction.md](direction.md) | Where the project is meant to go beyond the current plan |
 | [testing.md](testing.md) | How to run it against real stores and a real kernel, and known pitfalls |
+
+These notes are public. What must stay out of them (deployments, secrets,
+unfixed weaknesses) is listed in [CLAUDE.md](../../CLAUDE.md).
+
