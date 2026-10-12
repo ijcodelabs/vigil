@@ -224,6 +224,13 @@ groups:
 	if code, body := do("POST", "/alertmanager/api/v2/silences", "admin", silence); code != 200 || !strings.Contains(body, "silenceID") {
 		t.Errorf("create silence: %d %s", code, body)
 	}
+	// A script with a token may say whom it acts for; without a name it is named itself.
+	if code, body := do("POST", "/alertmanager/api/v2/silences", "admin", strings.Replace(silence, `"createdBy":"test"`, `"createdBy":""`, 1)); code != 200 {
+		t.Errorf("create unsigned silence: %d %s", code, body)
+	}
+	if code, body := do("GET", "/alertmanager/api/v2/silences", "admin", ""); code != 200 || !strings.Contains(body, `"createdBy":"test"`) || !strings.Contains(body, `"createdBy":"admin-token"`) {
+		t.Errorf("who made the silences: %d %s", code, body)
+	}
 	if code, _ := do("GET", "/alertmanager/api/v2/silences", "", ""); code != http.StatusUnauthorized {
 		t.Errorf("alertmanager API without token: %d", code)
 	}

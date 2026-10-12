@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
 	"encoding/json"
@@ -78,6 +79,9 @@ func (s *Server) startAlerting() error {
 		am.Close()
 		return fmt.Errorf("alerting config: %w", err)
 	}
+	if s.cfg.NotifySilences != nil {
+		am.NotifyAboutSilences(*s.cfg.NotifySilences)
+	}
 	s.am = am
 	s.rules = rules.NewManager(ruleBackend{s}, s.cfg.ExternalURL, s.log)
 	return nil
@@ -121,7 +125,60 @@ func (s *Server) alertingRoutes(mux *http.ServeMux) {
 	// Reading is open to viewers; changing silences needs an admin.
 	am := s.am.Handler().ServeHTTP
 	mux.HandleFunc("GET "+alerting.RoutePrefix+"/", s.viewer(am))
+	mux.HandleFunc("POST "+alerting.RoutePrefix+"/api/v2/silences", s.admin(s.postSilence))
 	mux.HandleFunc(alerting.RoutePrefix+"/", s.admin(am))
+}
+
+// captured is a response kept in memory so it can be looked at before it
+// is passed on.
+type captured struct {
+	header http.Header
+	status int
+	body   bytes.Buffer
+}
+
+func (c *captured) Header() http.Header         { return c.header }
+func (c *captured) WriteHeader(status int)      { c.status = status }
+func (c *captured) Write(b []byte) (int, error) { return c.body.Write(b) }
+
+// postSilence makes or changes a silence through Alertmanager's API, with
+// two additions: a silence made by someone signed in is signed with their
+// account, not with whatever name the request carries, and the contacts of
+// the alerts it covers are told about it.
+func (s *Server) postSilence(w http.ResponseWriter, r *http.Request) {
+	text, ok := readConfigBody(w, r)
+	if !ok {
+		return
+	}
+	body := []byte(text)
+	var sil map[string]any
+	if p, _ := r.Context().Value(principalKey{}).(*principal); p != nil && p.User != "" && json.Unmarshal(body, &sil) == nil && sil != nil {
+		// Someone signed in is who they signed in as. A script with a token
+		// may say whom it acts for, and is named itself only if it does not.
+		if given, _ := sil["createdBy"].(string); p.session != "" || given == "" {
+			sil["createdBy"] = p.User
+			if b, err := json.Marshal(sil); err == nil {
+				body = b
+			}
+		}
+	}
+	req := r.Clone(r.Context())
+	req.Body = io.NopCloser(bytes.NewReader(body))
+	req.ContentLength = int64(len(body))
+	res := &captured{header: http.Header{}, status: http.StatusOK}
+	s.am.Handler().ServeHTTP(res, req)
+
+	for k, v := range res.header {
+		w.Header()[k] = v
+	}
+	w.WriteHeader(res.status)
+	w.Write(res.body.Bytes())
+	var made struct {
+		ID string `json:"silenceID"`
+	}
+	if res.status == http.StatusOK && json.Unmarshal(res.body.Bytes(), &made) == nil && made.ID != "" {
+		s.am.NotifySilence(context.WithoutCancel(r.Context()), made.ID)
+	}
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

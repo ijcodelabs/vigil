@@ -3,6 +3,12 @@ listen: ":8080"
 data_dir: /var/lib/vigil
 external_url: http://vigil.example.internal:8080   # used for links in notifications
 
+# Silences are announced: the contacts of the alerts a new silence covers are
+# told who made it, until when and why, and hear when an alert they were told
+# about ends while silenced. Set to false for Alertmanager's own behaviour,
+# which is to say nothing.
+# notify_silences: false
+
 # Encryption. Without this section the server speaks plain HTTP.
 # self_signed: the server makes its own certificate authority in
 # data_dir/pki; agents check it by the fingerprint shown under

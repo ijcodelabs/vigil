@@ -154,6 +154,7 @@ function SilenceForm({ labels, onClose }) {
     <div class="field"><label>For how long</label><select name="hours">${DURATIONS.map(([l, h]) => html`<option value=${h} selected=${h === 2}>${l}</option>`)}</select></div>
     <div class="field"><label>Reason</label><input name="comment" required placeholder="Why these alerts can be ignored for now" /></div>
     <${ErrorBox} error=${error} />
+    <p class="muted" style="font-size: 12.5px">The contacts of the alerts this covers are told who silenced them, until when, and the comment.</p>
     <div class="actions"><button type="button" onClick=${onClose}>Cancel</button><button class="primary">Silence</button></div>
   </form><//>`;
 }
