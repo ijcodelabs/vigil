@@ -164,7 +164,13 @@ type Docker struct {
 	// against the container's name and its image's name (without registry
 	// and tag) and may use * and ?. For containers you cannot label.
 	ContainerTemplates map[string]string `yaml:"container_templates"`
-	Labels             map[string]string `yaml:"labels"`
+	// ContainerLogs says whose logs are collected, by the same kind of key:
+	// false for a container whose logs are not wanted, true to collect one
+	// that a wider pattern switched off ("*": false makes it a list of the
+	// wanted ones). The most specific pattern wins. A map, so that profiles
+	// add to each other's entries.
+	ContainerLogs map[string]bool   `yaml:"container_logs"`
+	Labels        map[string]string `yaml:"labels"`
 }
 
 // Security turns on runtime events from the kernel (process starts, network

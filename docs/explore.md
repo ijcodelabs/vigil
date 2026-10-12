@@ -183,6 +183,28 @@ level:error | stats by (app) count() as errors | sort by (errors desc) | limit 1
 - Field names and values are case-sensitive; use `(?i)` in a pattern to
   ignore case.
 
+## Log volume
+
+**Explore → Log volume** answers "who writes all these logs": lines and
+size per container, pod, systemd unit or application in the chosen time
+range, biggest first, with each one's share. **show lines** opens that
+source in Logs.
+
+For a container, an admin can **stop collecting** its logs on that agent:
+
+- The change is written into the profile of that one agent,
+  `agent-<name>`, as `docker.container_logs: {"<container>": false}`, and
+  saved like any profile: checked first, with a version you can go back to.
+- The agent picks it up within a minute. Lines already stored stay until
+  they age out; the container's metrics are not affected.
+- What is switched off is listed under **Switched off**, with **collect
+  again** to take it back.
+
+If your profiles are files in git ([Fleet](fleet.md)), make the same change
+there: `vigil apply -prune` removes profiles the files do not have. A
+pattern for several containers, or a rule for several agents, goes into a
+profile by hand ([Agent configuration](configs.md)).
+
 ## From Explore to elsewhere
 
 - A query that is worth keeping belongs on a [dashboard](dashboards.md).

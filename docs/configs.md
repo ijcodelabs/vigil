@@ -169,6 +169,28 @@ Which template a container's output gets, first match wins:
    you cannot or do not want to label;
 3. `template`, the default.
 
+**Whose logs are collected.** All running containers', unless told
+otherwise:
+
+```yaml
+docker:
+  container_logs:         # by container or image name, like container_templates
+    "haproxy*": false     # not these
+    haproxy-edge: true    # but this one: the more specific key wins
+```
+
+- `false` stops collecting a container's logs; its metrics stay.
+- `"*": false` turns the map around: only the containers set to `true` are
+  collected.
+- The container's own label has the last word: `vigil.logs=false` or
+  `vigil.logs=true`.
+- It is a map, so profiles add to each other: a profile for one agent can
+  switch off one more container without repeating the rest.
+
+**Explore → Log volume** shows who writes the most and switches a
+container off with a click ([Explore](explore.md)). To send fewer lines of
+a container instead of none, give it a template with `drop` or `keep`.
+
 ### Check that something answers
 
 ```yaml

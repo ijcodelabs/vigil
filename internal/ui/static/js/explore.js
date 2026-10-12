@@ -7,12 +7,99 @@ export const COLORS = ['#5794f2', '#73bf69', '#f2cc0c', '#ff7383', '#b877d9', '#
 const MAX_SERIES = 60;
 
 export function Explore({ route }) {
-  const tab = route.parts[1] === 'logs' ? 'logs' : 'metrics';
+  const tab = ['logs', 'volume'].includes(route.parts[1]) ? route.parts[1] : 'metrics';
   return html`
     <div class="head"><h1>Explore</h1><span class="spacer"></span>
       <a class="btn" href="/docs/explore" target="_blank" rel="noopener" title="How to use Explore, with examples">Help</a></div>
-    <${Tabs} base="explore" current=${tab} tabs=${[['metrics', 'Metrics'], ['logs', 'Logs']]} />
-    ${tab === 'metrics' ? html`<${Metrics} key=${'m' + route.nav} params=${route.params} />` : html`<${Logs} key=${'l' + route.nav} params=${route.params} />`}`;
+    <${Tabs} base="explore" current=${tab} tabs=${[['metrics', 'Metrics'], ['logs', 'Logs'], ['volume', 'Log volume']]} />
+    ${tab === 'metrics' ? html`<${Metrics} key=${'m' + route.nav} params=${route.params} />`
+      : tab === 'volume' ? html`<${Volume} key=${'v' + route.nav} params=${route.params} />`
+      : html`<${Logs} key=${'l' + route.nav} params=${route.params} />`}`;
+}
+
+// Volume shows who writes the logs: lines and bytes per source in the time
+// range, biggest first. For a container, an admin can switch its logs off
+// on that agent from here; what is switched off is listed underneath, since
+// it no longer shows up in the table.
+function Volume({ params }) {
+  const [range, setRange, win] = useRange(params);
+  const [rows, setRows] = useState(null);
+  const [off, setOff] = useState([]);
+  const [admin, setAdmin] = useState(false);
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [confirm, setConfirm] = useState(null); // { agent, container, collect }
+  const [note, setNote] = useState(null);
+
+  const run = async () => {
+    setBusy(true); setError(null);
+    const [from, to] = win();
+    setParams(['explore', 'volume'], rangeParams(range));
+    try {
+      const query = `_time:[${new Date(from * 1000).toISOString()}, ${new Date(to * 1000).toISOString()}] * | stats by (agent, source, container, unit, pod, app) count() as lines, sum_len(_msg) as bytes`;
+      const [stats, switched, me] = await Promise.all([
+        api('/api/v1/logs/stats_query', { method: 'POST', body: new URLSearchParams({ query, time: to }) }),
+        api('/api/v1/fleet/container-logs'), api('/api/v1/me')]);
+      const by = new Map();
+      for (const s of stats.data.result || []) {
+        const { __name__: stat, ...labels } = s.metric;
+        const key = JSON.stringify(labels);
+        if (!by.has(key)) by.set(key, { ...labels, lines: 0, bytes: 0 });
+        by.get(key)[stat] = Number(s.value[1]);
+      }
+      setRows([...by.values()].sort((a, b) => b.bytes - a.bytes));
+      setOff(switched.filter(e => !e.collect));
+      setAdmin(me.role === 'admin');
+    } catch (e) { setError(e.message); }
+    setBusy(false);
+  };
+  useEffect(() => { run(); }, [JSON.stringify(range)]);
+
+  const apply = async () => {
+    const { agent, container, collect } = confirm;
+    try {
+      await api(`/api/v1/agents/${encodeURIComponent(agent)}/container-logs`, { method: 'POST', body: { container, collect } });
+      setNote(collect ? `Logs of ${container} on ${agent} are collected again once the agent has its new settings, within a minute.`
+        : `Logs of ${container} on ${agent} stop arriving once the agent has its new settings, within a minute. What is stored stays.`);
+      setConfirm(null); run();
+    } catch (e) { setError(e.message); setConfirm(null); }
+  };
+
+  const total = (rows || []).reduce((a, r) => a + r.bytes, 0);
+  const what = r => r.container ? ['container', r.container] : r.pod ? ['pod', r.pod] : r.unit ? ['unit', r.unit] : r.app ? ['app', r.app] : [r.source || 'other', ''];
+  const search = r => { const [kind, name] = what(r); return `#/explore/logs?q=${encodeURIComponent(`agent:${JSON.stringify(r.agent)}` + (name ? ` ${kind}:${JSON.stringify(name)}` : ''))}&last=${range.last || 3600}`; };
+  return html`
+    <div class="panel">
+      <${RangeBar} range=${range} setRange=${setRange} onRun=${run} busy=${busy} />
+      <${ErrorBox} error=${error} />
+      ${note && html`<div class="notice" style="margin-top: 10px">${note}</div>`}
+    </div>
+    ${rows && html`<div class="panel flush">${rows.length === 0 ? html`<div class="empty">No log lines in this time range.</div>` : html`<table>
+      <thead><tr><th>Agent</th><th>From</th><th>Name</th><th style="text-align: right">Lines</th><th style="text-align: right">Size</th>
+        <th style="text-align: right">Share</th><th></th></tr></thead>
+      <tbody>${rows.slice(0, 200).map(r => { const [kind, name] = what(r); return html`<tr>
+        <td>${r.agent}</td><td class="muted">${kind}</td><td class="mono">${name}</td>
+        <td class="num mono">${fmtNum(r.lines)}</td><td class="num mono">${fmtUnit(r.bytes, 'bytes')}</td>
+        <td class="num mono">${total ? (100 * r.bytes / total).toFixed(1) + '%' : ''}</td>
+        <td style="text-align: right; white-space: nowrap"><a href=${search(r)}>show lines</a>
+          ${admin && r.container && html`<button class="link" style="margin-left: 12px" title="Stop collecting this container's logs on this agent"
+            onClick=${() => setConfirm({ agent: r.agent, container: r.container, collect: false })}>stop collecting</button>`}</td></tr>`; })}</tbody></table>`}
+    </div>`}
+    ${rows && html`<p class="muted">Sizes are the text of the lines as stored, in the time range above; ${fmtUnit(total, 'bytes')} in all.
+      Stopping a container here writes <code>docker.container_logs</code> into the profile of that one agent (<code>agent-NAME</code>); a pattern for several containers or agents goes into a profile by hand.</p>`}
+    ${off.length > 0 && html`<h3 style="margin: 18px 0 8px">Switched off</h3><div class="panel flush"><table>
+      <thead><tr><th>Container</th><th>By profile</th><th>For agents</th><th></th></tr></thead>
+      <tbody>${off.map(e => { const agent = e.profile.startsWith('agent-') && (e.select[0] || '').match(/^agent="(.*)"$/); return html`<tr>
+        <td class="mono">${e.container}</td><td><a href="#/fleet/profiles">${e.profile}</a></td><td class="mono">${e.select.join(', ') || 'all'}</td>
+        <td style="text-align: right">${admin && agent && html`<button class="link" onClick=${() => setConfirm({ agent: agent[1], container: e.container, collect: true })}>collect again</button>`}</td></tr>`; })}</tbody></table></div>`}
+    ${confirm && html`<${Dialog} title=${confirm.collect ? 'Collect logs again' : 'Stop collecting logs'} onClose=${() => setConfirm(null)}>
+      <p>${confirm.collect ? 'Collect' : 'Stop collecting'} the logs of container <strong>${confirm.container}</strong> on agent <strong>${confirm.agent}</strong>${confirm.collect ? ' again' : ''}?</p>
+      <p class="muted">${confirm.collect ? 'This takes the entry out of' : 'This adds an entry to'} the profile <code>agent-${confirm.agent.toLowerCase()}</code>:</p>
+      <pre class="mono" style="margin: 8px 0">config:\n  docker:\n    container_logs:\n      "${confirm.container}": false</pre>
+      <p class="muted">Metrics of the container are not affected. If your profiles come from files in git, make the same change there, or the next <code>vigil apply -prune</code> removes this profile.</p>
+      <div class="actions"><button type="button" onClick=${() => setConfirm(null)}>Cancel</button>
+        <button class="primary" onClick=${apply}>${confirm.collect ? 'Collect again' : 'Stop collecting'}</button></div>
+    <//>`}`;
 }
 
 // A range is either the last N seconds or a fixed window picked by dragging

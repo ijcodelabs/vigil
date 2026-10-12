@@ -340,6 +340,23 @@ Last updated: 2026-10-12.
   Slack or mail receiver.
 - Explore > Logs: "exclude" next to "filter" on a line's fields.
 
+## Choosing what an agent sends: container logs (built 2026-10-12)
+
+- `docker.container_logs`: a map of container or image name (with * and ?)
+  to true or false; the most specific key wins, the container's
+  `vigil.logs` label overrules it. A map, so profiles add entries.
+- Explore > Log volume: lines and bytes per source from the log store
+  (`stats by (...) count(), sum_len(_msg)`), with "stop collecting" for a
+  container. That calls `POST /api/v1/agents/{id}/container-logs`
+  (`internal/server/containerlogs.go`), which edits the profile
+  `agent-<id>` as YAML nodes, keeping the rest of the document, and saves it
+  through the normal profile save.
+- Verified live on Docker: a noisy container stopped arriving 12 s after
+  the click and came back 18 s after "collect again".
+- Not built: the same for systemd units, files and Kubernetes pods; a
+  minimum level per source; a rate limit per container; "errors only" from
+  the page.
+
 ## Next
 
 - The config-at-scale list is done. Open: step 7 (AI investigator, MCP

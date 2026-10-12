@@ -98,6 +98,8 @@ docker:
   # template: ""                    # default template for container logs
   # container_templates:            # by container or image name; * and ? allowed
   #   "haproxy*": haproxy_http
+  # container_logs:                 # whose logs to collect, by the same kind of key
+  #   "node-scripts-*": false       # not these; "*": false collects only those set to true
 
 logs:
   # A template says how one kind of log is read: what to join, parse,
