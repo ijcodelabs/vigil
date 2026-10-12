@@ -18,12 +18,14 @@ checks and logs.
 **Status: early.** It runs on its author's servers and a home lab, not on
 large fleets. Expect rough edges, and please say what you find.
 
-![The Containers dashboard: running containers, memory and CPU in use, and charts per container](docs/img/containers.png)
+![The Site checks dashboard: every check with whether it answers, its HTTP status, how fast, how often, and the time left on its certificate](docs/img/checks.png)
 
 | | |
 |---|---|
 | [![A service page: request rate, duration, operations and dependencies](docs/img/service.png)](docs/img/service.png) **Services** from OpenTelemetry traces | [![A failed request as a trace, span by span](docs/img/trace.png)](docs/img/trace.png) **Traces**, span by span |
 | [![Log search with a histogram of matching lines](docs/img/logs.png)](docs/img/logs.png) **Logs** from files, journald and containers | [![The agent list with labels, profiles and what runs unmonitored](docs/img/fleet.png)](docs/img/fleet.png) **Fleet**: agents configured from the server |
+| [![Log volume: lines and size per source, what is switched off and which lines are dropped](docs/img/log-volume.png)](docs/img/log-volume.png) **Log volume**: who writes the logs, and a switch for each | [![A dialog proposing a pattern from a log line, with how many lines it would have dropped and kept](docs/img/drop-rule.png)](docs/img/drop-rule.png) **Drop rules**, previewed before they are saved |
+| [![The Containers dashboard: running containers, memory and CPU in use, and charts per container](docs/img/containers.png)](docs/img/containers.png) **Containers**: CPU, memory and network of each | |
 
 ## What it does
 
