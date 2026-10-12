@@ -157,6 +157,7 @@ export function fmtUnit(v, unit) {
     return (i === 0 ? fmtNum(x) : x.toFixed(Math.abs(x) >= 100 ? 0 : digits)) + ' ' + steps[i];
   };
   switch (unit) {
+    case 'yesno': return n >= 1 ? 'yes' : 'no';
     case 'percent': return n.toFixed(Math.abs(n) >= 100 ? 0 : 1) + '%';
     case 'ratio': return (n * 100).toFixed(1) + '%';
     case 'bytes': return scaled(['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'], 1024);

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
 	"regexp"
 	"slices"
@@ -32,6 +33,8 @@ const (
 //	probe_tls_cert_expiry_seconds   (HTTPS, TLS) time left on the certificate that expires
 //	                                first; negative once it has expired
 //	probe_packet_loss_ratio         (ping) share of the echo requests that got no answer
+//	probe_dns_seconds, probe_connect_seconds, probe_tls_handshake_seconds,
+//	probe_first_byte_seconds        (HTTP) where the time went; each only if that step happened
 func Check(ctx context.Context, p config.Probe) []model.Sample {
 	timeout := p.Timeout.Std()
 	if timeout == 0 {
@@ -145,6 +148,58 @@ func checkHTTP(ctx context.Context, p config.Probe, add func(string, float64)) b
 		return false
 	}
 	req.Header.Set("User-Agent", "vigil-probe")
+	// Where the time goes, for the first connection (the address the probe
+	// names): looking the name up, connecting, the TLS handshake, and from
+	// the request being sent to the first byte of the answer.
+	var t struct {
+		dns, connect, tls, sent                      time.Time
+		dnsTook, connectTook, tlsTook, firstByteTook time.Duration
+	}
+	since := func(start time.Time, took *time.Duration) {
+		if !start.IsZero() && *took == 0 {
+			*took = time.Since(start)
+		}
+	}
+	req = req.WithContext(httptrace.WithClientTrace(req.Context(), &httptrace.ClientTrace{
+		DNSStart: func(httptrace.DNSStartInfo) {
+			if t.dns.IsZero() {
+				t.dns = time.Now()
+			}
+		},
+		DNSDone: func(httptrace.DNSDoneInfo) { since(t.dns, &t.dnsTook) },
+		ConnectStart: func(string, string) {
+			if t.connect.IsZero() {
+				t.connect = time.Now()
+			}
+		},
+		ConnectDone: func(_, _ string, err error) {
+			if err == nil {
+				since(t.connect, &t.connectTook)
+			}
+		},
+		TLSHandshakeStart: func() {
+			if t.tls.IsZero() {
+				t.tls = time.Now()
+			}
+		},
+		TLSHandshakeDone: func(tls.ConnectionState, error) { since(t.tls, &t.tlsTook) },
+		WroteRequest: func(httptrace.WroteRequestInfo) {
+			if t.sent.IsZero() {
+				t.sent = time.Now()
+			}
+		},
+		GotFirstResponseByte: func() { since(t.sent, &t.firstByteTook) },
+	}))
+	defer func() {
+		for name, took := range map[string]time.Duration{
+			"probe_dns_seconds": t.dnsTook, "probe_connect_seconds": t.connectTook,
+			"probe_tls_handshake_seconds": t.tlsTook, "probe_first_byte_seconds": t.firstByteTook,
+		} {
+			if took > 0 {
+				add(name, took.Seconds())
+			}
+		}
+	}()
 	// A fresh connection every time: the point is to test that one can be made.
 	client := &http.Client{Transport: &http.Transport{
 		DisableKeepAlives: true,

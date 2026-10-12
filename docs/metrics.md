@@ -93,6 +93,7 @@ The same names for Docker containers and Kubernetes pods.
 | `probe_http_status_code` | the HTTP status, 0 if none | same |
 | `probe_tls_cert_expiry_seconds` | time left on the certificate (https and tls); negative once it has expired, and reported also when the certificate is refused | same |
 | `probe_packet_loss_ratio` | share of the three echo requests that got no answer (ping) | same |
+| `probe_dns_seconds`, `probe_connect_seconds`, `probe_tls_handshake_seconds`, `probe_first_byte_seconds` | where the time of an HTTP check went: looking the name up, connecting, the TLS handshake, and from sending the request to the first byte of the answer. Each is reported only if that step happened | same |
 | `process_group_count` | matching processes; 0 = not running | `group` |
 | `process_group_cpu_seconds_total` | CPU time they used | `group` |
 | `process_group_memory_rss_bytes`, `process_group_threads` | memory, threads | `group` |

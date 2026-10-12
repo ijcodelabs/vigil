@@ -293,7 +293,25 @@ Last updated: 2026-10-12.
   the time left is reported also for a refused certificate; an expired one
   is negative. Built-in rule `CertificateExpired` next to
   `CertificateExpiresSoon`.
-- Starter dashboard "Site checks" (`checks`).
+- Starter dashboard "Site checks" (`checks`): one table with a row per
+  check (answers, HTTP status, time in this state, time to answer, share
+  answered and failures in the range, certificate left), where the time
+  goes, slowest checks, filters by agent, type and check.
+- HTTP probes report where the time went (`probe_dns_seconds`,
+  `probe_connect_seconds`, `probe_tls_handshake_seconds`,
+  `probe_first_byte_seconds`), and the certificate of the address they
+  name, not of where it redirects to.
+- Table panels take several queries as columns, matched by labels, each
+  with its own unit and yellow/red thresholds (red below yellow: low is
+  bad); `columns` picks the label columns. Unit `yesno`.
+- The Containers dashboard lists containers that are not running, with exit
+  code, time stopped and restarts.
+- ContainerRestarting (Docker and Kubernetes) compares with the value 15 or
+  30 minutes ago: the store's increase() counts a counter it first sees as
+  risen from zero, which fired for every container on the trial host.
+- "In this state for" and "Failures in range" use MetricsQL
+  (`tlast_change_over_time`, `decreases_over_time`), so those dashboards
+  need VictoriaMetrics, not any Prometheus-compatible store.
 - Verified live on Ubuntu 24.04 as root: all four types, a wrong body, a
   closed port, an expired public certificate (negative days,
   CertificateExpired fired), ping to an address nobody has.
