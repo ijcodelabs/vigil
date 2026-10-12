@@ -88,10 +88,11 @@ The same names for Docker containers and Kubernetes pods.
 
 | Metric | Meaning | Labels |
 |---|---|---|
-| `probe_success` | 1 if it answered as expected | `probe` |
-| `probe_duration_seconds` | how long the answer took | `probe` |
-| `probe_http_status_code` | the HTTP status, 0 if none | `probe` |
-| `probe_tls_cert_expiry_seconds` | time left on the certificate | `probe` |
+| `probe_success` | 1 if it answered as expected | `probe`, `type` (http, tcp, tls, ping), `target` (what is checked; a URL without its user, password and query) |
+| `probe_duration_seconds` | how long the answer took; for ping the average round trip | same |
+| `probe_http_status_code` | the HTTP status, 0 if none | same |
+| `probe_tls_cert_expiry_seconds` | time left on the certificate (https and tls); negative once it has expired, and reported also when the certificate is refused | same |
+| `probe_packet_loss_ratio` | share of the three echo requests that got no answer (ping) | same |
 | `process_group_count` | matching processes; 0 = not running | `group` |
 | `process_group_cpu_seconds_total` | CPU time they used | `group` |
 | `process_group_memory_rss_bytes`, `process_group_threads` | memory, threads | `group` |

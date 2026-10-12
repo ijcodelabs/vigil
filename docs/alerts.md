@@ -92,8 +92,9 @@ The group **builtin** always runs:
 | Alert | Fires when |
 |---|---|
 | `HostDown` | an agent has not reported for a minute |
-| `ProbeFailing` | a probe (HTTP, TCP) has failed for two minutes |
-| `CertificateExpiresSoon` | a probed certificate has less than 14 days left |
+| `ProbeFailing` | a check (HTTP, TCP, TLS, ping) has failed for two minutes |
+| `CertificateExpiresSoon` | a checked certificate has less than 14 days left |
+| `CertificateExpired` | a checked certificate has expired |
 | `AgentDroppingData` | an agent had to drop data it could not send or was not allowed to |
 
 Integrations bring their own rules, shown as `<integration>/<group>`, and

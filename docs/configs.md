@@ -177,12 +177,43 @@ probes:
     http: https://shop.example.com/health
     interval: 30s
     expect_status: [200]        # default: any 2xx
+    expect_body: '"db":"up"'    # optional: a regular expression the answer must contain
   - name: database-port
     tcp: db.internal:5432
+  - name: mail
+    tls: mail.example.com:993   # anything that speaks TLS from the first byte
+  - name: gateway
+    ping: 10.0.0.1              # a host name or an address
 ```
 
-For `https` the time left on the certificate is reported too
-(`probe_tls_cert_expiry_seconds`).
+| Check | It succeeds when |
+|---|---|
+| `http` | the address answers with a 2xx status (or one of `expect_status`), with a certificate that is valid for `https`, and with a body matching `expect_body` if set |
+| `tcp` | the port accepts a connection |
+| `tls` | the TLS handshake works and the certificate is valid for that host name |
+| `ping` | at least one of three ICMP echo requests is answered |
+
+Each takes `interval` (default: the agent's), `timeout` (default 10s) and
+`labels`. `tls_insecure_skip_verify: true` accepts any certificate.
+
+- **Certificates.** `https` and `tls` report the time left on the
+  certificate as `probe_tls_cert_expiry_seconds`, also when the certificate
+  is refused, so an expired one shows as expired. `tls` is for services
+  that start with TLS (HTTPS, IMAPS, SMTPS on 465, LDAPS, a database with
+  TLS only); it does not speak STARTTLS.
+- **Ping** needs the right to send ICMP: an agent running as root has it,
+  as has a container with `NET_RAW` (Docker's default). Another user needs
+  the host to allow it (`net.ipv4.ping_group_range`). Without it the check
+  fails. A name is resolved on every check, IPv4 preferred.
+- **Where from.** A check runs on the agent whose config has it, so "does
+  not answer" means "not from there". Give the same check to agents in two
+  places to tell a site that is down from a network that is.
+
+A failing check raises `ProbeFailing` after two minutes, a certificate
+with less than 14 days left `CertificateExpiresSoon`, an expired one
+`CertificateExpired`; these rules come with vigil ([Alerts](alerts.md)).
+The **Site checks** dashboard shows all checks, how often each answered
+and the days left on every certificate.
 
 ### Watch particular processes
 

@@ -28,7 +28,7 @@ func TestBuiltinRulesYieldToTheRuleFile(t *testing.T) {
 
 	g, ok := builtinRuleGroup(parse("groups: []\n"))
 	names := alertNames(g)
-	if !ok || g.Name != builtinGroup || !names["HostDown"] || !names["ProbeFailing"] || !names["CertificateExpiresSoon"] {
+	if !ok || g.Name != builtinGroup || !names["HostDown"] || !names["ProbeFailing"] || !names["CertificateExpiresSoon"] || !names["CertificateExpired"] {
 		t.Fatalf("with an empty rule file: ok=%v group=%q alerts=%v", ok, g.Name, names)
 	}
 	all := len(g.Rules)

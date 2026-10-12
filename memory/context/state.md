@@ -282,14 +282,37 @@ Last updated: 2026-10-12.
 - Not built: opting a container out by label; `vigil apply` for the rule
   file (it is uploaded with curl); pod and node rules were already there.
 
+## Site checks (built 2026-10-12)
+
+- Probes gained `tls:` (handshake and certificate of anything that starts
+  with TLS), `ping:` (three ICMP echo requests; an unprivileged ping socket
+  first, a raw socket second) and `expect_body` for HTTP
+  (`internal/probe`). Every probe metric now carries `type` and `target`
+  (a URL without user, password and query).
+- The certificate is verified by the probe itself, not by the handshake, so
+  the time left is reported also for a refused certificate; an expired one
+  is negative. Built-in rule `CertificateExpired` next to
+  `CertificateExpiresSoon`.
+- Starter dashboard "Site checks" (`checks`).
+- Verified live on Ubuntu 24.04 as root: all four types, a wrong body, a
+  closed port, an expired public certificate (negative days,
+  CertificateExpired fired), ping to an address nobody has.
+- Known: changing a probe's target makes a new series, and the old one
+  lingers for the store's lookback (a few minutes) with its last value.
+  Lima's network answers echo requests for every address beyond the
+  machine, so "nobody answers" needs an unused address on a local bridge.
+- Not built: checks run by the server itself (no agent), STARTTLS, DNS
+  checks, timing per phase (DNS, connect, TLS), ping as a non-root user on
+  a host that does not allow ping sockets (it fails, as documented), IPv6
+  ping against a real host.
+
 ## Next
 
 - The config-at-scale list is done. Open: step 7 (AI investigator, MCP
   server), and the watched eBPF window on the trial host.
-- Agreed 2026-10-12, in this order: site checks (ICMP ping next to the HTTP
-  and TCP probes, and a page for checks); then notifications around
-  silences: tell the routed contacts when a silence is created, and send
-  "resolved (was silenced)" only if the firing notification had gone out.
+- Agreed 2026-10-12: notifications around silences: tell the routed
+  contacts when a silence is created, and send "resolved (was silenced)"
+  only if the firing notification had gone out.
 - Step 7 of the original plan: AI investigator and MCP server. Open question:
   Claude API, or must it run with local models?
 

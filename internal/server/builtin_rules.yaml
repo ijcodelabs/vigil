@@ -27,10 +27,16 @@ groups:
         for: 2m
         labels: {severity: critical}
         annotations:
-          summary: '{{ $labels.probe }} does not answer when checked from {{ $labels.agent }}'
+          summary: '{{ $labels.probe }} ({{ $labels.target }}) does not answer when checked from {{ $labels.agent }}'
 
       - alert: CertificateExpiresSoon
-        expr: probe_tls_cert_expiry_seconds < 14 * 86400
+        expr: probe_tls_cert_expiry_seconds < 14 * 86400 and probe_tls_cert_expiry_seconds > 0
         labels: {severity: warning}
         annotations:
-          summary: 'The certificate of {{ $labels.probe }} expires in {{ $value | humanizeDuration }}'
+          summary: 'The certificate of {{ $labels.probe }} ({{ $labels.target }}) expires in {{ $value | humanizeDuration }}'
+
+      - alert: CertificateExpired
+        expr: probe_tls_cert_expiry_seconds <= 0
+        labels: {severity: critical}
+        annotations:
+          summary: 'The certificate of {{ $labels.probe }} ({{ $labels.target }}) has expired'

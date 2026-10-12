@@ -49,8 +49,13 @@ probes: []
 #    http: https://shop.example.com/health
 #    interval: 30s
 #    expect_status: [200]            # default: any 2xx
+#    expect_body: '"db":"up"'        # a regular expression the answer must contain
 #  - name: database-port
 #    tcp: db.internal:5432
+#  - name: mail
+#    tls: mail.example.com:993       # the handshake, and the time left on the certificate
+#  - name: gateway
+#    ping: 10.0.0.1                  # ICMP echo; needs root or NET_RAW
 
 # CPU, memory and count of groups of processes. A group nothing matches is
 # reported with a count of 0, which is how "not running" is alerted on.

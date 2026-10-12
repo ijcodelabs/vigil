@@ -246,9 +246,9 @@ config:
 		t.Errorf("processes %+v systemd %+v otlp %+v limits %+v", c.Processes, c.Systemd, c.OTLP, c.Limits)
 	}
 	for want, doc := range map[string]string{
-		"exactly one of http and tcp": "config: {probes: [{name: x}]}",
-		"must be a URL":               "config: {probes: [{name: x, http: example.com}]}",
-		"match or cmdline":            "config: {processes: [{name: x, match: a, cmdline: b}]}",
+		"exactly one of http, tcp, tls and ping": "config: {probes: [{name: x}]}",
+		"must be a URL":                          "config: {probes: [{name: x, http: example.com}]}",
+		"match or cmdline":                       "config: {processes: [{name: x, match: a, cmdline: b}]}",
 	} {
 		if _, err := Resolve([]*Profile{profile(t, "p", doc)}, nil, Attributes("x", nil, nil)); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%s: got %v, want %q", doc, err, want)
