@@ -198,7 +198,9 @@ Each takes `interval` (default: the agent's), `timeout` (default 10s) and
 
 - **Certificates.** `https` and `tls` report the time left on the
   certificate as `probe_tls_cert_expiry_seconds`, also when the certificate
-  is refused, so an expired one shows as expired. `tls` is for services
+  is refused, so an expired one shows as expired. It is the certificate
+  of the address you named: if that redirects to another site, the other
+  site's certificate is not what is measured. `tls` is for services
   that start with TLS (HTTPS, IMAPS, SMTPS on 465, LDAPS, a database with
   TLS only); it does not speak STARTTLS.
 - **Ping** needs the right to send ICMP: an agent running as root has it,

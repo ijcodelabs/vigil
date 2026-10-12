@@ -132,3 +132,30 @@ func TestPing(t *testing.T) {
 		t.Errorf("a name that does not resolve: %v", v)
 	}
 }
+
+// A site that redirects elsewhere is measured by its own certificate, once.
+func TestCertificateOfTheNamedAddress(t *testing.T) {
+	serve := func(cert tls.Certificate, h http.Handler) string {
+		srv := httptest.NewUnstartedServer(h)
+		srv.TLS = &tls.Config{Certificates: []tls.Certificate{cert}}
+		srv.StartTLS()
+		t.Cleanup(srv.Close)
+		return srv.URL
+	}
+	final := serve(certUntil(t, time.Now().Add(50*24*time.Hour)), http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	named := serve(certUntil(t, time.Now().Add(10*24*time.Hour)), http.RedirectHandler(final, http.StatusMovedPermanently))
+
+	var expiry []float64
+	status := -1.0
+	for _, s := range Check(context.Background(), config.Probe{Name: "site", HTTP: named, TLSInsecure: true}) {
+		switch s.Name {
+		case "probe_tls_cert_expiry_seconds":
+			expiry = append(expiry, s.Value/86400)
+		case "probe_http_status_code":
+			status = s.Value
+		}
+	}
+	if len(expiry) != 1 || expiry[0] < 9.9 || expiry[0] > 10.1 || status != 200 {
+		t.Errorf("days left %v (want one value, about 10), status %v", expiry, status)
+	}
+}

@@ -113,14 +113,14 @@
    ]
   },
   {
-   "title": "Certificates: days left",
+   "title": "Certificates: time left",
    "type": "table",
    "w": 6,
    "h": 3,
-   "unit": "",
+   "unit": "seconds",
    "queries": [
     {
-     "expr": "sort(probe_tls_cert_expiry_seconds{agent=~\"$agent\"} / 86400)"
+     "expr": "sort(probe_tls_cert_expiry_seconds{agent=~\"$agent\"})"
     }
    ]
   },
