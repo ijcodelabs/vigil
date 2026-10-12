@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"regexp"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/ijcodelabs/vigil/internal/config"
@@ -93,7 +94,12 @@ func target(p config.Probe) string {
 // tlsConfig checks the certificate itself instead of leaving it to the
 // handshake, so that the time left is reported also for a certificate that
 // is refused: one that has expired is exactly the one people ask about.
+//
+// Only the first connection is measured: that is the address the probe
+// names. Where it redirects to has a certificate of its own, and reporting
+// that one instead hides the day the named address stops working.
 func tlsConfig(p config.Probe, add func(string, float64)) *tls.Config {
+	var first sync.Once
 	return &tls.Config{
 		InsecureSkipVerify: true, // verified below
 		VerifyConnection: func(cs tls.ConnectionState) error {
@@ -106,7 +112,7 @@ func tlsConfig(p config.Probe, add func(string, float64)) *tls.Config {
 					earliest = c.NotAfter
 				}
 			}
-			add("probe_tls_cert_expiry_seconds", time.Until(earliest).Seconds())
+			first.Do(func() { add("probe_tls_cert_expiry_seconds", time.Until(earliest).Seconds()) })
 			if p.TLSInsecure {
 				return nil
 			}

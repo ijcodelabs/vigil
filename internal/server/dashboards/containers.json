@@ -1,130 +1,142 @@
 {
-  "id": "containers",
-  "title": "Containers",
-  "variables": [
+ "id": "containers",
+ "title": "Containers",
+ "variables": [
+  {
+   "name": "agent",
+   "label": "agent",
+   "match": "container_memory_usage_bytes"
+  }
+ ],
+ "panels": [
+  {
+   "title": "Containers running",
+   "type": "stat",
+   "w": 3,
+   "h": 2,
+   "unit": "",
+   "queries": [
     {
-      "name": "agent",
-      "label": "agent",
-      "match": "container_memory_usage_bytes"
+     "expr": "count(container_memory_usage_bytes{agent=~\"$agent\"})"
     }
-  ],
-  "panels": [
+   ]
+  },
+  {
+   "title": "Memory in use",
+   "type": "stat",
+   "w": 3,
+   "h": 2,
+   "unit": "bytes",
+   "queries": [
     {
-      "title": "Containers running",
-      "type": "stat",
-      "w": 3,
-      "h": 2,
-      "unit": "",
-      "queries": [
-        {
-          "expr": "count(container_memory_usage_bytes{agent=~\"$agent\"})"
-        }
-      ]
-    },
-    {
-      "title": "Memory in use",
-      "type": "stat",
-      "w": 3,
-      "h": 2,
-      "unit": "bytes",
-      "queries": [
-        {
-          "expr": "sum(container_memory_usage_bytes{agent=~\"$agent\"})"
-        }
-      ]
-    },
-    {
-      "title": "CPU cores in use",
-      "type": "stat",
-      "w": 3,
-      "h": 2,
-      "unit": "cores",
-      "queries": [
-        {
-          "expr": "sum(rate(container_cpu_usage_seconds_total{agent=~\"$agent\"}[2m]))"
-        }
-      ]
-    },
-    {
-      "title": "Busiest container, CPU",
-      "type": "stat",
-      "w": 3,
-      "h": 2,
-      "unit": "cores",
-      "queries": [
-        {
-          "expr": "max(rate(container_cpu_usage_seconds_total{agent=~\"$agent\"}[2m]))"
-        }
-      ]
-    },
-    {
-      "title": "CPU by container",
-      "type": "timeseries",
-      "w": 6,
-      "h": 3,
-      "unit": "cores",
-      "queries": [
-        {
-          "expr": "rate(container_cpu_usage_seconds_total{agent=~\"$agent\"}[2m])",
-          "legend": "{{container}}"
-        }
-      ],
-      "min": 0,
-      "fill": true
-    },
-    {
-      "title": "Memory by container",
-      "type": "timeseries",
-      "w": 6,
-      "h": 3,
-      "unit": "bytes",
-      "queries": [
-        {
-          "expr": "container_memory_usage_bytes{agent=~\"$agent\"}",
-          "legend": "{{container}}"
-        }
-      ],
-      "min": 0
-    },
-    {
-      "title": "Network received",
-      "type": "timeseries",
-      "w": 6,
-      "h": 3,
-      "unit": "bytes/s",
-      "queries": [
-        {
-          "expr": "sum by (container) (rate(container_network_receive_bytes_total{agent=~\"$agent\"}[2m]))",
-          "legend": "{{container}}"
-        }
-      ],
-      "min": 0
-    },
-    {
-      "title": "Network sent",
-      "type": "timeseries",
-      "w": 6,
-      "h": 3,
-      "unit": "bytes/s",
-      "queries": [
-        {
-          "expr": "sum by (container) (rate(container_network_transmit_bytes_total{agent=~\"$agent\"}[2m]))",
-          "legend": "{{container}}"
-        }
-      ],
-      "min": 0
-    },
-    {
-      "title": "Memory now",
-      "type": "table",
-      "w": 12,
-      "h": 3,
-      "unit": "bytes",
-      "queries": [
-        {
-          "expr": "sort_desc(container_memory_usage_bytes{agent=~\"$agent\"})"
-        }
-      ]
+     "expr": "sum(container_memory_usage_bytes{agent=~\"$agent\"})"
     }
-  ]
+   ]
+  },
+  {
+   "title": "CPU cores in use",
+   "type": "stat",
+   "w": 3,
+   "h": 2,
+   "unit": "cores",
+   "queries": [
+    {
+     "expr": "sum(rate(container_cpu_usage_seconds_total{agent=~\"$agent\"}[2m]))"
+    }
+   ]
+  },
+  {
+   "title": "Busiest container, CPU",
+   "type": "stat",
+   "w": 3,
+   "h": 2,
+   "unit": "cores",
+   "queries": [
+    {
+     "expr": "max(rate(container_cpu_usage_seconds_total{agent=~\"$agent\"}[2m]))"
+    }
+   ]
+  },
+  {
+   "title": "Stopped containers (the value is the exit code; 0 is a job that finished)",
+   "type": "table",
+   "w": 12,
+   "h": 2,
+   "unit": "",
+   "queries": [
+    {
+     "expr": "sort_desc(container_exit_code{agent=~\"$agent\"} and container_running == 0)"
+    }
+   ]
+  },
+  {
+   "title": "CPU by container",
+   "type": "timeseries",
+   "w": 6,
+   "h": 3,
+   "unit": "cores",
+   "queries": [
+    {
+     "expr": "rate(container_cpu_usage_seconds_total{agent=~\"$agent\"}[2m])",
+     "legend": "{{container}}"
+    }
+   ],
+   "min": 0,
+   "fill": true
+  },
+  {
+   "title": "Memory by container",
+   "type": "timeseries",
+   "w": 6,
+   "h": 3,
+   "unit": "bytes",
+   "queries": [
+    {
+     "expr": "container_memory_usage_bytes{agent=~\"$agent\"}",
+     "legend": "{{container}}"
+    }
+   ],
+   "min": 0
+  },
+  {
+   "title": "Network received",
+   "type": "timeseries",
+   "w": 6,
+   "h": 3,
+   "unit": "bytes/s",
+   "queries": [
+    {
+     "expr": "sum by (container) (rate(container_network_receive_bytes_total{agent=~\"$agent\"}[2m]))",
+     "legend": "{{container}}"
+    }
+   ],
+   "min": 0
+  },
+  {
+   "title": "Network sent",
+   "type": "timeseries",
+   "w": 6,
+   "h": 3,
+   "unit": "bytes/s",
+   "queries": [
+    {
+     "expr": "sum by (container) (rate(container_network_transmit_bytes_total{agent=~\"$agent\"}[2m]))",
+     "legend": "{{container}}"
+    }
+   ],
+   "min": 0
+  },
+  {
+   "title": "Memory now",
+   "type": "table",
+   "w": 12,
+   "h": 3,
+   "unit": "bytes",
+   "queries": [
+    {
+     "expr": "sort_desc(container_memory_usage_bytes{agent=~\"$agent\"})"
+    }
+   ]
+  }
+ ]
 }
