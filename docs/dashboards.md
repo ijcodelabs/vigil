@@ -35,7 +35,7 @@ PostgreSQL, …). All of them are ordinary dashboards: change or delete them.
 |---|---|---|
 | Lines over time | how something develops | unit, where the Y axis starts, fill under lines, a legend text per query |
 | Single number | one figure to glance at | unit, "yellow from" and "red from" thresholds |
-| Table | the current value of many series | unit |
+| Table | the current value of many series, with one column per query | unit, which labels are columns; per query a column title, a unit, and "yellow from" and "red from" |
 | Log lines | the latest matching lines | number of lines |
 
 A panel has a **width** out of 12 (6 is half the row) and a **height** in
@@ -52,7 +52,19 @@ level:error | stats by (app) count() as errors
 `{{agent}} in`, `{{namespace}}/{{pod}}`.
 
 **Units**: percent (0–100), ratio (0–1, shown as percent), bytes, bytes per
-second, seconds, milliseconds, CPU cores, per second.
+second, seconds, milliseconds, CPU cores, per second, yes / no (1 / 0).
+
+**Tables with several columns.** Every query of a table is a column, named
+by the query's legend. Rows are the series, matched across the queries by
+their labels, so `probe_success` and `probe_duration_seconds` of the same
+check land in one row; a query that has nothing for a row leaves the cell
+empty. The first query decides the order of the rows. "Label columns"
+picks which labels are shown, and in what order.
+
+A column can have its own unit and thresholds: a cell is yellow from one
+value and red from another. If the red value is below the yellow one, low
+values are the bad ones (a certificate with 7 days left, an availability
+of 99%).
 
 ### Variables
 

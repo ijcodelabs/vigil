@@ -159,3 +159,21 @@ func TestCertificateOfTheNamedAddress(t *testing.T) {
 		t.Errorf("days left %v (want one value, about 10), status %v", expiry, status)
 	}
 }
+
+// An HTTP probe says where its time went.
+func TestHTTPTimings(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(30 * time.Millisecond)
+	}))
+	defer srv.Close()
+	v := values(config.Probe{Name: "shop", HTTP: srv.URL, TLSInsecure: true})
+	if v["probe_connect_seconds"] <= 0 || v["probe_tls_handshake_seconds"] <= 0 || v["probe_first_byte_seconds"] < 0.03 {
+		t.Errorf("timings: %v", v)
+	}
+	if _, has := v["probe_dns_seconds"]; has {
+		t.Errorf("an address needs no name lookup, none should be reported: %v", v)
+	}
+	if v = values(config.Probe{Name: "none", HTTP: "http://127.0.0.1:1/"}); v["probe_connect_seconds"] != 0 || v["probe_first_byte_seconds"] != 0 {
+		t.Errorf("nothing listening: %v", v)
+	}
+}

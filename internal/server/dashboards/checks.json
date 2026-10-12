@@ -6,81 +6,153 @@
    "name": "agent",
    "label": "agent",
    "match": "probe_success"
+  },
+  {
+   "name": "type",
+   "label": "type",
+   "match": "probe_success"
+  },
+  {
+   "name": "probe",
+   "label": "probe",
+   "match": "probe_success"
   }
  ],
  "panels": [
   {
    "title": "Checks",
    "type": "stat",
-   "w": 3,
+   "w": 2,
    "h": 2,
    "unit": "",
    "queries": [
     {
-     "expr": "count(probe_success{agent=~\"$agent\"})"
+     "expr": "count(probe_success{agent=~\"$agent\",probe=~\"$probe\",type=~\"$type\"})"
     }
    ]
   },
   {
    "title": "Failing now",
    "type": "stat",
-   "w": 3,
+   "w": 2,
    "h": 2,
    "unit": "",
    "warn": 1,
    "crit": 1,
    "queries": [
     {
-     "expr": "count(probe_success{agent=~\"$agent\"} == 0) or vector(0)"
+     "expr": "count(probe_success{agent=~\"$agent\",probe=~\"$probe\",type=~\"$type\"} == 0) or vector(0)"
     }
    ]
   },
   {
-   "title": "Certificates with under 14 days left",
+   "title": "Down from everywhere",
    "type": "stat",
-   "w": 3,
+   "w": 2,
+   "h": 2,
+   "unit": "",
+   "crit": 1,
+   "queries": [
+    {
+     "expr": "count(max by (probe) (probe_success{agent=~\"$agent\",probe=~\"$probe\",type=~\"$type\"}) == 0) or vector(0)"
+    }
+   ]
+  },
+  {
+   "title": "Down from some places only",
+   "type": "stat",
+   "w": 2,
    "h": 2,
    "unit": "",
    "warn": 1,
    "queries": [
     {
-     "expr": "count(probe_tls_cert_expiry_seconds{agent=~\"$agent\"} < 14 * 86400) or vector(0)"
+     "expr": "count(max by (probe) (probe_success{agent=~\"$agent\",probe=~\"$probe\",type=~\"$type\"}) == 1 and min by (probe) (probe_success{agent=~\"$agent\",probe=~\"$probe\",type=~\"$type\"}) == 0) or vector(0)"
     }
    ]
   },
   {
-   "title": "Slowest answer",
+   "title": "Certificates under 14 days",
    "type": "stat",
-   "w": 3,
+   "w": 2,
+   "h": 2,
+   "unit": "",
+   "warn": 1,
+   "queries": [
+    {
+     "expr": "count(probe_tls_cert_expiry_seconds{agent=~\"$agent\",probe=~\"$probe\",type=~\"$type\"} < 14 * 86400) or vector(0)"
+    }
+   ]
+  },
+  {
+   "title": "Slowest answer now",
+   "type": "stat",
+   "w": 2,
    "h": 2,
    "unit": "seconds",
+   "warn": 1,
+   "crit": 3,
    "queries": [
     {
-     "expr": "max(probe_duration_seconds{agent=~\"$agent\"} and probe_success{agent=~\"$agent\"} == 1)"
+     "expr": "max(probe_duration_seconds{agent=~\"$agent\",probe=~\"$probe\",type=~\"$type\"} and probe_success{agent=~\"$agent\",probe=~\"$probe\",type=~\"$type\"} == 1)"
     }
    ]
   },
   {
-   "title": "Now: 1 answers, 0 does not",
+   "title": "Checks",
    "type": "table",
-   "w": 6,
-   "h": 3,
+   "w": 12,
+   "h": 4,
    "unit": "",
+   "columns": [
+    "probe",
+    "target",
+    "agent",
+    "type"
+   ],
    "queries": [
     {
-     "expr": "sort(probe_success{agent=~\"$agent\"})"
-    }
-   ]
-  },
-  {
-   "title": "Answered in this time range",
-   "type": "table",
-   "w": 6,
-   "h": 3,
-   "unit": "percent",
-   "queries": [
+     "expr": "sort_by_label(probe_success{agent=~\"$agent\",probe=~\"$probe\",type=~\"$type\"}, \"probe\", \"agent\")",
+     "legend": "Answers",
+     "unit": "yesno",
+     "warn": 0.5,
+     "crit": 0
+    },
     {
-     "expr": "sort(100 * avg_over_time(probe_success{agent=~\"$agent\"}[$__range]))"
+     "expr": "probe_http_status_code{agent=~\"$agent\",probe=~\"$probe\",type=~\"$type\"}",
+     "legend": "HTTP status"
+    },
+    {
+     "expr": "time() - tlast_change_over_time(probe_success{agent=~\"$agent\",probe=~\"$probe\",type=~\"$type\"}[30d])",
+     "legend": "In this state for",
+     "unit": "seconds"
+    },
+    {
+     "expr": "probe_duration_seconds{agent=~\"$agent\",probe=~\"$probe\",type=~\"$type\"}",
+     "legend": "Time to answer",
+     "unit": "seconds",
+     "warn": 1,
+     "crit": 3
+    },
+    {
+     "expr": "100 * avg_over_time(probe_success{agent=~\"$agent\",probe=~\"$probe\",type=~\"$type\"}[$__range])",
+     "legend": "Answered in range",
+     "unit": "percent",
+     "warn": 99.9,
+     "crit": 99
+    },
+    {
+     "expr": "decreases_over_time(probe_success{agent=~\"$agent\",probe=~\"$probe\",type=~\"$type\"}[$__range])",
+     "legend": "Failures in range",
+     "warn": 1,
+     "crit": 5
+    },
+    {
+     "expr": "probe_tls_cert_expiry_seconds{agent=~\"$agent\",probe=~\"$probe\",type=~\"$type\"}",
+     "legend": "Certificate left",
+     "unit": "seconds",
+     "warn": 1209600,
+     "crit": 604800
     }
    ]
   },
@@ -93,7 +165,7 @@
    "min": 0,
    "queries": [
     {
-     "expr": "probe_duration_seconds{agent=~\"$agent\"}",
+     "expr": "probe_duration_seconds{agent=~\"$agent\",probe=~\"$probe\",type=~\"$type\"}",
      "legend": "{{probe}} from {{agent}}"
     }
    ]
@@ -107,8 +179,62 @@
    "min": 0,
    "queries": [
     {
-     "expr": "probe_success{agent=~\"$agent\"}",
+     "expr": "probe_success{agent=~\"$agent\",probe=~\"$probe\",type=~\"$type\"}",
      "legend": "{{probe}} from {{agent}}"
+    }
+   ]
+  },
+  {
+   "title": "Where the time goes (HTTP checks)",
+   "type": "table",
+   "w": 6,
+   "h": 3,
+   "unit": "seconds",
+   "columns": [
+    "probe",
+    "agent"
+   ],
+   "queries": [
+    {
+     "expr": "sort_by_label(probe_dns_seconds{agent=~\"$agent\",probe=~\"$probe\",type=~\"$type\"} or probe_connect_seconds{agent=~\"$agent\",probe=~\"$probe\",type=~\"$type\"} * 0, \"probe\", \"agent\")",
+     "legend": "Name lookup"
+    },
+    {
+     "expr": "probe_connect_seconds{agent=~\"$agent\",probe=~\"$probe\",type=~\"$type\"}",
+     "legend": "Connect"
+    },
+    {
+     "expr": "probe_tls_handshake_seconds{agent=~\"$agent\",probe=~\"$probe\",type=~\"$type\"}",
+     "legend": "TLS handshake"
+    },
+    {
+     "expr": "probe_first_byte_seconds{agent=~\"$agent\",probe=~\"$probe\",type=~\"$type\"}",
+     "legend": "First byte",
+     "warn": 1,
+     "crit": 3
+    }
+   ]
+  },
+  {
+   "title": "Slowest on average in this time range",
+   "type": "table",
+   "w": 6,
+   "h": 3,
+   "unit": "seconds",
+   "columns": [
+    "probe",
+    "agent"
+   ],
+   "queries": [
+    {
+     "expr": "sort_desc(avg_over_time(probe_duration_seconds{agent=~\"$agent\",probe=~\"$probe\",type=~\"$type\"}[$__range]))",
+     "legend": "Average",
+     "warn": 1,
+     "crit": 3
+    },
+    {
+     "expr": "max_over_time(probe_duration_seconds{agent=~\"$agent\",probe=~\"$probe\",type=~\"$type\"}[$__range])",
+     "legend": "Slowest"
     }
    ]
   },
@@ -118,9 +244,17 @@
    "w": 6,
    "h": 3,
    "unit": "seconds",
+   "columns": [
+    "probe",
+    "target",
+    "agent"
+   ],
    "queries": [
     {
-     "expr": "sort(probe_tls_cert_expiry_seconds{agent=~\"$agent\"})"
+     "expr": "sort(probe_tls_cert_expiry_seconds{agent=~\"$agent\",probe=~\"$probe\",type=~\"$type\"})",
+     "legend": "Time left",
+     "warn": 1209600,
+     "crit": 604800
     }
    ]
   },
@@ -133,7 +267,7 @@
    "min": 0,
    "queries": [
     {
-     "expr": "probe_packet_loss_ratio{agent=~\"$agent\"}",
+     "expr": "probe_packet_loss_ratio{agent=~\"$agent\",probe=~\"$probe\",type=~\"$type\"}",
      "legend": "{{probe}} from {{agent}}"
     }
    ]

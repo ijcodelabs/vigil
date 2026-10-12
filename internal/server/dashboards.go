@@ -57,17 +57,26 @@ type Panel struct {
 	Warn  *float64 `json:"warn,omitempty"`  // stat: yellow from this value
 	Crit  *float64 `json:"crit,omitempty"`  // stat: red from this value
 	Limit int      `json:"limit,omitempty"` // logs: number of lines
+	// table: the labels shown as columns, in this order; all of them if empty.
+	Columns []string `json:"columns,omitempty"`
 }
 
+// Query is one expression. In a table with several queries each one is a
+// column: rows are the series, matched across the queries by their labels.
 type Query struct {
 	Expr   string `json:"expr"`
-	Legend string `json:"legend,omitempty"` // e.g. "{{agent}} in"
+	Legend string `json:"legend,omitempty"` // e.g. "{{agent}} in"; in a table, the column's title
+	// table: this column's unit (default: the panel's) and when a cell is
+	// yellow and red. With crit below warn, low values are the bad ones.
+	Unit string   `json:"unit,omitempty"`
+	Warn *float64 `json:"warn,omitempty"`
+	Crit *float64 `json:"crit,omitempty"`
 }
 
 var (
 	panelTypes = map[string]bool{"timeseries": true, "stat": true, "table": true, "logs": true}
 	units      = map[string]bool{"": true, "percent": true, "ratio": true, "bytes": true, "bytes/s": true,
-		"seconds": true, "ms": true, "cores": true, "ops/s": true}
+		"seconds": true, "ms": true, "cores": true, "ops/s": true, "yesno": true}
 )
 
 // parseDashboard reads and checks a dashboard definition. Unknown fields
@@ -116,6 +125,20 @@ func parseDashboard(body []byte) (*Dashboard, error) {
 		for _, q := range p.Queries {
 			if strings.TrimSpace(q.Expr) == "" {
 				return nil, fmt.Errorf("%s: a query is empty", where)
+			}
+			if !units[q.Unit] {
+				return nil, fmt.Errorf("%s: unknown unit %q", where, q.Unit)
+			}
+			if p.Type != "table" && (q.Unit != "" || q.Warn != nil || q.Crit != nil) {
+				return nil, fmt.Errorf("%s: a unit and colours per query are for tables", where)
+			}
+		}
+		if len(p.Columns) > 0 && p.Type != "table" {
+			return nil, fmt.Errorf("%s: columns are for tables", where)
+		}
+		for _, c := range p.Columns {
+			if !labelNameRe.MatchString(c) {
+				return nil, fmt.Errorf("%s: column %q is not a label name", where, c)
 			}
 		}
 		if p.Limit < 0 || p.Limit > 1000 {

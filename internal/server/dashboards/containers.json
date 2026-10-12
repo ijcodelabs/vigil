@@ -58,14 +58,31 @@
    ]
   },
   {
-   "title": "Stopped containers (the value is the exit code; 0 is a job that finished)",
+   "title": "Containers that are not running",
    "type": "table",
    "w": 12,
    "h": 2,
    "unit": "",
+   "columns": [
+    "container",
+    "image",
+    "agent"
+   ],
    "queries": [
     {
-     "expr": "sort_desc(container_exit_code{agent=~\"$agent\"} and container_running == 0)"
+     "expr": "sort_by_label(container_exit_code{agent=~\"$agent\"} and container_running == 0, \"agent\", \"container\")",
+     "legend": "Exit code (0: finished)",
+     "warn": 1,
+     "crit": 1
+    },
+    {
+     "expr": "(time() - tlast_change_over_time(container_running{agent=~\"$agent\"}[30d])) and container_running == 0",
+     "legend": "Stopped for",
+     "unit": "seconds"
+    },
+    {
+     "expr": "container_restarts_total{agent=~\"$agent\"} and container_running == 0",
+     "legend": "Restarts"
     }
    ]
   },

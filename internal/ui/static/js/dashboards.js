@@ -2,7 +2,7 @@ import { html, useState, useEffect, useRef, useErrorBoundary, api, useLoad, setP
 import { Chart, seriesName, useRange, rangeParams, RANGES, REFRESH, parseLines } from './explore.js';
 
 const UNITS = [['', 'plain number'], ['percent', 'percent (0–100)'], ['ratio', 'ratio (0–1 shown as %)'], ['bytes', 'bytes'],
-  ['bytes/s', 'bytes per second'], ['seconds', 'seconds'], ['ms', 'milliseconds'], ['cores', 'CPU cores'], ['ops/s', 'per second']];
+  ['bytes/s', 'bytes per second'], ['seconds', 'seconds'], ['ms', 'milliseconds'], ['cores', 'CPU cores'], ['ops/s', 'per second'], ['yesno', 'yes / no (1 / 0)']];
 const TYPES = [['timeseries', 'Lines over time'], ['stat', 'Single number'], ['table', 'Table'], ['logs', 'Log lines']];
 const ROW = 84; // pixels per unit of panel height
 
@@ -212,7 +212,7 @@ async function run(panel, from, to, variables, values, width) {
     const r = logs
       ? await api('/api/v1/logs/stats_query', form({ query: `_time:[${iso(from)}, ${iso(to)}] ${q.expr}`, time: to }))
       : await api('/api/v1/query', form({ query: q.expr, time: to }));
-    for (const s of r.data.result || []) rows.push({ metric: s.metric, value: Number(s.value[1]), name: legendFor(q, s.metric) });
+    for (const s of r.data.result || []) rows.push({ metric: s.metric, value: Number(s.value[1]), name: legendFor(q, s.metric), q: queries.indexOf(q) });
   }
   return { values: rows };
 }
@@ -261,10 +261,30 @@ function show(panel, data, height, onZoom) {
   }
   if (panel.type === 'table') {
     if (!data.values.length) return none;
-    const cols = [...new Set(data.values.flatMap(r => Object.keys(r.metric)))].filter(k => k !== '__name__').sort();
-    return html`<div class="scroll"><table><thead><tr>${cols.map(c => html`<th>${c}</th>`)}<th style="text-align: right">Value</th></tr></thead>
-      <tbody>${data.values.slice(0, 200).map(r => html`<tr>${cols.map(c => html`<td class="mono">${r.metric[c] ?? ''}</td>`)}
-        <td class="num mono">${fmtUnit(r.value, panel.unit)}</td></tr>`)}</tbody></table></div>`;
+    // One row per series, one value column per query: the rows of the
+    // queries are matched by their labels, whatever the metric is called.
+    const rows = new Map();
+    for (const r of data.values) {
+      const labels = Object.entries(r.metric).filter(([k]) => k !== '__name__').sort(([a], [b]) => (a < b ? -1 : 1));
+      const key = JSON.stringify(labels);
+      if (!rows.has(key)) rows.set(key, { metric: r.metric, cells: [] });
+      rows.get(key).cells[r.q || 0] = r.value;
+    }
+    const all = [...rows.values()];
+    const cols = panel.columns && panel.columns.length ? panel.columns
+      : [...new Set(all.flatMap(r => Object.keys(r.metric)))].filter(k => k !== '__name__').sort();
+    const qs = panel.queries;
+    // Yellow and red by the query's thresholds; with red below yellow, low is bad.
+    const level = (q, v) => {
+      if (v == null || (q.warn == null && q.crit == null)) return '';
+      const low = q.warn != null && q.crit != null && q.crit < q.warn;
+      const past = t => t != null && (low ? v <= t : v >= t);
+      return past(q.crit) ? 'lvl-bad' : past(q.warn) ? 'lvl-warn' : 'lvl-ok';
+    };
+    return html`<div class="scroll"><table><thead><tr>${cols.map(c => html`<th>${c}</th>`)}
+      ${qs.map((q, i) => html`<th style="text-align: right">${qs.length > 1 ? q.legend || 'Value ' + (i + 1) : 'Value'}</th>`)}</tr></thead>
+      <tbody>${all.slice(0, 200).map(r => html`<tr>${cols.map(c => html`<td class="mono">${r.metric[c] ?? ''}</td>`)}
+        ${qs.map((q, i) => html`<td class="num mono ${level(q, r.cells[i])}">${r.cells[i] == null ? '' : fmtUnit(r.cells[i], q.unit || panel.unit)}</td>`)}</tr>`)}</tbody></table></div>`;
   }
   if (panel.type !== 'logs') return html`<div class="error" style="margin: 0">Unknown panel type “${panel.type}”.</div>`;
   if (!data.rows.length) return html`<div class="empty">No log lines in this time range.</div>`;
@@ -286,7 +306,11 @@ function PanelEditor({ panel, onSave, onClose }) {
   const submit = e => {
     e.preventDefault();
     const out = { title: p.title.trim(), type: p.type, w: +p.w, h: +p.h,
-      queries: p.queries.filter(q => q.expr.trim()).map(q => ({ expr: q.expr.trim(), ...(q.legend ? { legend: q.legend } : {}) })) };
+      queries: p.queries.filter(q => q.expr.trim()).map(q => ({ expr: q.expr.trim(), ...(q.legend ? { legend: q.legend } : {}),
+        ...(p.type === 'table' && q.unit ? { unit: q.unit } : {}), ...(p.type === 'table' && q.warn != null ? { warn: q.warn } : {}),
+        ...(p.type === 'table' && q.crit != null ? { crit: q.crit } : {}) })) };
+    const columns = (Array.isArray(p.columns) ? p.columns.join(',') : String(p.columns || '')).split(',').map(c => c.trim()).filter(Boolean);
+    if (p.type === 'table' && columns.length) out.columns = columns;
     if (!logsOnly && p.source === 'logs') out.source = 'logs';
     if (p.unit && !logsOnly) out.unit = p.unit;
     if (p.type === 'timeseries') { if (p.min != null) out.min = p.min; if (p.fill) out.fill = true; }
@@ -306,10 +330,17 @@ function PanelEditor({ panel, onSave, onClose }) {
     ${p.queries.map((q, i) => html`<div class="row" style="align-items: flex-start; margin-bottom: 8px">
       <textarea rows="2" style="flex: 3" spellcheck="false" required=${i === 0} aria-label="Query" value=${q.expr} onInput=${e => setQuery(i, 'expr', e.target.value)}
         placeholder=${logsOnly ? 'LogsQL, e.g. app:nginx error' : isLogs ? 'LogsQL ending in | stats …, e.g. error | stats by (app) count() as errors' : 'PromQL, e.g. rate(http_requests_total[5m])'}></textarea>
-      ${!logsOnly && html`<input style="flex: 1; min-width: 120px" aria-label="Legend" placeholder=${'Legend, e.g. {{agent}}'} value=${q.legend || ''} onInput=${e => setQuery(i, 'legend', e.target.value)} />`}
+      ${!logsOnly && html`<input style="flex: 1; min-width: 120px" aria-label=${p.type === 'table' ? 'Column title' : 'Legend'} placeholder=${p.type === 'table' ? 'Column title' : 'Legend, e.g. {{agent}}'} value=${q.legend || ''} onInput=${e => setQuery(i, 'legend', e.target.value)} />`}
+      ${p.type === 'table' && html`
+        <select aria-label="Unit of this column" title="Unit of this column" value=${q.unit || ''} onChange=${e => setQuery(i, 'unit', e.target.value)} style="width: 110px">
+          <option value="">panel's unit</option>${UNITS.filter(([v]) => v).map(([v, l]) => html`<option value=${v}>${l}</option>`)}</select>
+        <input type="number" step="any" aria-label="Yellow from" title="Yellow from this value" placeholder="yellow" value=${q.warn ?? ''} onInput=${e => setQuery(i, 'warn', num(e.target.value))} style="width: 84px" />
+        <input type="number" step="any" aria-label="Red from" title="Red from this value. Below the yellow value means low is bad" placeholder="red" value=${q.crit ?? ''} onInput=${e => setQuery(i, 'crit', num(e.target.value))} style="width: 84px" />`}
       ${p.queries.length > 1 && html`<button type="button" class="small" onClick=${() => set('queries', p.queries.filter((_, j) => j !== i))}>Remove</button>`}
     </div>`)}
     ${!logsOnly && p.queries.length < 10 && html`<button type="button" class="small" onClick=${() => set('queries', [...p.queries, { expr: '' }])}>Add query</button>`}
+    ${p.type === 'table' && html`<p class="muted" style="font-size: 12.5px">Each query is a column; rows are matched by their labels. A cell turns yellow and red from the values given; with red below yellow, low values are the bad ones.</p>
+      <div class="field"><label>Label columns, in order (empty: all)</label><input placeholder="probe, target, agent" value=${Array.isArray(p.columns) ? p.columns.join(', ') : p.columns || ''} onInput=${e => set('columns', e.target.value)} /></div>`}
     <p class="muted" style="font-size: 12.5px">Use the dashboard's variables as <code>$name</code>, for example <code>${isLogs ? 'agent:~"$agent"' : 'agent=~"$agent"'}</code>.</p>
     <div class="row" style="align-items: flex-end">
       <div class="field"><label>Width (of 12)</label><input type="number" min="1" max="12" required value=${p.w} onInput=${e => set('w', e.target.value)} style="width: 90px" /></div>
