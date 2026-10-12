@@ -96,7 +96,9 @@ Arithmetic works between series with the same labels:
 - **Enter** runs the query. An empty query or `*` shows everything.
 - The **bar chart** shows how many lines matched over time.
 - **Click a line** to see all its fields. **filter** next to a field adds it
-  to the query.
+  to the query, so only lines with that value stay; **exclude** hides the
+  lines with that value instead (it adds `-field:"value"`). Each undoes the
+  other for the same value.
 - **Live tail** shows matching lines as they arrive, newest on top.
 - The newest lines up to the chosen limit are shown.
 
