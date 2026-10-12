@@ -4,8 +4,9 @@ A dashboard is a grid of panels that share one time range, one refresh
 interval and one set of variables.
 
 A new server comes with **Hosts**, **Containers**, **Logs and security**,
-**vigil agents** (what each agent sends and what it costs its host) and
-**AI costs** (language-model tokens and GPU time, priced).
+**Site checks** (what answers, how fast, and the days left on
+certificates), **vigil agents** (what each agent sends and what it costs
+its host) and **AI costs** (language-model tokens and GPU time, priced).
 Integrations add their own the first time they are used (Kubernetes,
 PostgreSQL, …). All of them are ordinary dashboards: change or delete them.
 

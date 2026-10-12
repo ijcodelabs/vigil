@@ -1,0 +1,142 @@
+{
+ "id": "checks",
+ "title": "Site checks",
+ "variables": [
+  {
+   "name": "agent",
+   "label": "agent",
+   "match": "probe_success"
+  }
+ ],
+ "panels": [
+  {
+   "title": "Checks",
+   "type": "stat",
+   "w": 3,
+   "h": 2,
+   "unit": "",
+   "queries": [
+    {
+     "expr": "count(probe_success{agent=~\"$agent\"})"
+    }
+   ]
+  },
+  {
+   "title": "Failing now",
+   "type": "stat",
+   "w": 3,
+   "h": 2,
+   "unit": "",
+   "warn": 1,
+   "crit": 1,
+   "queries": [
+    {
+     "expr": "count(probe_success{agent=~\"$agent\"} == 0) or vector(0)"
+    }
+   ]
+  },
+  {
+   "title": "Certificates with under 14 days left",
+   "type": "stat",
+   "w": 3,
+   "h": 2,
+   "unit": "",
+   "warn": 1,
+   "queries": [
+    {
+     "expr": "count(probe_tls_cert_expiry_seconds{agent=~\"$agent\"} < 14 * 86400) or vector(0)"
+    }
+   ]
+  },
+  {
+   "title": "Slowest answer",
+   "type": "stat",
+   "w": 3,
+   "h": 2,
+   "unit": "seconds",
+   "queries": [
+    {
+     "expr": "max(probe_duration_seconds{agent=~\"$agent\"} and probe_success{agent=~\"$agent\"} == 1)"
+    }
+   ]
+  },
+  {
+   "title": "Now: 1 answers, 0 does not",
+   "type": "table",
+   "w": 6,
+   "h": 3,
+   "unit": "",
+   "queries": [
+    {
+     "expr": "sort(probe_success{agent=~\"$agent\"})"
+    }
+   ]
+  },
+  {
+   "title": "Answered in this time range",
+   "type": "table",
+   "w": 6,
+   "h": 3,
+   "unit": "percent",
+   "queries": [
+    {
+     "expr": "sort(100 * avg_over_time(probe_success{agent=~\"$agent\"}[$__range]))"
+    }
+   ]
+  },
+  {
+   "title": "Time to answer",
+   "type": "timeseries",
+   "w": 6,
+   "h": 3,
+   "unit": "seconds",
+   "min": 0,
+   "queries": [
+    {
+     "expr": "probe_duration_seconds{agent=~\"$agent\"}",
+     "legend": "{{probe}} from {{agent}}"
+    }
+   ]
+  },
+  {
+   "title": "Answering",
+   "type": "timeseries",
+   "w": 6,
+   "h": 3,
+   "unit": "",
+   "min": 0,
+   "queries": [
+    {
+     "expr": "probe_success{agent=~\"$agent\"}",
+     "legend": "{{probe}} from {{agent}}"
+    }
+   ]
+  },
+  {
+   "title": "Certificates: days left",
+   "type": "table",
+   "w": 6,
+   "h": 3,
+   "unit": "",
+   "queries": [
+    {
+     "expr": "sort(probe_tls_cert_expiry_seconds{agent=~\"$agent\"} / 86400)"
+    }
+   ]
+  },
+  {
+   "title": "Ping: packets lost",
+   "type": "timeseries",
+   "w": 6,
+   "h": 3,
+   "unit": "ratio",
+   "min": 0,
+   "queries": [
+    {
+     "expr": "probe_packet_loss_ratio{agent=~\"$agent\"}",
+     "legend": "{{probe}} from {{agent}}"
+    }
+   ]
+  }
+ ]
+}

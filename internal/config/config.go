@@ -196,18 +196,48 @@ type SecurityRule struct {
 }
 
 // Probe checks from the agent's host that something answers: an HTTP(S)
-// address, or a TCP port. For HTTPS it also reports how long the
-// certificate is still valid.
+// address, a TCP port, a TLS service, or a host by ICMP echo ("ping"). For
+// HTTPS and TLS it also reports how long the certificate is still valid.
 type Probe struct {
 	Name         string            `yaml:"name"`
 	HTTP         string            `yaml:"http"` // a URL
 	TCP          string            `yaml:"tcp"`  // host:port
+	TLS          string            `yaml:"tls"`  // host:port of anything that speaks TLS at once (not STARTTLS)
+	Ping         string            `yaml:"ping"` // a host name or address
 	Interval     Duration          `yaml:"interval"`
 	Timeout      Duration          `yaml:"timeout"`
 	ExpectStatus []int             `yaml:"expect_status"` // default: any 2xx
+	ExpectBody   string            `yaml:"expect_body"`   // HTTP: a regular expression the answer must contain
 	TLSInsecure  bool              `yaml:"tls_insecure_skip_verify"`
 	Labels       map[string]string `yaml:"labels"`
 	Enabled      *bool             `yaml:"enabled"`
+}
+
+// Kind and Target say what a probe checks, in the words of its config.
+func (p Probe) Kind() string {
+	switch {
+	case p.HTTP != "":
+		return "http"
+	case p.TCP != "":
+		return "tcp"
+	case p.TLS != "":
+		return "tls"
+	default:
+		return "ping"
+	}
+}
+
+func (p Probe) Target() string {
+	switch {
+	case p.HTTP != "":
+		return p.HTTP
+	case p.TCP != "":
+		return p.TCP
+	case p.TLS != "":
+		return p.TLS
+	default:
+		return p.Ping
+	}
 }
 
 // ProcessGroup reports CPU, memory and count of the processes it matches.
@@ -369,13 +399,31 @@ func (c *Collection) Check() error {
 		if Off(p.Enabled) {
 			continue
 		}
+		set := 0
+		for _, v := range []string{p.HTTP, p.TCP, p.TLS, p.Ping} {
+			if v != "" {
+				set++
+			}
+		}
 		switch {
-		case (p.HTTP == "") == (p.TCP == ""):
-			return fmt.Errorf("probe %s: set exactly one of http and tcp", p.Name)
+		case set != 1:
+			return fmt.Errorf("probe %s: set exactly one of http, tcp, tls and ping", p.Name)
 		case p.HTTP != "" && !strings.HasPrefix(p.HTTP, "http://") && !strings.HasPrefix(p.HTTP, "https://"):
 			return fmt.Errorf("probe %s: http must be a URL starting with http:// or https://", p.Name)
 		case p.Interval != 0 && p.Interval.Std() < time.Second:
 			return fmt.Errorf("probe %s: interval must be at least 1s", p.Name)
+		case p.ExpectBody != "" && p.HTTP == "":
+			return fmt.Errorf("probe %s: expect_body is for http probes", p.Name)
+		}
+		if p.ExpectBody != "" {
+			if _, err := regexp.Compile(p.ExpectBody); err != nil {
+				return fmt.Errorf("probe %s: expect_body: %v", p.Name, err)
+			}
+		}
+		if p.TLS != "" {
+			if _, _, err := net.SplitHostPort(p.TLS); err != nil {
+				return fmt.Errorf("probe %s: tls must be host:port", p.Name)
+			}
 		}
 	}
 	groups := map[string]bool{}
