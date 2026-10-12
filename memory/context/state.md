@@ -1,6 +1,6 @@
 # State
 
-Last updated: 2026-10-10.
+Last updated: 2026-10-12.
 
 ## Built (steps 1–6 of the original plan)
 
@@ -260,10 +260,35 @@ Last updated: 2026-10-10.
 - Upgrading those agents: copy the new binary and restart the unit by hand;
   nothing redeploys them.
 
+## Down alerts and built-in rules (built 2026-10-12)
+
+- A rule group `builtin` runs on every server (`internal/server/builtin_rules.yaml`,
+  `GET /api/v1/rules/builtin`): HostDown, AgentDroppingData, ProbeFailing,
+  CertificateExpiresSoon. An alert of the same name in the rule file
+  replaces the built-in one; a group named `builtin` there replaces all.
+- The Docker collector reports every container, not only running ones:
+  `container_running`, `container_exit_code` (while stopped),
+  `container_restarts_total`. One more API call per container and interval.
+  The Docker integration gained ContainerDown (stopped with a non-zero exit
+  code for two minutes) and ContainerRestarting.
+- Verified live against Podman's Docker API: exit 3 and a kill (137) alert,
+  exit 0 does not, a restarted container clears within about two minutes, a
+  restart loop is caught, HostDown goes pending for a stopped agent.
+- Known: `container_exit_code` stays visible for a few minutes after a
+  container starts again (the store's lookback), which is why the rule also
+  asks for `container_running == 0`. Container alerts of a host that went
+  down linger for that long too.
+- Not built: opting a container out by label; `vigil apply` for the rule
+  file (it is uploaded with curl); pod and node rules were already there.
+
 ## Next
 
 - The config-at-scale list is done. Open: step 7 (AI investigator, MCP
-  server), OpenTelemetry traces, and the watched eBPF window on the trial host.
+  server), and the watched eBPF window on the trial host.
+- Agreed 2026-10-12, in this order: site checks (ICMP ping next to the HTTP
+  and TCP probes, and a page for checks); then notifications around
+  silences: tell the routed contacts when a silence is created, and send
+  "resolved (was silenced)" only if the firing notification had gone out.
 - Step 7 of the original plan: AI investigator and MCP server. Open question:
   Claude API, or must it run with local models?
 

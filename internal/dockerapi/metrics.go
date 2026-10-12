@@ -8,7 +8,10 @@ import (
 	"github.com/ijcodelabs/vigil/internal/model"
 )
 
-// Metrics reads CPU, memory and network usage of every running container.
+// Metrics reads whether each container runs and, for the running ones, CPU,
+// memory and network usage. A container that stopped is still reported
+// (container_running 0, with its exit code) until it is removed, which is
+// what lets a rule tell "crashed" from "gone on purpose".
 func (c *Client) Metrics(ctx context.Context) ([]model.Sample, error) {
 	containers, err := c.List(ctx)
 	if err != nil {
@@ -17,15 +20,8 @@ func (c *Client) Metrics(ctx context.Context) ([]model.Sample, error) {
 	var out []model.Sample
 	var lastErr error
 	for _, ct := range containers {
-		if ct.State != "running" {
-			continue
-		}
-		st, err := c.Stats(ctx, ct.ID)
-		if errors.Is(err, ErrGone) {
-			continue // it ended since the list was taken
-		}
-		if err != nil {
-			lastErr = err
+		// Never started, or on its way out: neither up nor down.
+		if ct.State == "created" || ct.State == "removing" {
 			continue
 		}
 		ts := time.Now().UnixMilli()
@@ -35,6 +31,29 @@ func (c *Client) Metrics(ctx context.Context) ([]model.Sample, error) {
 				l[kv[i]] = kv[i+1]
 			}
 			out = append(out, model.Sample{Name: name, Labels: l, Value: v, TS: ts})
+		}
+		rs, err := c.RunState(ctx, ct.ID)
+		if errors.Is(err, ErrGone) {
+			continue // it ended since the list was taken
+		}
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		add("container_restarts_total", float64(rs.RestartCount))
+		if !rs.Running {
+			add("container_running", 0)
+			add("container_exit_code", float64(rs.ExitCode))
+			continue
+		}
+		add("container_running", 1)
+		st, err := c.Stats(ctx, ct.ID)
+		if errors.Is(err, ErrGone) {
+			continue
+		}
+		if err != nil {
+			lastErr = err
+			continue
 		}
 		// Page cache that can be reclaimed is not counted as used, as `docker stats` does.
 		// cgroup v2 calls it inactive_file, v1 total_inactive_file.

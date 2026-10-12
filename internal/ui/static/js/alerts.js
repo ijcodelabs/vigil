@@ -76,7 +76,7 @@ function Rules({ admin }) {
     ${groups && groups.length === 0 && html`<div class="panel empty">No rules yet.${admin && ' Use “Edit rule file” to add some.'}</div>`}
     ${(groups || []).map(g => html`<div class="panel flush">
       <div style="padding: 10px 14px; border-bottom: 1px solid var(--border)"><strong>${g.name}</strong>
-        <span class="muted"> · ${g.type} · every ${g.interval}s</span></div>
+        <span class="muted"> · ${g.type} · every ${g.interval}s${g.name === 'builtin' && ' · comes with vigil; an alert of the same name in the rule file replaces one'}</span></div>
       <table><tbody>${g.rules.map(r => html`<tr>
         <td style="width: 110px">${state(r)}</td>
         <td><strong>${r.name}</strong>${r.duration > 0 && html`<span class="muted"> · for ${r.duration}s</span>`}

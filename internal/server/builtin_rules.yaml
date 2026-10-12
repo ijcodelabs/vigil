@@ -1,0 +1,36 @@
+# Rules every vigil server runs without being asked: what "it is down" means
+# for the things vigil itself knows about. Shown under Alerts > Rules as the
+# group "builtin" and served at /api/v1/rules/builtin.
+#
+# To change one, define an alert of the same name in the rule file; yours
+# then runs instead. A group named "builtin" in the rule file replaces all
+# of these (with `rules: []`, switches them off).
+groups:
+  - name: builtin
+    interval: 30s
+    rules:
+      - alert: HostDown
+        expr: vigil_agent_up == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: 'Agent {{ $labels.agent }} stopped reporting'
+
+      - alert: AgentDroppingData
+        expr: increase(vigil_agent_dropped_total[10m]) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: '{{ $labels.agent }} is dropping data ({{ $labels.reason }})'
+
+      - alert: ProbeFailing
+        expr: probe_success == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: '{{ $labels.probe }} does not answer when checked from {{ $labels.agent }}'
+
+      - alert: CertificateExpiresSoon
+        expr: probe_tls_cert_expiry_seconds < 14 * 86400
+        labels: {severity: warning}
+        annotations:
+          summary: 'The certificate of {{ $labels.probe }} expires in {{ $value | humanizeDuration }}'

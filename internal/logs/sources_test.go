@@ -316,7 +316,8 @@ func TestDocker(t *testing.T) {
 			w.(http.Flusher).Flush()
 			<-r.Context().Done()
 		case strings.HasSuffix(r.URL.Path, "/json"):
-			io.WriteString(w, `{"Config":{"Tty":false}}`)
+			running := !strings.Contains(r.URL.Path, "ccc333")
+			fmt.Fprintf(w, `{"Config":{"Tty":false},"State":{"Running":%v,"ExitCode":0}}`, running)
 		default:
 			http.NotFound(w, r)
 		}
@@ -372,7 +373,8 @@ func TestDocker(t *testing.T) {
 		vals[fmt.Sprintf("%s/%s", s.Labels["container"], s.Name)] = s.Value
 	}
 	if vals["web/container_cpu_usage_seconds_total"] != 2.5 || vals["web/container_memory_usage_bytes"] != 700 ||
-		vals["web/container_network_transmit_bytes_total"] != 20 || len(samples) != 10 {
+		vals["web/container_network_transmit_bytes_total"] != 20 || vals["web/container_running"] != 1 ||
+		vals["stopped/container_running"] != 0 || len(samples) != 17 {
 		t.Errorf("metrics: %v", vals)
 	}
 }

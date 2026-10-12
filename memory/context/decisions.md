@@ -46,3 +46,15 @@ and rejected as more to learn.
 
 **Config can be edited on the server or come from files in git.** Each
 profile records where it was last written from.
+
+**Some rules are built in, and the rule file overrides them by alert name.**
+A new server has an empty rule file, and "is it down" should not depend on
+someone uploading an example. The rule file is what people keep in git, so
+it has the last word: it then holds only what differs from the defaults,
+which change with the version. Overriding by group name alone was rejected
+because changing one threshold would mean copying the whole group.
+
+**A stopped container alerts only with a non-zero exit code.** Exit 0 is a
+job that finished; a removed container is gone on purpose. A container
+stopped by hand usually ends with 137 or 143 and does alert, which was
+accepted: it is down, and a silence covers planned work.

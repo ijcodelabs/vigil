@@ -51,6 +51,9 @@ The same names for Docker containers and Kubernetes pods.
 | `container_cpu_usage_seconds_total` | CPU time used | `container`, `image`; on Kubernetes also `namespace`, `pod` |
 | `container_memory_usage_bytes` | memory in use, without reclaimable cache | same |
 | `container_memory_limit_bytes` | its limit; 0 or a huge number means none | same |
+| `container_running` | 1 while it runs, 0 once it stopped; a removed container is no longer reported (Docker) | `container`, `image` |
+| `container_exit_code` | the exit code of a container that is not running (Docker) | same |
+| `container_restarts_total` | restarts by the restart policy since it was created (Docker) | same |
 | `container_network_receive_bytes_total`, `container_network_transmit_bytes_total` | network traffic (per pod on Kubernetes) | `interface` |
 | `container_cpu_cfs_periods_total`, `container_cpu_cfs_throttled_periods_total` | CPU limit enforcement (Kubernetes) | |
 | `container_oom_events_total` | out-of-memory kills (Kubernetes) | |

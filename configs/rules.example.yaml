@@ -4,17 +4,14 @@
 #        --data-binary @configs/rules.example.yaml http://localhost:8080/api/v1/rules/config
 # The upload replaces the whole rule file. It is refused, with the reason, if
 # anything in it is wrong; the rules already running then stay as they are.
+#
+# HostDown, ProbeFailing, CertificateExpiresSoon and AgentDroppingData are
+# not here: they come with vigil (group "builtin"). An alert of the same
+# name in this file replaces the built-in one.
 groups:
   - name: hosts
     interval: 30s
     rules:
-      - alert: HostDown
-        expr: vigil_agent_up == 0
-        for: 1m
-        labels: {severity: critical}
-        annotations:
-          summary: 'Agent {{ $labels.agent }} stopped reporting'
-
       - alert: TargetDown
         expr: up == 0
         for: 3m
@@ -50,19 +47,6 @@ groups:
         annotations:
           summary: '{{ $value }} systemd units failed on {{ $labels.agent }}'
 
-      - alert: ProbeFailing
-        expr: probe_success == 0
-        for: 2m
-        labels: {severity: critical}
-        annotations:
-          summary: '{{ $labels.probe }} does not answer when checked from {{ $labels.agent }}'
-
-      - alert: CertificateExpiresSoon
-        expr: probe_tls_cert_expiry_seconds < 14 * 86400
-        labels: {severity: warning}
-        annotations:
-          summary: 'The certificate of {{ $labels.probe }} expires in {{ $value | humanizeDuration }}'
-
       - alert: ProcessNotRunning
         expr: process_group_count == 0
         for: 2m
@@ -76,12 +60,6 @@ groups:
         labels: {severity: warning}
         annotations:
           summary: '{{ $labels.agent }} spends {{ $value | humanizePercentage }} of its time stalled waiting for memory'
-
-      - alert: AgentDroppingData
-        expr: increase(vigil_agent_dropped_total[10m]) > 0
-        labels: {severity: warning}
-        annotations:
-          summary: '{{ $labels.agent }} is dropping data ({{ $labels.reason }})'
 
       # Recording rules store a query's result as a new metric.
       - record: agent:cpu_usage:ratio
