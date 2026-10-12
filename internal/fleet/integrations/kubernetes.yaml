@@ -27,7 +27,8 @@ rules:
         annotations:
           summary: 'Container {{ $labels.container }} of {{ $labels.namespace }}/{{ $labels.pod }} keeps crashing'
       - alert: ContainerRestarting
-        expr: increase(kube_pod_container_status_restarts_total[30m]) > 3
+        # Not increase(): see the same rule of the Docker integration.
+        expr: kube_pod_container_status_restarts_total - kube_pod_container_status_restarts_total offset 30m > 3
         labels: {severity: warning}
         annotations:
           summary: 'Container {{ $labels.container }} of {{ $labels.namespace }}/{{ $labels.pod }} restarted {{ $value | humanize }} times in 30 minutes'

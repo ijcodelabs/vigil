@@ -22,8 +22,11 @@ rules:
         labels: {severity: critical}
         annotations:
           summary: 'Container {{ $labels.container }} on {{ $labels.agent }} is not running (exit code {{ $value }})'
+      # A difference against the value 15 minutes ago, not increase(): the
+      # store counts a counter it sees for the first time as having risen
+      # from zero, which would report every old restart of a container as new.
       - alert: ContainerRestarting
-        expr: increase(container_restarts_total[15m]) > 3
+        expr: container_restarts_total - container_restarts_total offset 15m > 3
         labels: {severity: warning}
         annotations:
           summary: 'Container {{ $labels.container }} on {{ $labels.agent }} was restarted {{ $value | humanize }} times in 15 minutes'
