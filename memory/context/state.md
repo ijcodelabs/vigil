@@ -324,13 +324,26 @@ Last updated: 2026-10-12.
   a host that does not allow ping sockets (it fails, as documented), IPv6
   ping against a real host.
 
+## Silences are announced (built 2026-10-12)
+
+- `internal/alerting/silences.go`: a new silence is reported to the
+  receivers of the alerts it covers (or, covering none, of its own labels)
+  as an alert `AlertsSilenced`; an alert that ends while silenced is
+  reported as resolved to the receivers that had been told it fires. Both
+  go straight to the receivers' integrations, past grouping and silences.
+- "Had been told" is recorded by wrapping every integration; in memory
+  only, so it is lost with a restart.
+- Silences go through `POST /alertmanager/api/v2/silences` in the server
+  (`postSilence`), which signs them with the signed-in account.
+  `notify_silences: false` switches the messages off.
+- Tested with webhook receivers only; never sent through a real Telegram,
+  Slack or mail receiver.
+- Explore > Logs: "exclude" next to "filter" on a line's fields.
+
 ## Next
 
 - The config-at-scale list is done. Open: step 7 (AI investigator, MCP
   server), and the watched eBPF window on the trial host.
-- Agreed 2026-10-12: notifications around silences: tell the routed
-  contacts when a silence is created, and send "resolved (was silenced)"
-  only if the firing notification had gone out.
 - Step 7 of the original plan: AI investigator and MCP server. Open question:
   Claude API, or must it run with local models?
 

@@ -69,6 +69,7 @@ type Alertmanager struct {
 	handler     http.Handler
 
 	alerts      *mem.Alerts
+	silences    *silence.Silences
 	silencer    *silence.Silencer
 	nflog       *nflog.Log
 	groupMarker marker.GroupMarker
@@ -76,6 +77,11 @@ type Alertmanager struct {
 	dispMetrics *dispatch.DispatcherMetrics
 	api         *api.API
 	events      eventrecorder.Recorder
+
+	// See silences.go: who is told about silences, and what they were told before.
+	routing        atomic.Pointer[routing]
+	told           told
+	notifySilences atomic.Bool
 
 	mu         sync.Mutex // serialises Apply
 	dispatcher atomic.Pointer[dispatch.Dispatcher]
@@ -127,6 +133,8 @@ func New(dataDir, serverURL string, log *slog.Logger) (*Alertmanager, error) {
 	a.wg.Go(func() { a.nflog.Maintenance(maintenance, nflogFile, a.stopc, nil) })
 	a.wg.Go(func() { silences.Maintenance(maintenance, silFile, a.stopc, nil) })
 
+	a.silences = silences
+	a.notifySilences.Store(true)
 	a.silencer = silence.NewSilencer(silences, log, a.events)
 	if a.alerts, err = mem.NewAlerts(context.Background(), 30*time.Minute, 0, a.silencer, log, a.events, reg, ff); err != nil {
 		return nil, fmt.Errorf("alert store: %w", err)
@@ -184,7 +192,7 @@ func (a *Alertmanager) Apply(yaml string) error {
 		if err != nil {
 			return err
 		}
-		receivers[rcv.Name] = integrations
+		receivers[rcv.Name] = a.recordDeliveries(rcv.Name, integrations)
 	}
 	intervals := map[string][]timeinterval.TimeInterval{}
 	for _, ti := range conf.MuteTimeIntervals {
@@ -214,8 +222,14 @@ func (a *Alertmanager) Apply(yaml string) error {
 	go dispatcher.Run(a.started)
 	dispatcher.WaitForLoading()
 	a.dispatcher.Store(dispatcher)
+	a.routing.Store(&routing{routes: routes, receivers: receivers})
 	return nil
 }
+
+// NotifyAboutSilences switches the two messages about silences on or off
+// (on by default): that one was made, and that an alert people had been
+// told about ended while silenced.
+func (a *Alertmanager) NotifyAboutSilences(on bool) { a.notifySilences.Store(on) }
 
 func (a *Alertmanager) stopRouting() {
 	if i := a.inhibitor.Load(); i != nil {
@@ -246,7 +260,11 @@ func (a *Alertmanager) Send(ctx context.Context, alerts []Alert) error {
 		}
 		out = append(out, al)
 	}
-	return a.alerts.Put(ctx, out...)
+	if err := a.alerts.Put(ctx, out...); err != nil {
+		return err
+	}
+	a.reportEndedWhileSilenced(ctx, out)
+	return nil
 }
 
 // Close stops routing and writes silences and the notification log to disk.

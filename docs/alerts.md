@@ -291,6 +291,33 @@ amtool --alertmanager.url=https://vigil.example.com/alertmanager silence add ale
 
 (give it the admin token with `--http.config.file`).
 
+### Who hears about a silence
+
+Alertmanager itself says nothing about a silenced alert. vigil adds two
+messages, sent to the contacts the alerts are routed to:
+
+- **When a silence is made**: who silenced what, until when, and the
+  comment. It goes to the contacts of the alerts the silence covers at that
+  moment. If it covers none yet (planned work), it goes to the contacts an
+  alert with the silence's own labels would reach. The message is an alert
+  named `AlertsSilenced` with severity `info`, so routing and templates
+  treat it like any other.
+- **When an alert ends while silenced**: a "resolved" message with the note
+  that it ended while silenced, but only to contacts that had been told it
+  was firing (and whose receiver has `send_resolved`). An alert that began
+  and ended inside a silence was never announced, so its end is not either.
+
+When a silence ends and the alert still fires, Alertmanager notifies as
+usual; nothing extra is sent.
+
+A silence made by someone signed in carries their account name, whatever
+the request says. A script using a token may name whom it acts for.
+
+Good to know: what was announced is remembered in the server's memory.
+After a restart of the server, alerts that end while silenced do so
+quietly. `notify_silences: false` in the server config switches both
+messages off.
+
 ## Alerts that do not come from a rule
 
 Security detections from agents ([Runtime events](security.md)) are raised

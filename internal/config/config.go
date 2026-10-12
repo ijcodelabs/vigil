@@ -549,7 +549,11 @@ type Server struct {
 	// ExternalURL is how people reach this server; it is used for links in
 	// notifications.
 	ExternalURL string `yaml:"external_url"`
-	Storage     struct {
+	// NotifySilences tells the contacts of the alerts concerned when a
+	// silence is made, and when an alert they were told about ends while
+	// silenced. On unless set to false.
+	NotifySilences *bool `yaml:"notify_silences"`
+	Storage        struct {
 		MetricsURL string `yaml:"metrics_url"`
 		LogsURL    string `yaml:"logs_url"`
 		// TracesURL is a VictoriaTraces instance; optional. Without it,
