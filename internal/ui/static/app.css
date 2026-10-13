@@ -185,6 +185,18 @@ td.lvl-bad { color: var(--bad); background: color-mix(in srgb, var(--bad) 16%, t
 /* The value after each name is hidden in a tile, so its colon goes too. */
 .tile .chart .u-legend .u-series th::after { content: none; }
 .tile .empty { padding: 14px; }
+/* Editing: a panel is moved by its title and resized by its corner. */
+.tile.editing { position: relative; }
+.tile.editing header { cursor: grab; }
+.tile .resize { position: absolute; right: 0; bottom: 0; width: 18px; height: 18px; z-index: 2; cursor: nwse-resize; touch-action: none; opacity: .55; background: linear-gradient(135deg, transparent 50%, var(--muted) 50%); }
+.tile .resize:hover { opacity: 1; }
+.tile .size { position: absolute; right: 24px; bottom: 5px; z-index: 2; font-size: 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 7px; }
+/* While a panel is being moved, the tiles themselves take the drop: what
+   is inside them is redrawn now and then, and a drop target that goes away
+   under the pointer loses the drop. */
+.grid.moving .tile-body { pointer-events: none; }
+.tile.drop-before { box-shadow: -5px 0 0 var(--accent); }
+.tile.drop-after { box-shadow: 5px 0 0 var(--accent); }
 .tile .scroll { height: 100%; overflow: auto; margin: 0 -12px; }
 .tile th { position: sticky; top: 0; background: var(--panel); padding: 5px 12px; }
 .tile td { padding: 5px 12px; }

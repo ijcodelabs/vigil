@@ -400,6 +400,14 @@ Last updated: 2026-10-13.
   (before, they stayed there until their four-minute timeout); a rule
   whose expression was edited keeps its alerts (same group and name, one
   gone and one new). Found by removing an alert made from Explore.
+- Dashboards, edit mode: a panel is moved by dragging its title (native
+  drag and drop; it takes the place before or after the panel it is
+  dropped on, the layout stays a flow of panels in order) and resized by
+  dragging its corner, in whole columns and rows. The new order is applied
+  when the drag ends, and tile contents ignore the pointer during a move:
+  charts are redrawn on every render, and a drop target that is replaced
+  under the pointer loses the drop. Not built: free placement with gaps,
+  dragging on touch screens.
 - Verified live on the Lima host: every shipped query is accepted by its
   store; save, update, share, pick, both "Add to" paths, a viewer's view,
   and `vigil apply` with save, unchanged, change and prune.
