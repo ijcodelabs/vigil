@@ -349,9 +349,12 @@ cluster talks to the server, and the agents talk to that host.
   convenient for a first test; leave it out to accept per-agent tokens
   only.
 - **`admin_token`** is for the API and `vigil apply`.
+- **Read-only tokens** (`vgr_…`, Users → Read-only tokens) let a tool read
+  what a viewer can see and change nothing: for [Grafana](grafana.md) and
+  for scripts.
 
-The server stores only hashes of enrolment and agent tokens; each is shown
-once.
+The server stores only hashes of enrolment, agent and read-only tokens;
+each is shown once.
 
 ## Check that it works
 

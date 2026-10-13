@@ -1,0 +1,50 @@
+# Grafana data sources for a vigil server. Put this file in Grafana's
+# provisioning/datasources directory and give Grafana two environment
+# variables: VIGIL_URL (the server's address, e.g. https://vigil.example.com)
+# and VIGIL_TOKEN (a read-only token from the Users page).
+#
+# The logs data source needs the plugin victoriametrics-logs-datasource
+# (GF_INSTALL_PLUGINS=victoriametrics-logs-datasource). The traces one only
+# answers on a server that has a trace store.
+apiVersion: 1
+datasources:
+  - name: vigil metrics
+    uid: vigil-metrics
+    type: prometheus
+    access: proxy
+    url: $VIGIL_URL
+    isDefault: true
+    jsonData:
+      httpMethod: POST
+      httpHeaderName1: Authorization
+    secureJsonData:
+      httpHeaderValue1: Bearer $VIGIL_TOKEN
+  - name: vigil logs
+    uid: vigil-logs
+    type: victoriametrics-logs-datasource
+    access: proxy
+    url: $VIGIL_URL
+    jsonData:
+      httpHeaderName1: Authorization
+    secureJsonData:
+      httpHeaderValue1: Bearer $VIGIL_TOKEN
+  - name: vigil traces
+    uid: vigil-traces
+    type: jaeger
+    access: proxy
+    url: $VIGIL_URL/api/v1/traces/jaeger
+    jsonData:
+      httpHeaderName1: Authorization
+    secureJsonData:
+      httpHeaderValue1: Bearer $VIGIL_TOKEN
+  - name: vigil alerts
+    uid: vigil-alerts
+    type: alertmanager
+    access: proxy
+    url: $VIGIL_URL/alertmanager
+    jsonData:
+      implementation: prometheus
+      handleGrafanaManagedAlerts: false
+      httpHeaderName1: Authorization
+    secureJsonData:
+      httpHeaderValue1: Bearer $VIGIL_TOKEN

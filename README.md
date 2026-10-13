@@ -10,6 +10,11 @@ same binary runs as the agent on every host or Kubernetes node
 (`vigil agent`) and as the central server (`vigil server`).
 VictoriaMetrics and VictoriaLogs store the data.
 
+Its own interface is optional. If you prefer Grafana, or already run one,
+it connects to the vigil server with a read-only token: vigil then
+collects, stores, manages the agents and alerts, and Grafana draws.
+[How to connect it](docs/grafana.md).
+
 A new server is useful before you configure anything: it alerts when a host
 goes silent, a container stops, a site stops answering or a certificate is
 about to expire, and it comes with dashboards for hosts, containers, site
@@ -48,6 +53,8 @@ large fleets. Expect rough edges, and please say what you find.
   selected by labels, which can be kept in git, with integrations per
   technology and detection of what runs unmonitored.
 - **Web interface**: Dashboards, Explore, Services, Alerts, Captures, Fleet.
+- **Grafana, if you want it**: the server answers Grafana's data sources
+  for metrics, logs, traces and alerts, through read-only tokens.
 
 ## Documentation
 
@@ -63,6 +70,7 @@ pages under `/docs/` (the **Docs** link in the interface).
 | [Explore](docs/explore.md) | PromQL and LogsQL with examples, saved queries |
 | [Dashboards](docs/dashboards.md) | panels, variables, editing |
 | [Alerts](docs/alerts.md) | rules, contacts, silences |
+| [Grafana](docs/grafana.md) | read-only tokens, data sources, what stays in vigil |
 | [Runtime events](docs/security.md) | events, rules, captures |
 | [Metric reference](docs/metrics.md) | what every metric means |
 | [API](docs/api.md) | endpoints |

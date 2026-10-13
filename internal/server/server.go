@@ -54,7 +54,7 @@ func (s *Server) hardened(next http.Handler) http.Handler {
 		if s.viaTLS(r) {
 			h.Set("Strict-Transport-Security", "max-age=31536000")
 		}
-		if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/alertmanager/") {
+		if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/alertmanager/") || strings.HasPrefix(r.URL.Path, "/select/") {
 			h.Set("Cache-Control", "no-store") // answers hold data, and sometimes secrets shown once
 		}
 		next.ServeHTTP(w, r)
@@ -182,8 +182,10 @@ func (s *Server) Handler() http.Handler {
 
 	// Read-only Prometheus query API, served by the metrics store.
 	proxy := httputil.NewSingleHostReverseProxy(s.metrics)
-	query := s.viewer(proxy.ServeHTTP)
-	for _, p := range []string{"query", "query_range", "series", "labels"} {
+	query := s.asks(proxy.ServeHTTP)
+	// The last two are asked by tools that speak Prometheus' API (Grafana's
+	// data source, on connecting and for the help text of metrics).
+	for _, p := range []string{"query", "query_range", "series", "labels", "metadata", "status/buildinfo"} {
 		mux.HandleFunc("GET /api/v1/"+p, query)
 		mux.HandleFunc("POST /api/v1/"+p, query)
 	}
@@ -202,7 +204,7 @@ func (s *Server) Handler() http.Handler {
 	// Read-only log query API (LogsQL), served by the log store.
 	logProxy := httputil.NewSingleHostReverseProxy(s.logs)
 	logProxy.FlushInterval = -1 // live tail is a long streaming response
-	logQuery := s.viewer(func(w http.ResponseWriter, r *http.Request) {
+	logQuery := s.asks(func(w http.ResponseWriter, r *http.Request) {
 		op := r.PathValue("op")
 		if !logQueryOps[op] {
 			http.NotFound(w, r)
@@ -213,6 +215,11 @@ func (s *Server) Handler() http.Handler {
 	})
 	mux.HandleFunc("GET /api/v1/logs/{op}", logQuery)
 	mux.HandleFunc("POST /api/v1/logs/{op}", logQuery)
+	// The same under the log store's own paths, for tools that expect to
+	// talk to a VictoriaLogs (its Grafana data source) and are given this
+	// server's address instead.
+	mux.HandleFunc("GET /select/logsql/{op}", logQuery)
+	mux.HandleFunc("POST /select/logsql/{op}", logQuery)
 	mux.HandleFunc("POST /api/v1/logs", s.ingest(s.bounded(s.handleLogs)))
 	s.traceRoutes(mux)
 	s.alertingRoutes(mux)
@@ -220,6 +227,7 @@ func (s *Server) Handler() http.Handler {
 	s.enrollRoutes(mux)
 	s.dashboardRoutes(mux)
 	s.queryRoutes(mux)
+	s.tokenRoutes(mux)
 	mux.Handle("GET /docs/", ui.DocsHandler())
 	mux.Handle("/", ui.Handler())
 	return s.hardened(mux)

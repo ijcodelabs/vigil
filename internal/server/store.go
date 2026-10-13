@@ -80,6 +80,10 @@ func OpenStore(dataDir string) (*Store, error) {
 		// belong to their owner.
 		`CREATE TABLE IF NOT EXISTS saved_queries (id TEXT PRIMARY KEY, type TEXT NOT NULL, name TEXT NOT NULL, query TEXT NOT NULL,
 			owner TEXT NOT NULL, shared INTEGER NOT NULL, origin TEXT NOT NULL, updated INTEGER NOT NULL)`,
+		// Read-only tokens for tools that query (Grafana, scripts). Only the
+		// hash is kept.
+		`CREATE TABLE IF NOT EXISTS api_tokens (id TEXT PRIMARY KEY, name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE,
+			expires INTEGER NOT NULL, author TEXT NOT NULL, created INTEGER NOT NULL, last_used INTEGER NOT NULL DEFAULT 0)`,
 		`CREATE TABLE IF NOT EXISTS agent_reports (agent_id TEXT PRIMARY KEY, config_hash TEXT NOT NULL, config_error TEXT NOT NULL, at INTEGER NOT NULL)`,
 	} {
 		if err == nil {

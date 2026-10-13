@@ -415,6 +415,33 @@ Last updated: 2026-10-13.
   hiding a query that comes with vigil, removing an alert again from
   Explore (edit the rule file), `vigil apply` for the rule file itself.
 
+## Grafana on top of the server (built 2026-10-13)
+
+- Read-only tokens (`internal/server/tokens.go`, table `api_tokens`, hash
+  only, `vgr_…`, optional expiry, last use noted at most once a minute):
+  a viewer that may only GET, plus POST on the query APIs (`s.asks`).
+  Made and revoked on the Users page.
+- The log query operations also answer under `/select/logsql/…`, so
+  Grafana's VictoriaLogs data source can be given the server's address.
+  `/api/v1/metadata` and `/api/v1/status/buildinfo` go to the metric store.
+- `deploy/grafana/datasources.yaml` provisions four data sources
+  (Prometheus, VictoriaLogs plugin, Jaeger, Alertmanager), all through
+  the server with one token. `docs/grafana.md`.
+- Alertmanager's `/api/v2/status` carries its whole configuration and was
+  readable by viewers; non-admins now get it without the configuration.
+- Verified live with Grafana 13.2 in the Lima host: health checks of the
+  metrics and logs data sources, range queries, label and metric lookups,
+  log lines and `| stats` over time, alerts and silences read through the
+  Alertmanager data source, a silence made from Grafana refused.
+- Seen: Grafana's Explore says "No logs volume available" with the
+  VictoriaLogs plugin on Grafana 13.2, also when the plugin talks to the
+  log store directly; the hits query itself answers through the server.
+- Not tried: the Jaeger data source against a real trace store (the test
+  host has none), a server with its own certificate authority, the
+  VictoriaMetrics data source plugin (only the Prometheus one).
+- Not built: exporting vigil's dashboards as Grafana JSON, tokens limited
+  to some agents or labels, a limit on query load per token.
+
 ## Next
 
 - The config-at-scale list is done. Open: step 7 (AI investigator, MCP

@@ -43,6 +43,9 @@ type principal struct {
 	// Bootstrap is true for the built-in admin that exists only while no
 	// user accounts have been created.
 	Bootstrap bool `json:"bootstrap,omitempty"`
+	// ReadOnly is true for a caller that came with a read-only token: it
+	// sees what a viewer sees and changes nothing.
+	ReadOnly bool `json:"read_only,omitempty"`
 	// session is the id of the session the caller signed in with, if any.
 	session string
 }
@@ -72,6 +75,12 @@ func randomToken() string {
 func (s *Server) identify(r *http.Request) (p *principal, viaCookie bool) {
 	if sameToken(bearer(r), s.cfg.AdminToken) {
 		return &principal{User: "admin-token", Role: RoleAdmin}, false
+	}
+	if t := bearer(r); strings.HasPrefix(t, readTokenPrefix) {
+		if name, ok := s.readToken(t); ok {
+			return &principal{User: "token " + name, Role: RoleViewer, ReadOnly: true}, false
+		}
+		return nil, false
 	}
 	c, err := r.Cookie(sessionCookie)
 	if err != nil {
@@ -104,7 +113,9 @@ func (s *Server) hasUsers() bool {
 }
 
 // require wraps a handler so only the given role (or admin) may call it.
-func (s *Server) require(role string, next http.HandlerFunc) http.HandlerFunc {
+// asks says that the handler only answers questions whatever the method:
+// query APIs take their query by POST as well as by GET.
+func (s *Server) require(role string, asks bool, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		p, viaCookie := s.identify(r)
 		if p == nil {
@@ -113,6 +124,10 @@ func (s *Server) require(role string, next http.HandlerFunc) http.HandlerFunc {
 		}
 		if role == RoleAdmin && p.Role != RoleAdmin {
 			http.Error(w, "this needs an admin account", http.StatusForbidden)
+			return
+		}
+		if p.ReadOnly && !asks && r.Method != http.MethodGet && r.Method != http.MethodHead {
+			http.Error(w, "this token only reads", http.StatusForbidden)
 			return
 		}
 		if viaCookie && r.Method != http.MethodGet && r.Method != http.MethodHead && r.Header.Get(csrfHeader) == "" {
@@ -126,8 +141,18 @@ func (s *Server) require(role string, next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func (s *Server) viewer(next http.HandlerFunc) http.HandlerFunc { return s.require(RoleViewer, next) }
-func (s *Server) admin(next http.HandlerFunc) http.HandlerFunc  { return s.require(RoleAdmin, next) }
+func (s *Server) viewer(next http.HandlerFunc) http.HandlerFunc {
+	return s.require(RoleViewer, false, next)
+}
+func (s *Server) admin(next http.HandlerFunc) http.HandlerFunc {
+	return s.require(RoleAdmin, false, next)
+}
+
+// asks is viewer for the query APIs: a POST there changes nothing, so a
+// read-only token may send one.
+func (s *Server) asks(next http.HandlerFunc) http.HandlerFunc {
+	return s.require(RoleViewer, true, next)
+}
 
 // ingest lets agents in: with the shared ingest token (any agent id), or
 // with a token issued to one agent, which only works for that agent's id.

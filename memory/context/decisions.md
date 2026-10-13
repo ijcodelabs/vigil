@@ -62,6 +62,13 @@ that come with vigil or an integration are computed, not stored, so they
 follow the version and need none of the "was it changed" bookkeeping the
 dashboards have; the price is that they cannot be edited, only copied.
 
+**Grafana goes through the server, with a token that only reads.** The
+stores stay unexposed, as for everything else, and the server keeps the
+last word on who reads. The token is a viewer that cannot write at all,
+rather than a viewer account: a tool should not be able to do what a
+person signed in as a viewer can (save queries, change a password). The
+query APIs take POST, so "read-only" is decided per route, not by method.
+
 **A stopped container alerts only with a non-zero exit code.** Exit 0 is a
 job that finished; a removed container is gone on purpose. A container
 stopped by hand usually ends with 137 or 143 and does alert, which was

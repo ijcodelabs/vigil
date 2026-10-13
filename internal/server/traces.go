@@ -43,7 +43,7 @@ func (s *Server) traceRoutes(mux *http.ServeMux) {
 	}
 	proxy := httputil.NewSingleHostReverseProxy(s.traces)
 	to := func(path func(r *http.Request) (string, bool)) http.HandlerFunc {
-		return s.viewer(func(w http.ResponseWriter, r *http.Request) {
+		return s.asks(func(w http.ResponseWriter, r *http.Request) {
 			p, ok := path(r)
 			if !ok {
 				http.NotFound(w, r)

@@ -126,7 +126,24 @@ func (s *Server) alertingRoutes(mux *http.ServeMux) {
 	// Alertmanager's own API v2: silences, alert groups, receivers, status.
 	// Reading is open to viewers; changing silences needs an admin.
 	am := s.am.Handler().ServeHTTP
-	mux.HandleFunc("GET "+alerting.RoutePrefix+"/", s.viewer(am))
+	mux.HandleFunc("GET "+alerting.RoutePrefix+"/", s.viewer(func(w http.ResponseWriter, r *http.Request) {
+		// Alertmanager's status carries its whole configuration, and who
+		// is told about alerts is for admins (GET /api/v1/alerting/config
+		// is theirs alone). Others get the status without it.
+		if caller(r).Role == RoleAdmin || !strings.HasSuffix(r.URL.Path, "/api/v2/status") {
+			am(w, r)
+			return
+		}
+		res := &captured{header: http.Header{}, status: http.StatusOK}
+		am(res, r)
+		var status map[string]any
+		if res.status != http.StatusOK || json.Unmarshal(res.body.Bytes(), &status) != nil {
+			http.Error(w, "the alerting status could not be read", http.StatusBadGateway)
+			return
+		}
+		status["config"] = map[string]string{"original": ""}
+		writeJSON(w, status)
+	}))
 	mux.HandleFunc("POST "+alerting.RoutePrefix+"/api/v2/silences", s.admin(s.postSilence))
 	mux.HandleFunc(alerting.RoutePrefix+"/", s.admin(am))
 }

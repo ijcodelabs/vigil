@@ -10,6 +10,11 @@ curl -H "Authorization: Bearer $VIGIL_ADMIN_TOKEN" https://vigil.example.com/api
 ```
 
 - The **admin token** may do everything.
+- A **read-only token** (Users → Read-only tokens, `vgr_…`) may read what
+  a viewer can and change nothing. It is the one to give a script that
+  only pulls numbers, or [Grafana](grafana.md). `GET` `POST /api/v1/tokens`
+  and `DELETE /api/v1/tokens/{id}` manage them (admins); a new token's
+  value is in the answer to the `POST` and nowhere afterwards.
 - A browser session (cookie) works too; requests that change something must
   then carry the header `X-Vigil-CSRF: 1`.
 - **viewer** accounts may read; **admin** accounts may change.
@@ -28,6 +33,8 @@ Errors come back as plain text with a 4xx or 5xx status.
 | `…/logs/stats_query`, `…/logs/stats_query_range` | numbers computed from logs, in Prometheus' response format |
 | `…/logs/tail` | a stream of matching lines as they arrive |
 | `…/logs/streams`, `stream_field_names`, `stream_field_values`, `field_names`, `field_values` | what there is to filter on |
+| `GET` `POST /select/logsql/…` | the same log operations under the log store's own paths, for tools that expect a VictoriaLogs |
+| `GET /api/v1/metadata`, `/api/v1/status/buildinfo` | asked by tools that speak Prometheus' API |
 
 ```bash
 curl -H "Authorization: Bearer $T" --data-urlencode 'query=up == 0' https://vigil/api/v1/query
