@@ -311,3 +311,62 @@ func TestParseErrors(t *testing.T) {
 		t.Errorf("prometheus durations: %v", err)
 	}
 }
+
+// Editing a rule's expression keeps its alerts; removing the rule resolves
+// them at once instead of leaving them to time out.
+func TestEditedAndRemovedRules(t *testing.T) {
+	text := strings.NewReplacer("interval: 30s", "interval: 20ms", "for: 2m", "for: 0s", "keep_firing_for: 1m", "keep_firing_for: 0s").Replace(ruleFile)
+	series := Series{Labels: map[string]string{"__name__": "disk", "instance": "db-01"}, Value: 50}
+	be := newBackend()
+	be.set("disk_full", series)
+	be.set("disk_full > 40", series)
+	m := NewManager(be, "", quiet)
+	defer m.Stop()
+	apply := func(text string) {
+		t.Helper()
+		f, err := Parse(text)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := m.Apply(context.Background(), f); err != nil {
+			t.Fatal(err)
+		}
+	}
+	firedAt := func() (at time.Time) {
+		for _, g := range m.Status() {
+			for _, r := range g.Rules {
+				for _, a := range r.Alerts {
+					if a.State == StateFiring {
+						at = a.ActiveAt
+					}
+				}
+			}
+		}
+		return at
+	}
+	apply(text)
+	waitFor(t, "the alert to fire", func() bool { return !firedAt().IsZero() })
+	since := firedAt()
+
+	apply(strings.Replace(text, "expr: disk_full\n        for", "expr: disk_full > 40\n        for", 1))
+	time.Sleep(60 * time.Millisecond)
+	if got := firedAt(); !got.Equal(since) {
+		t.Errorf("after editing the expression the alert is active since %v, was %v", got, since)
+	}
+	for _, a := range be.take() {
+		if !a.EndsAt.After(time.Now()) {
+			t.Errorf("editing the expression resolved the alert: %+v", a)
+		}
+	}
+
+	apply("groups: []\n")
+	var ended int
+	for _, a := range be.take() {
+		if a.Labels["alertname"] == "DiskFull" && !a.EndsAt.After(time.Now()) {
+			ended++
+		}
+	}
+	if ended != 1 || !firedAt().IsZero() {
+		t.Errorf("removing the rule sent %d resolved alerts, want 1", ended)
+	}
+}
