@@ -47,6 +47,38 @@ either make the agent collect less (a `drop` on the job or the log
 template, the agent's own `limits`), or raise the server's limit for that
 agent under `limits.agents`. See [Install](install.md#limits).
 
+## An agent sits at its memory limit
+
+`systemctl status vigil-agent` shows the unit at, or just under, the
+`MemoryMax` you gave it, and never lets go. That is usually not the agent.
+
+The agent reads the journal by running `journalctl`, which opens every
+journal file of the host. What it reads from them is kept by the kernel as
+file cache, and the kernel counts that cache against the agent's unit. With
+a journal bigger than the limit, the unit fills up to the limit and stays
+there. Cache is handed back the moment anything needs the memory, so
+nothing is killed.
+
+To tell the two apart:
+
+- `vigil_agent_memory_bytes{agent="NAME"}` is what the agent itself holds.
+  Flat and far below the limit means it is cache.
+- On the host, `memory.stat` of the unit says the same in the kernel's
+  words: a small `anon`, large `active_file` and `inactive_file`:
+
+  ```bash
+  cat /sys/fs/cgroup$(systemctl show vigil-agent -p ControlGroup --value)/memory.stat | grep -E '^(anon|active_file|inactive_file) '
+  ```
+
+- `memory.events` next to it counts real trouble: `oom_kill` above zero
+  means the limit is too low for the agent itself.
+
+It costs a little at each start, while `journalctl` finds the place it left
+off in a large journal. If the number bothers you, keep less journal
+(`SystemMaxUse=` in `journald.conf`) or raise the limit. If
+`vigil_agent_memory_bytes` itself keeps climbing, that is the agent, and
+worth reporting as a bug.
+
 ## It appears but there is no data in Explore
 
 - **Wait 30 seconds.** The metric store hides the most recent half minute.
