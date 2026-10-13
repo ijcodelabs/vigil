@@ -26,6 +26,9 @@ import (
 // integrations and are saved first, since profiles may use them. Unchanged profiles are left alone. With -prune, profiles that were
 // applied from files before and are no longer in the directory are deleted;
 // profiles made on the server itself are never touched.
+//
+// Files in a `queries` directory directly under DIR hold saved queries for
+// Explore, shared with everyone; see applyQueries.
 func runApply(args []string) error {
 	fs := flag.NewFlagSet("apply", flag.ExitOnError)
 	dir := fs.String("f", "", "directory of profile files (*.yaml, *.yml)")
@@ -63,7 +66,7 @@ func runApply(args []string) error {
 	}
 
 	failed := 0
-	intDir := filepath.Join(*dir, "integrations")
+	intDir, queryDir := filepath.Join(*dir, "integrations"), filepath.Join(*dir, "queries")
 	if entries, err := os.ReadDir(intDir); err == nil {
 		for _, e := range entries {
 			name, isYAML := strings.CutSuffix(e.Name(), ".yaml")
@@ -110,7 +113,7 @@ func runApply(args []string) error {
 	var want []local
 	seen := map[string]string{}
 	err = filepath.WalkDir(*dir, func(path string, d os.DirEntry, err error) error {
-		if err == nil && d.IsDir() && path == intDir {
+		if err == nil && d.IsDir() && (path == intDir || path == queryDir) {
 			return filepath.SkipDir
 		}
 		if err != nil || d.IsDir() || (!strings.HasSuffix(path, ".yaml") && !strings.HasSuffix(path, ".yml")) {
@@ -235,10 +238,120 @@ func runApply(args []string) error {
 			}
 		}
 	}
-	if failed > 0 {
-		return fmt.Errorf("%d profile change(s) were refused; the server keeps what it had for those", failed)
+	n, err := applyQueries(call, strings.TrimRight(*server, "/")+"/api/v1/queries", queryDir, *dry, *prune)
+	if err != nil {
+		return err
+	}
+	if failed += n; failed > 0 {
+		return fmt.Errorf("%d change(s) were refused; the server keeps what it had for those", failed)
 	}
 	return nil
+}
+
+// applyQueries makes the server's shared saved queries match the files in
+// DIR/queries. A file holds a list under `queries:`; a query is known by
+// its name within its type (metrics or logs), across all the files. With
+// prune, shared queries that came from files before and are in none now
+// are deleted. Personal queries, and shared ones made in the interface,
+// are never deleted. Without the directory nothing is done at all, so a
+// repository that keeps only profiles in git is left alone.
+func applyQueries(call func(method, u, body string) (int, string, error), api, dir string, dry, prune bool) (failed int, err error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return 0, nil
+	}
+	want := map[string]fleet.Query{}
+	from := map[string]string{}
+	var order []string
+	for _, e := range entries {
+		if e.IsDir() || (!strings.HasSuffix(e.Name(), ".yaml") && !strings.HasSuffix(e.Name(), ".yml")) {
+			continue
+		}
+		path := filepath.Join(dir, e.Name())
+		text, err := os.ReadFile(path)
+		if err != nil {
+			return 0, err
+		}
+		list, err := fleet.ParseQueries(string(text))
+		if err != nil {
+			return 0, fmt.Errorf("%s: %w", path, err)
+		}
+		for _, q := range list {
+			if other, dup := from[q.Key()]; dup {
+				return 0, fmt.Errorf("%s and %s both define the %s query %q", other, path, q.Type, q.Name)
+			}
+			from[q.Key()], want[q.Key()] = path, q
+			order = append(order, q.Key())
+		}
+	}
+	code, body, err := call("GET", api, "")
+	if err != nil {
+		return 0, err
+	}
+	if code != http.StatusOK {
+		return 0, fmt.Errorf("listing saved queries: HTTP %d: %s", code, body)
+	}
+	var have []struct {
+		fleet.Query
+		ID, Origin string
+		Shared     bool
+	}
+	if err := json.Unmarshal([]byte(body), &have); err != nil {
+		return 0, err
+	}
+	shared := map[string]int{} // key -> index in have
+	for i, h := range have {
+		if h.Shared && h.ID != "" {
+			shared[h.Key()] = i
+		}
+	}
+	for _, key := range order {
+		q := want[key]
+		label := fmt.Sprintf("query %s (%s)", q.Name, q.Type)
+		method, u := "POST", api
+		if i, ok := shared[key]; ok {
+			if have[i].Query.Query == q.Query {
+				fmt.Printf("  unchanged  %s\n", label)
+				continue
+			}
+			method, u = "PUT", api+"/"+url.PathEscape(have[i].ID)
+		}
+		if dry {
+			fmt.Printf("  would save %s\n", label)
+			continue
+		}
+		doc, _ := json.Marshal(map[string]any{"name": q.Name, "type": q.Type, "query": q.Query, "shared": true})
+		code, body, err := call(method, u, string(doc))
+		switch {
+		case err != nil:
+			return failed, err
+		case code == http.StatusOK:
+			fmt.Printf("  saved      %s\n", label)
+		default:
+			fmt.Printf("  REFUSED    %s: %s\n", label, body)
+			failed++
+		}
+	}
+	if !prune {
+		return failed, nil
+	}
+	for _, h := range have {
+		if _, kept := want[h.Key()]; kept || !h.Shared || h.ID == "" || h.Origin != "files" {
+			continue
+		}
+		label := fmt.Sprintf("query %s (%s)", h.Name, h.Type)
+		if dry {
+			fmt.Printf("  would delete %s\n", label)
+			continue
+		}
+		if code, body, _ := call("DELETE", api+"/"+url.PathEscape(h.ID), ""); code != http.StatusNoContent {
+			fmt.Printf("  REFUSED    delete %s: %s\n", label, body)
+			failed++
+		} else {
+			fmt.Printf("  deleted    %s\n", label)
+		}
+	}
+	return failed, nil
 }
 
 // yamlName pulls the top-level name: field out of a profile document.

@@ -69,6 +69,7 @@ textarea { width: 100%; font-family: var(--mono); font-size: 12.5px; line-height
 label { display: block; font-size: 12.5px; color: var(--muted); margin-bottom: 4px; }
 .field { margin-bottom: 12px; }
 .field input, .field select { width: 100%; }
+.field input[type=checkbox], .field input[type=radio] { width: auto; margin: 0 6px 0 0; vertical-align: -1px; }
 .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 
 .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
@@ -134,6 +135,17 @@ td.lvl-bad { color: var(--bad); background: color-mix(in srgb, var(--bad) 16%, t
 .logfields table { width: auto; }
 .logfields td { border: none; padding: 1px 14px 1px 0; }
 .logfields td:first-child { color: var(--muted); }
+
+/* Menus that drop down from a button: saved queries, "Add to" */
+.menu { position: relative; display: inline-block; }
+.menu .pop { position: absolute; top: calc(100% + 4px); left: 0; z-index: 6; width: min(560px, 86vw); max-height: 62vh; overflow: auto; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, .35); padding: 8px; }
+.menu .pop.narrow { width: 190px; }
+.pop .group { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); padding: 10px 8px 3px; }
+.pop .item { display: flex; gap: 6px; align-items: center; border-radius: 6px; padding: 0 6px 0 0; }
+.pop .item:hover, .pop .item:focus-within { background: var(--panel-2); }
+.pop .item.on { box-shadow: inset 3px 0 0 var(--accent); }
+.pop .item .what { flex: 1; min-width: 0; background: none; border: none; text-align: left; padding: 5px 8px; white-space: normal; }
+.pop .item .q { font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* Dialogs and editors */
 .overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, .55); display: flex; align-items: flex-start; justify-content: center; padding: 6vh 16px; z-index: 10; overflow: auto; }

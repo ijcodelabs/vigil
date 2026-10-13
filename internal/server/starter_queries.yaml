@@ -1,0 +1,55 @@
+# The queries every server offers in Explore under "Saved", before anyone
+# has saved one. They ask about what every agent reports; what belongs to
+# one technology comes with its integration instead. Nobody can change them
+# on a server; a changed copy can be saved under another name.
+queries:
+  - name: Agents reporting
+    query: vigil_agent_up
+  - name: CPU used per host (%)
+    query: 100 * (1 - sum by (agent) (rate(host_cpu_seconds_total{mode="idle"}[5m])) / sum by (agent) (rate(host_cpu_seconds_total[5m])))
+  - name: Memory used per host (%)
+    query: 100 * (1 - host_memory_available_bytes / host_memory_total_bytes)
+  - name: Load per host
+    query: host_load1
+  - name: Fullest filesystems (%)
+    query: topk(10, 100 * (1 - host_filesystem_free_bytes / host_filesystem_size_bytes))
+  - name: Network in per host (bytes/s)
+    query: sum by (agent) (rate(host_network_receive_bytes_total[5m]))
+  - name: Network out per host (bytes/s)
+    query: sum by (agent) (rate(host_network_transmit_bytes_total[5m]))
+  - name: Hosts short of memory
+    query: host_pressure_ratio{resource="memory", kind="some"}
+  - name: Scrape targets that are down
+    query: up == 0
+  - name: Site checks that fail
+    query: probe_success == 0
+  - name: Days left on certificates
+    query: probe_tls_cert_expiry_seconds / 86400
+  - name: Process groups with nothing running
+    query: process_group_count == 0
+  - name: Alerts firing now
+    query: ALERTS{alertstate="firing"}
+  - name: Agents dropping data
+    query: increase(vigil_agent_dropped_total[1h]) > 0
+
+  - name: Errors anywhere
+    type: logs
+    query: level:~"(?i)^(err|crit|fatal)"
+  - name: Errors by host and app
+    type: logs
+    query: level:~"(?i)^(err|crit|fatal)" | stats by (agent, app) count() as errors | sort by (errors desc)
+  - name: Lines per host
+    type: logs
+    query: '* | stats by (agent) count() as lines | sort by (lines desc)'
+  - name: Lines per source
+    type: logs
+    query: '* | stats by (source) count() as lines | sort by (lines desc)'
+  - name: Failed SSH logins
+    type: logs
+    query: source:journald "Failed password"
+  - name: Kernel killing processes for memory
+    type: logs
+    query: source:journald "Out of memory"
+  - name: Security detections
+    type: logs
+    query: source:security

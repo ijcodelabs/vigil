@@ -12,7 +12,7 @@ export function Dashboards({ route, admin }) {
     : html`<${DashboardList} admin=${admin} />`;
 }
 
-const slug = title => title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'dashboard';
+export const slug = title => title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'dashboard';
 
 function DashboardList({ admin }) {
   const { data, error } = useLoad(() => api('/api/v1/dashboards'));
@@ -296,7 +296,10 @@ function show(panel, data, height, onZoom) {
   })}</div>`;
 }
 
-function PanelEditor({ panel, onSave, onClose }) {
+// PanelEditor edits one panel. Explore uses it too, to make a panel of a
+// query: heading and action name the dialog and its button there, head is
+// drawn above the form's own fields, error under them.
+export function PanelEditor({ panel, onSave, onClose, heading, action, head, error }) {
   const [p, setP] = useState(() => structuredClone(panel));
   const set = (k, v) => setP({ ...p, [k]: v });
   const num = v => (v === '' || v == null ? undefined : Number(v));
@@ -319,7 +322,8 @@ function PanelEditor({ panel, onSave, onClose }) {
     if (!out.queries.length) return;
     onSave(out);
   };
-  return html`<${Dialog} title=${panel.title ? 'Edit panel' : 'Add panel'} wide onClose=${onClose}><form onSubmit=${submit}>
+  return html`<${Dialog} title=${heading || (panel.title ? 'Edit panel' : 'Add panel')} wide onClose=${onClose}><form onSubmit=${submit}>
+    ${head}
     <div class="row" style="align-items: flex-end">
       <div class="field" style="flex: 2; min-width: 200px"><label>Title</label><input required value=${p.title} onInput=${e => set('title', e.target.value)} autofocus /></div>
       <div class="field" style="flex: 1"><label>Shows</label><select value=${p.type} onChange=${e => set('type', e.target.value)}>
@@ -355,7 +359,8 @@ function PanelEditor({ panel, onSave, onClose }) {
         <div class="field"><label>Red from</label><input type="number" step="any" value=${p.crit ?? ''} onInput=${e => set('crit', num(e.target.value))} style="width: 100px" /></div>`}
       ${logsOnly && html`<div class="field"><label>Lines</label><input type="number" min="1" max="1000" value=${p.limit || 50} onInput=${e => set('limit', e.target.value)} style="width: 100px" /></div>`}
     </div>
-    <div class="actions"><button type="button" onClick=${onClose}>Cancel</button><button class="primary">${panel.title ? 'Apply' : 'Add'}</button></div>
+    <${ErrorBox} error=${error} />
+    <div class="actions"><button type="button" onClick=${onClose}>Cancel</button><button class="primary">${action || (panel.title ? 'Apply' : 'Add')}</button></div>
   </form><//>`;
 }
 

@@ -76,6 +76,10 @@ func OpenStore(dataDir string) (*Store, error) {
 		// What runs on each agent's host, as it last reported (JSON).
 		`CREATE TABLE IF NOT EXISTS agent_inventory (agent_id TEXT PRIMARY KEY, doc TEXT NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS dashboards (id TEXT PRIMARY KEY, title TEXT NOT NULL, body TEXT NOT NULL, updated INTEGER NOT NULL)`,
+		// Queries saved in Explore. A shared one is everyone's; the others
+		// belong to their owner.
+		`CREATE TABLE IF NOT EXISTS saved_queries (id TEXT PRIMARY KEY, type TEXT NOT NULL, name TEXT NOT NULL, query TEXT NOT NULL,
+			owner TEXT NOT NULL, shared INTEGER NOT NULL, origin TEXT NOT NULL, updated INTEGER NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS agent_reports (agent_id TEXT PRIMARY KEY, config_hash TEXT NOT NULL, config_error TEXT NOT NULL, at INTEGER NOT NULL)`,
 	} {
 		if err == nil {
@@ -228,6 +232,11 @@ func (s *Store) PutUser(name, hash, role string) error {
 
 func (s *Store) DeleteUser(name string) error {
 	if _, err := s.db.Exec(`DELETE FROM sessions WHERE user = ?`, name); err != nil {
+		return err
+	}
+	// What they saved for themselves goes with them, or the next account
+	// of that name would inherit it. What they shared stays.
+	if _, err := s.db.Exec(`DELETE FROM saved_queries WHERE owner = ? AND shared = 0`, name); err != nil {
 		return err
 	}
 	_, err := s.db.Exec(`DELETE FROM users WHERE name = ?`, name)

@@ -36,3 +36,18 @@ rules:
         labels: {severity: warning}
         annotations:
           summary: 'Container {{ $labels.container }} on {{ $labels.agent }} uses {{ $value | humanizePercentage }} of its memory limit'
+queries:
+  - name: Containers using most memory
+    query: topk(10, container_memory_usage_bytes)
+  - name: CPU cores used per container
+    query: rate(container_cpu_usage_seconds_total[5m])
+  - name: Containers that are not running
+    query: container_running == 0
+  - name: Containers restarted in the last hour
+    query: container_restarts_total - container_restarts_total offset 1h > 0
+  - name: Which containers log most
+    type: logs
+    query: source:docker | stats by (agent, container) count() as lines | sort by (lines desc)
+  - name: Error lines from containers
+    type: logs
+    query: source:docker (level:~"(?i)^(err|crit|fatal)" or error)

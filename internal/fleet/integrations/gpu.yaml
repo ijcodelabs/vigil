@@ -112,3 +112,12 @@ dashboard:
       h: 2
       warn: 1
       queries: [{expr: 'sum(increase(gpu_ecc_errors_total{agent=~"$agent"}[$__range])) or vector(0)'}]
+queries:
+  - name: GPU utilization
+    query: gpu_utilization_ratio
+  - name: GPU memory used
+    query: gpu_memory_used_bytes
+  - name: GPU temperature (°C)
+    query: gpu_temperature_celsius
+  - name: Processes holding GPU memory
+    query: sort_desc(sum by (agent, gpu, process, user, container) (gpu_process_memory_bytes))

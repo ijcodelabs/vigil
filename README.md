@@ -60,7 +60,7 @@ pages under `/docs/` (the **Docs** link in the interface).
 | [Agent configuration](docs/configs.md) | every source, with recipes |
 | [Fleet](docs/fleet.md) | labels, profiles, integrations, `vigil apply` |
 | [Kubernetes](docs/kubernetes.md) | node agents and the cluster agent |
-| [Explore](docs/explore.md) | PromQL and LogsQL with examples |
+| [Explore](docs/explore.md) | PromQL and LogsQL with examples, saved queries |
 | [Dashboards](docs/dashboards.md) | panels, variables, editing |
 | [Alerts](docs/alerts.md) | rules, contacts, silences |
 | [Runtime events](docs/security.md) | events, rules, captures |

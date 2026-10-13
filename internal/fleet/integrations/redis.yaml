@@ -52,3 +52,8 @@ dashboard:
       unit: bytes
       min: 0
       queries: [{expr: 'redis_memory_used_bytes{agent=~"$agent"}', legend: '{{agent}}'}]
+queries:
+  - name: Redis commands per second
+    query: sum by (agent) (rate(redis_commands_processed_total[2m]))
+  - name: Redis memory used
+    query: redis_memory_used_bytes

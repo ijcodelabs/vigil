@@ -4,6 +4,60 @@ Explore is for asking questions of the data directly: **Metrics** with
 PromQL, **Logs** with LogsQL. The address bar always holds the query and the
 time range, so copying it shares exactly what you see.
 
+## Saved queries
+
+A query you will want again can be kept under a name, on both the Metrics
+and the Logs tab.
+
+- **Save** keeps the query that is in the box. If it came from one of your
+  saved queries and you changed it, Save offers to update that one or to
+  save a new one.
+- **Saved** lists what there is, with a field to search names and queries.
+  Click one (or press Enter for the first match) and it runs. While the
+  query in the box is a saved one, the button shows its name.
+- What is saved is the query, not the time range: picking one keeps the
+  range you are looking at.
+
+The list has up to four parts:
+
+| Part | What is in it | Who can change it |
+|---|---|---|
+| **Yours** | what you saved | you. Viewers can save too; nobody else sees these, not even admins |
+| **Shared** | what an admin saved with **Shared** ticked | admins. Everyone sees them |
+| **Comes with vigil** | starter queries, and those of the [integrations](fleet.md#integrations) in use (marked with the integration's name) | nobody: they follow the version. Pick one, change it and save it as your own |
+| **Recent** | the last 20 queries you ran that are not saved | kept in this browser only, per account |
+
+**Edit** on a saved query renames it, changes its text or (admins) shares
+it or takes it back. A shared query that is taken back becomes the query of
+the admin who did it. Deleting an account deletes what it saved for itself;
+what it shared stays.
+
+A name is used once among your own queries, and once among the shared
+ones, separately for metrics and logs. There can be 200 of your own and
+1,000 shared.
+
+Shared queries can also be kept as files in git and applied with `vigil
+apply`; see [Fleet](fleet.md#keeping-profiles-in-git). Those are marked
+"from files".
+
+### From a query to a dashboard or an alert
+
+**Add to** (admins) sends the query in the box on:
+
+- **Dashboard…** opens the panel editor with the query filled in. Choose a
+  dashboard, or a new one, and the panel is added at its end. A LogsQL
+  query without `| stats` becomes a panel of log lines, one with it a
+  table.
+- **Alert rules…** makes an alert of it. For PromQL, say when it should
+  alert ("is above 90"); for LogsQL, how many matching lines in how long.
+  The expression that results can be edited, and the dialog runs it as
+  you type and tells you how many alerts it would raise right now. The
+  rule is written into the rule file, into the group you name, and the
+  whole file is checked before anything changes, as when you
+  [edit it by hand](alerts.md#rules). Comments and everything else in the
+  file stay. If your rule file lives in git, copy the rule from **As
+  YAML** instead of adding it here.
+
 ## Metrics
 
 ### Finding what there is
@@ -60,6 +114,8 @@ Arithmetic works between series with the same labels:
 ```
 
 ### Queries to start from
+
+Most of these are under **Saved** already.
 
 | Question | Query |
 |---|---|
@@ -165,6 +221,8 @@ level:error | stats by (app) count() as errors | sort by (errors desc) | limit 1
 
 ### Queries to start from
 
+Several of these are under **Saved** already.
+
 | Question | Query |
 |---|---|
 | Everything from one host | `agent:web-01` |
@@ -217,6 +275,8 @@ profile by hand ([Agent configuration](configs.md)).
 
 ## From Explore to elsewhere
 
-- A query that is worth keeping belongs on a [dashboard](dashboards.md).
-- A query that should wake someone belongs in a [rule](alerts.md). Rules
-  use the same two languages.
+- A query you will type again: **Save** it.
+- A query that is worth looking at every day belongs on a
+  [dashboard](dashboards.md): **Add to → Dashboard…**
+- A query that should wake someone belongs in a [rule](alerts.md):
+  **Add to → Alert rules…** Rules use the same two languages.

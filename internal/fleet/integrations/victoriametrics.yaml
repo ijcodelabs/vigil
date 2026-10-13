@@ -73,3 +73,8 @@ dashboard:
       queries:
         - {expr: 'vm_concurrent_select_current{agent=~"$agent"}', legend: running}
         - {expr: 'vm_concurrent_select_capacity{agent=~"$agent"}', legend: limit}
+queries:
+  - name: VictoriaMetrics rows inserted per second
+    query: sum by (type) (rate(vm_rows_inserted_total[2m]))
+  - name: VictoriaMetrics data on disk
+    query: sum by (agent) (vm_data_size_bytes)

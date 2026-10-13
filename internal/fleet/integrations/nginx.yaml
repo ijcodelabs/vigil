@@ -77,3 +77,14 @@ dashboard:
       fill: true
       queries: [{expr: 'app:nginx agent:~"$agent" status:* | stats by (status) count() as responses', legend: '{{status}}'}]
     - {title: Latest errors, type: logs, w: 12, h: 4, limit: 50, queries: [{expr: 'app:nginx agent:~"$agent" (level:error or level:crit or status:~"5..")'}]}
+queries:
+  - name: nginx requests per second
+    query: sum by (agent) (rate(nginx_http_requests_total[2m]))
+  - name: nginx active connections
+    query: nginx_connections_active
+  - name: nginx responses by status
+    type: logs
+    query: app:nginx status:* | stats by (status) count() as responses | sort by (responses desc)
+  - name: nginx 5xx responses by path
+    type: logs
+    query: app:nginx status:~"5.." | stats by (path) count() as n | sort by (n desc) | limit 20

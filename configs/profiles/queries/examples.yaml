@@ -1,0 +1,8 @@
+# Saved queries for Explore, shared with everyone. `vigil apply` reads every
+# file in this directory; a query is known by its name within its type.
+queries:
+  - name: Disk space used, production (%)
+    query: 100 * (1 - host_filesystem_free_bytes{env="prod"} / host_filesystem_size_bytes{env="prod"})
+  - name: Shop errors by pod
+    type: logs
+    query: namespace:shop level:error | stats by (pod) count() as errors | sort by (errors desc)

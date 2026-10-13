@@ -1,20 +1,21 @@
 import { html, useState, useEffect, useRef, api, setParams, Tabs, ErrorBox, Dialog, fmtNum, fmtUnit } from './lib.js';
 import uPlot from '../vendor/uPlot.esm.js';
+import { QueryTools, remember } from './saved.js';
 
 export const RANGES = [['5m', 300], ['15m', 900], ['30m', 1800], ['1h', 3600], ['3h', 10800], ['6h', 21600], ['12h', 43200], ['24h', 86400], ['2d', 172800], ['7d', 604800]];
 export const REFRESH = [['Off', 0], ['5s', 5], ['10s', 10], ['30s', 30], ['1m', 60]];
 export const COLORS = ['#5794f2', '#73bf69', '#f2cc0c', '#ff7383', '#b877d9', '#ff9830', '#4ec9c0', '#e06bb0', '#8ab8ff', '#96d98d', '#ffcb7d', '#c4a2e8'];
 const MAX_SERIES = 60;
 
-export function Explore({ route }) {
+export function Explore({ route, me, admin }) {
   const tab = ['logs', 'volume'].includes(route.parts[1]) ? route.parts[1] : 'metrics';
   return html`
     <div class="head"><h1>Explore</h1><span class="spacer"></span>
       <a class="btn" href="/docs/explore" target="_blank" rel="noopener" title="How to use Explore, with examples">Help</a></div>
     <${Tabs} base="explore" current=${tab} tabs=${[['metrics', 'Metrics'], ['logs', 'Logs'], ['volume', 'Log volume']]} />
-    ${tab === 'metrics' ? html`<${Metrics} key=${'m' + route.nav} params=${route.params} />`
+    ${tab === 'metrics' ? html`<${Metrics} key=${'m' + route.nav} params=${route.params} me=${me} admin=${admin} />`
       : tab === 'volume' ? html`<${Volume} key=${'v' + route.nav} params=${route.params} />`
-      : html`<${Logs} key=${'l' + route.nav} params=${route.params} />`}`;
+      : html`<${Logs} key=${'l' + route.nav} params=${route.params} me=${me} admin=${admin} />`}`;
 }
 
 // Volume shows who writes the logs: lines and bytes per source in the time
@@ -159,8 +160,9 @@ export function seriesName(metric) {
   return labels ? `${name}{${labels}}` : name || '{}';
 }
 
-function Metrics({ params }) {
+function Metrics({ params, me, admin }) {
   const [query, setQuery] = useState(params.get('q') || '');
+  const [note, setNote] = useState(null);
   const [range, setRange, win] = useRange(params);
   const [refresh, setRefresh] = useState(0);
   const [result, setResult] = useState(null);
@@ -182,6 +184,7 @@ function Metrics({ params }) {
       const r = await api('/api/v1/query_range', { method: 'POST', body: new URLSearchParams({ query: q, start: from, end: to, step }) });
       setResult({ series: r.data.result, from, to, step });
       setError(null);
+      remember(me.user, 'metrics', q);
     } catch (e) { setError(e.message); }
     setBusy(false);
   };
@@ -199,9 +202,11 @@ function Metrics({ params }) {
         placeholder=${'PromQL, e.g. rate(host_cpu_seconds_total{mode!="idle"}[5m])  ·  Enter runs it'} />
       <${RangeBar} range=${range} setRange=${setRange} refresh=${refresh} setRefresh=${setRefresh} onRun=${() => run()} busy=${busy}>
         <button onClick=${() => setBrowsing(true)} title="List every metric that has data in this time range">Show metrics</button>
+        <${QueryTools} type="metrics" me=${me} admin=${admin} query=${query} onPick=${q => { setQuery(q); run(q); }} onNote=${setNote} />
       <//>
       <${ErrorBox} error=${error} />
     </div>
+    ${note && html`<div class="notice">${note}</div>`}
     ${browsing && html`<${MetricBrowser} win=${win} onClose=${() => setBrowsing(false)}
       onPick=${name => { setBrowsing(false); setQuery(name); run(name); }} />`}
     ${result && (result.series.length === 0
@@ -383,11 +388,9 @@ function DropDialog({ row, onClose, onSaved }) {
   </form><//>`;
 }
 
-function Logs({ params }) {
-  const [admin, setAdmin] = useState(false);
+function Logs({ params, me, admin }) {
   const [dropping, setDropping] = useState(null); // the line a drop rule is being made from
   const [note, setNote] = useState(null);
-  useEffect(() => { api('/api/v1/me').then(me => setAdmin(me.role === 'admin'), () => {}); }, []);
   const [query, setQuery] = useState(params.get('q') || '*');
   const [range, setRange, win] = useRange(params);
   const [limit, setLimit] = useState(500);
@@ -418,6 +421,7 @@ function Logs({ params }) {
       setRows(list);
       setHits(mergeHits(h));
       setError(null);
+      remember(me.user, 'logs', q);
     } catch (e) { setError(e.message); }
     setBusy(false);
   };
@@ -467,6 +471,7 @@ function Logs({ params }) {
         <select aria-label="Line limit" value=${limit} onChange=${e => setLimit(+e.target.value)}>
           ${LIMITS.map(n => html`<option value=${n}>Up to ${n} lines</option>`)}</select>
         ${live ? html`<button onClick=${stopTail}>■ Stop live tail</button>` : html`<button onClick=${startTail}>▶ Live tail</button>`}
+        <${QueryTools} type="logs" me=${me} admin=${admin} query=${query} onPick=${q => { setQuery(q); run(q); }} onNote=${setNote} />
       <//>
       <${ErrorBox} error=${error} />
     </div>
