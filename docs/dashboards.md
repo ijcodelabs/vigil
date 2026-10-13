@@ -24,7 +24,13 @@ PostgreSQL, …). All of them are ordinary dashboards: change or delete them.
 **Edit**, then:
 
 - **Add panel**, or **Edit** on a panel.
-- ◀ ▶ move a panel earlier or later; ✕ removes it.
+- Drag a panel by its title to move it: an orange bar shows whether it
+  lands before or after the panel under the pointer. Panels fill the rows
+  in order, left to right, so a panel cannot be left on its own in the
+  middle of an empty row. ◀ ▶ do the same one step at a time.
+- Drag a panel's bottom right corner to resize it, in twelfths of the
+  width and in rows; the numbers are in the panel editor too.
+- ✕ removes a panel.
 - **Title, variables, JSON** changes the title and the variables, and shows
   the whole dashboard as JSON.
 - Nothing is stored until **Save**. **Discard changes** goes back.

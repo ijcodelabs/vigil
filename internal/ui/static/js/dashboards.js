@@ -65,6 +65,10 @@ function DashboardView({ id, params, admin }) {
   const [tick, setTick] = useState(0);
   const [dialog, setDialog] = useState(null);
   const [saveError, setSaveError] = useState(null);
+  const grid = useRef(null);
+  const [resize, setResize] = useState(null); // {i, w, h} while a panel's corner is being dragged
+  const [drag, setDrag] = useState(null); // {from, to, after} while a panel is being moved
+  const moving = useRef(null);
 
   const [offer, setOffer] = useState(null); // a newer version that comes with vigil
   const load = () => api('/api/v1/dashboards/' + id).then(d => {
@@ -111,6 +115,60 @@ function DashboardView({ id, params, admin }) {
   };
   const move = (i, by) => change(d => { const j = i + by; if (j < 0 || j >= d.panels.length) return; [d.panels[i], d.panels[j]] = [d.panels[j], d.panels[i]]; });
 
+  // Dragging a panel's corner resizes it. While the pointer is down only
+  // the tile's box follows, in whole columns and rows; the panel itself is
+  // changed once, on release, so its queries do not run for every step.
+  const startResize = (e, i) => {
+    e.preventDefault();
+    const p = draft.panels[i], gap = 12;
+    const col = (grid.current.clientWidth - 11 * gap) / 12 + gap;
+    const x0 = e.clientX, y0 = e.clientY;
+    const clamp = n => Math.max(1, Math.min(12, n));
+    let last = { i, w: p.w, h: p.h };
+    const follow = ev => {
+      const w = clamp(Math.round((p.w * col + ev.clientX - x0) / col)), h = clamp(Math.round((p.h * ROW + ev.clientY - y0) / ROW));
+      if (w !== last.w || h !== last.h) setResize(last = { i, w, h });
+    };
+    const done = () => {
+      removeEventListener('pointermove', follow); removeEventListener('pointerup', done); removeEventListener('pointercancel', done);
+      setResize(null);
+      if (last.w !== p.w || last.h !== p.h) change(d => { d.panels[i].w = last.w; d.panels[i].h = last.h; });
+    };
+    addEventListener('pointermove', follow); addEventListener('pointerup', done); addEventListener('pointercancel', done);
+    setResize(last);
+  };
+  // Dragging a panel by its title moves it. Panels flow in order, left to
+  // right and then down, so moving means taking another place in that
+  // order: before or after the panel it is dropped on.
+  // The move is tracked in a ref as well as in state: the browser asks
+  // "may it be dropped here" right after the drag starts, before the page
+  // has drawn again, and an answer from the old state would be no.
+  const track = d => { moving.current = d; setDrag(d); };
+  const dragOver = (e, i) => {
+    const m = moving.current;
+    if (!m) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const r = e.currentTarget.getBoundingClientRect(), after = e.clientX > r.left + r.width / 2;
+    if (m.to !== i || m.after !== after) track({ ...m, to: i, after });
+  };
+  // The panels are put in their new order when the drag ends, not on the
+  // drop itself: reordering redraws the dragged panel, and a drag whose
+  // source disappears under it never gets its end.
+  const drop = e => {
+    if (!moving.current) return;
+    e.preventDefault();
+    moving.current.dropped = true;
+  };
+  const dragEnd = () => {
+    const m = moving.current;
+    track(null);
+    if (!m || !m.dropped) return;
+    const { from, to, after } = m;
+    const at = (to > from ? to - 1 : to) + (after ? 1 : 0);
+    if (at !== from) change(d => { const [p] = d.panels.splice(from, 1); d.panels.splice(at, 0, p); });
+  };
+
   return html`
     <div class="head"><a href="#/dashboards">← Dashboards</a><h1>${shown.title}</h1>
       ${variables.map(v => html`<${VariablePicker} key=${v.name} variable=${v} from=${from} to=${to}
@@ -135,7 +193,7 @@ function DashboardView({ id, params, admin }) {
         : html`<span class="muted">An admin can update it.</span>`}
     </div>`}
     ${draft && html`<div class="notice row">
-      <strong>Editing.</strong> Nothing is saved until you press Save.
+      <span><strong>Editing.</strong> Drag a panel by its title to move it, by its corner to resize it. Nothing is saved until you press Save.</span>
       <span class="spacer"></span>
       <button onClick=${() => setDialog({ kind: 'panel', index: -1 })}>Add panel</button>
       <button onClick=${() => setDialog({ kind: 'settings' })}>Title, variables, JSON</button>
@@ -145,9 +203,14 @@ function DashboardView({ id, params, admin }) {
     </div>`}
     <${ErrorBox} error=${saveError} />
     ${shown.panels.length === 0 && html`<div class="panel empty">This dashboard has no panels yet.${draft ? ' Use “Add panel”.' : admin ? ' Press Edit to add some.' : ''}</div>`}
-    <div class="grid">${shown.panels.map((p, i) => html`
-      <section key=${i + JSON.stringify(p)} class="panel tile" style="grid-column: span ${p.w}; height: ${p.h * ROW}px">
-        <header><h2>${p.title}</h2><span class="spacer"></span>
+    <div class="grid ${drag ? 'moving' : ''}" ref=${grid}>${shown.panels.map((p, i) => { const size = resize && resize.i === i ? resize : p; return html`
+      <section key=${i + JSON.stringify(p)} style="grid-column: span ${size.w}; height: ${size.h * ROW}px"
+        class="panel tile ${draft ? 'editing' : ''} ${drag && drag.to === i && drag.from !== i ? (drag.after ? 'drop-after' : 'drop-before') : ''}"
+        onDragOver=${e => dragOver(e, i)} onDrop=${drop}>
+        <header draggable=${!!draft} onDragEnd=${dragEnd} onDragStart=${e => {
+          e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', p.title);
+          e.dataTransfer.setDragImage(e.currentTarget.parentNode, 24, 16); track({ from: i, to: i, after: false }); }}>
+          <h2>${p.title}</h2><span class="spacer"></span>
           ${draft && html`<button class="small" title="Move earlier" onClick=${() => move(i, -1)}>◀</button>
             <button class="small" title="Move later" onClick=${() => move(i, 1)}>▶</button>
             <button class="small" onClick=${() => setDialog({ kind: 'panel', index: i })}>Edit</button>
@@ -155,7 +218,9 @@ function DashboardView({ id, params, admin }) {
         </header>
         <${PanelBody} key=${JSON.stringify(p)} panel=${p} from=${from} to=${to} tick=${tick} variables=${variables} values=${values}
           height=${p.h * ROW - 58} onZoom=${(a, b) => setRange({ from: a, to: b })} />
-      </section>`)}</div>
+        ${draft && html`<div class="resize" title="Drag to resize" onPointerDown=${e => startResize(e, i)}></div>`}
+        ${size !== p && html`<div class="size">${size.w} of 12 wide · ${size.h} high</div>`}
+      </section>`; })}</div>
     ${dialog?.kind === 'panel' && html`<${PanelEditor}
       panel=${dialog.index < 0 ? { title: '', type: 'timeseries', w: 6, h: 3, queries: [{ expr: '' }] } : draft.panels[dialog.index]}
       onClose=${() => setDialog(null)}
