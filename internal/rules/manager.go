@@ -141,23 +141,71 @@ func (m *Manager) Apply(ctx context.Context, f *File) error {
 
 	m.rules = nil
 	keep := map[string]bool{}
+	for gi := range f.Groups {
+		for ri := range f.Groups[gi].Rules {
+			keep[f.Groups[gi].key(&f.Groups[gi].Rules[ri])] = true
+		}
+	}
+	// A rule whose expression was edited has a new key, but it is the same
+	// rule to whoever edited it: its alerts carry on instead of resolving
+	// and starting over. That holds when exactly one rule of that group and
+	// name went and exactly one came.
+	gone, came := map[string][]string{}, map[string]int{}
+	for key := range old {
+		if !keep[key] {
+			gone[ruleName(key)] = append(gone[ruleName(key)], key)
+		}
+	}
+	for key := range keep {
+		if old[key] == nil {
+			came[ruleName(key)]++
+		}
+	}
+	parent := ctx
 	ctx, m.cancel = context.WithCancel(ctx)
 	for gi := range f.Groups {
 		g := &f.Groups[gi]
 		var group []*ruleState
 		for ri := range g.Rules {
 			rs := &ruleState{group: g, rule: &g.Rules[ri], key: g.key(&g.Rules[ri]), health: "unknown"}
-			if rs.alerts = old[rs.key]; rs.alerts == nil {
+			name := ruleName(rs.key)
+			if rs.alerts = old[rs.key]; rs.alerts == nil && len(gone[name]) == 1 && came[name] == 1 {
+				rs.alerts = old[gone[name][0]]
+				delete(gone, name)
+			}
+			if rs.alerts == nil {
 				rs.alerts = map[string]*Instance{}
 			}
-			keep[rs.key] = true
 			group = append(group, rs)
 		}
 		m.rules = append(m.rules, group...)
 		m.wg.Go(func() { m.runGroup(ctx, g, group) })
 	}
+	// What is left belonged to rules that are no longer there. Nobody will
+	// evaluate them again, so their firing alerts are resolved now; left
+	// alone they would stay with the notifier until they time out.
+	var resolved []alerting.Alert
+	now := time.Now()
+	for _, keys := range gone {
+		for _, key := range keys {
+			for _, in := range old[key] {
+				if in.State == StateFiring {
+					resolved = append(resolved, alerting.Alert{Labels: in.Labels, Annotations: in.Annotations,
+						StartsAt: in.FiredAt, EndsAt: now, GeneratorURL: m.externalURL})
+				}
+			}
+		}
+	}
+	if len(resolved) > 0 {
+		if err := m.be.Notify(parent, resolved); err != nil {
+			m.log.Error("resolving the alerts of removed rules failed", "err", err)
+		}
+	}
 	return m.be.PruneAlertStates(keep)
 }
+
+// ruleName is a rule's key without its expression: the group and the name.
+func ruleName(key string) string { return key[:strings.LastIndex(key, "\x00")+1] }
 
 // Stop ends evaluation; alert state stays saved for the next start.
 func (m *Manager) Stop() {

@@ -338,6 +338,10 @@ detection.
 - Rules see data about 30 seconds late (see [Explore](explore.md)).
 - Pending and firing alerts, silences, and the record of what was already
   notified all survive a server restart.
+- Removing a rule ends its alerts at once: they leave the Alerts page, and
+  contacts that get "resolved" messages get one. Editing a rule's
+  expression keeps its alerts; they go on, or end, by what the new
+  expression returns.
 - Firing and pending alerts are also stored as the metric
   `ALERTS{alertname, alertstate}`, so they can be charted.
 - A rule file can only be saved while both stores are reachable, because

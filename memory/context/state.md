@@ -395,6 +395,11 @@ Last updated: 2026-10-13.
   same check as the whole file. It refuses the names of built-in alerts
   and the group names `builtin` and anything with a slash.
   `GET /api/v1/rules/config/groups` lists the file's groups.
+- Rule manager (`internal/rules/manager.go`, `Apply`): the firing alerts
+  of a rule that was removed are sent to the notifier as resolved at once
+  (before, they stayed there until their four-minute timeout); a rule
+  whose expression was edited keeps its alerts (same group and name, one
+  gone and one new). Found by removing an alert made from Explore.
 - Verified live on the Lima host: every shipped query is accepted by its
   store; save, update, share, pick, both "Add to" paths, a viewer's view,
   and `vigil apply` with save, unchanged, change and prune.
