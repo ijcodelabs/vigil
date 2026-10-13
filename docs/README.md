@@ -33,7 +33,7 @@ every host or Kubernetes node and as the **server** in the middle.
 | decide what an agent collects | [Agent configuration](configs.md) |
 | manage many agents | [Fleet: profiles and integrations](fleet.md) |
 | monitor Kubernetes | [Kubernetes](kubernetes.md) |
-| look at data | [Explore](explore.md), [Dashboards](dashboards.md) |
+| look at data | [Explore](explore.md), [Dashboards](dashboards.md), or your own [Grafana](grafana.md) |
 | see how your applications do: requests, errors, latency, traces | [Services and traces](apm.md) |
 | watch GPUs and what AI use costs | [GPUs and AI machines](gpu.md), [AI costs](finops.md) |
 | be told when something is wrong | [Alerts](alerts.md) |
