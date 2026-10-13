@@ -25,6 +25,11 @@ configuration.
 Saving replaces all rules. Every expression is run once against its store
 first; if anything is wrong nothing changes and the reason is shown.
 
+A single alert can also be made from a query in
+[Explore](explore.md#from-a-query-to-a-dashboard-or-an-alert) with **Add
+to → Alert rules…**: a form writes the rule into this file, which is
+checked in the same way.
+
 ```yaml
 groups:
   - name: hosts

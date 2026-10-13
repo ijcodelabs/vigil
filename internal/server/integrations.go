@@ -125,6 +125,7 @@ func (s *Server) handleIntegrations(w http.ResponseWriter, _ *http.Request) {
 		Customised        bool     `json:"customised"` // a built-in one changed on this server
 		HasRules          bool     `json:"has_rules"`
 		HasDashboard      bool     `json:"has_dashboard"`
+		Queries           int      `json:"queries"`            // saved queries it brings to Explore
 		Profiles          []string `json:"profiles"`           // profiles that switch it on
 		Detected          int      `json:"detected"`           // agents it was found running on
 		Enabled           int      `json:"enabled"`            // agents it is switched on for
@@ -152,7 +153,7 @@ func (s *Server) handleIntegrations(w http.ResponseWriter, _ *http.Request) {
 		in := f.catalog[name]
 		_, custom := f.custom[name]
 		_, isBuiltin := fleet.BuiltinText(name)
-		it := item{Integration: in, Customised: custom && isBuiltin, HasRules: len(in.Rules) > 0, HasDashboard: in.Dashboard != nil,
+		it := item{Integration: in, Customised: custom && isBuiltin, HasRules: len(in.Rules) > 0, HasDashboard: in.Dashboard != nil, Queries: len(in.Queries),
 			Profiles: []string{}, Enabled: len(enabled[name]), UnmonitoredAgents: []string{}}
 		it.Builtin = isBuiltin
 		for _, p := range f.profiles {

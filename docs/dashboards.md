@@ -29,6 +29,10 @@ PostgreSQL, …). All of them are ordinary dashboards: change or delete them.
   the whole dashboard as JSON.
 - Nothing is stored until **Save**. **Discard changes** goes back.
 
+A panel can also come from [Explore](explore.md#from-a-query-to-a-dashboard-or-an-alert):
+**Add to → Dashboard…** there puts the query on screen on a dashboard, at
+its end, and saves it at once.
+
 ### Panels
 
 | Shows | Use for | Options |

@@ -206,3 +206,35 @@ func TestHaproxyLogTemplate(t *testing.T) {
 		t.Errorf("notice line: %q %v %v", msg, labels, fields)
 	}
 }
+
+func TestQueries(t *testing.T) {
+	list, err := ParseQueries("queries:\n  - {name: ' Load ', query: host_load1}\n  - {name: Load, type: logs, query: 'load | stats count() as n'}\n")
+	if err != nil || len(list) != 2 || list[0].Name != "Load" || list[0].Type != QueryMetrics || list[1].Type != QueryLogs {
+		t.Fatalf("%+v %v", list, err)
+	}
+	if list, err := ParseQueries("# nothing yet\n"); err != nil || len(list) != 0 {
+		t.Errorf("an empty file: %+v %v", list, err)
+	}
+	for text, want := range map[string]string{
+		"queries: [{name: a, query: up}, {name: a, query: down}]": "defined twice",
+		"queries: [{name: a, type: traces, query: up}]":           "type must be",
+		"queries: [{name: a}]":                                    "empty",
+		"queries: [{query: up}]":                                  "needs a name",
+		"queries: [{name: a, query: up, unit: bytes}]":            "field unit not found",
+		"panels: []": "field panels not found",
+	} {
+		if _, err := ParseQueries(text); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s: %v, want an error with %q", text, err, want)
+		}
+	}
+	// Integrations bring queries; a bad one refuses the whole integration.
+	cat, _ := Builtin()
+	for _, name := range cat.Names() {
+		if len(cat[name].Queries) == 0 {
+			t.Errorf("built-in integration %s has no queries for Explore", name)
+		}
+	}
+	if _, err := ParseIntegration("shop", "queries: [{name: Orders, type: sql, query: x}]"); err == nil || !strings.Contains(err.Error(), "queries: ") {
+		t.Errorf("an integration with a bad query: %v", err)
+	}
+}

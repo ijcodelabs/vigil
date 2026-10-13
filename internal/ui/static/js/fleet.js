@@ -234,7 +234,7 @@ config: {}
           <div class="muted">${it.description}</div>
           ${it.unmonitored > 0 && html`<div style="margin-top: 4px"><${Badge} kind="warn">running unmonitored on ${it.unmonitored}<//>
             ${' '}<span class="muted">${it.unmonitored_agents.slice(0, 6).join(', ')}${it.unmonitored > 6 ? ', …' : ''}</span></div>`}</td>
-        <td class="muted" style="white-space: nowrap">collection${it.has_rules ? ' · rules' : ''}${it.has_dashboard ? ' · dashboard' : ''}</td>
+        <td class="muted" style="white-space: nowrap">collection${it.has_rules ? ' · rules' : ''}${it.has_dashboard ? ' · dashboard' : ''}${it.queries ? ' · saved queries' : ''}</td>
         <td class="num">${it.detected}</td>
         <td class="num">${it.enabled}${it.profiles.length > 0 && html`<div class="muted" style="font-size: 12px">via ${it.profiles.join(', ')}</div>`}</td>
         <td style="text-align: right; white-space: nowrap">

@@ -36,6 +36,9 @@ type Integration struct {
 	Rules []map[string]any `yaml:"rules" json:"-"`
 	// Dashboard is installed the first time the integration is used.
 	Dashboard map[string]any `yaml:"dashboard" json:"-"`
+	// Queries are offered in Explore under "Saved" while the integration
+	// is in use. They cannot be changed there; a copy can be saved.
+	Queries []Query `yaml:"queries" json:"-"`
 
 	Builtin bool `yaml:"-" json:"builtin"`
 }
@@ -95,6 +98,9 @@ func ParseIntegration(name, text string) (*Integration, error) {
 	}
 	if _, err := in.RuleGroups(); err != nil {
 		return nil, fmt.Errorf("rules: %w", err)
+	}
+	if err := CheckQueries(in.Queries); err != nil {
+		return nil, fmt.Errorf("queries: %w", err)
 	}
 	return in, nil
 }

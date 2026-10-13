@@ -244,7 +244,16 @@ rules:                          # optional, in the rule-file format
         expr: up{job="shop"} == 0
         for: 2m
 dashboard: {...}                # optional, a dashboard as JSON or YAML
+queries:                        # optional, offered in Explore under Saved
+  - name: Orders per minute
+    query: sum(rate(shop_orders_total[1m])) * 60
+  - name: Shop errors
+    type: logs                  # metrics (PromQL) is the default
+    query: app:shop level:error
 ```
+
+The queries show up in Explore, for everyone, while a profile switches the
+integration on. They cannot be changed there, only copied.
 
 ## Keeping profiles in git
 
@@ -257,6 +266,8 @@ fleet/
   databases.yaml
   integrations/
     shop.yaml
+  queries/
+    team.yaml
 ```
 
 ```bash
@@ -269,6 +280,15 @@ It changes only what differs. `-prune` deletes only profiles that were
 applied from files before; profiles made in the interface are left alone.
 Both ways of editing can be mixed; each profile shows where it was last
 written from. `configs/profiles/` in the repository has examples.
+
+Files under `queries/` hold [saved queries](explore.md#saved-queries) that
+everyone gets in Explore, as a list under `queries:` in the form shown for
+integrations above. A query is known by its name within its type, across
+all the files. A shared query of that name made in the interface is taken
+over. `-prune` deletes shared queries that came from files and are in none
+any more; personal queries and shared ones made in the interface are never
+deleted. Without a `queries` directory the saved queries are left alone
+altogether.
 
 A profile with a `rollout` section is rolled out in steps when applied
 this way too; `vigil apply` says so and returns without waiting for it.

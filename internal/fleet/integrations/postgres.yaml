@@ -71,3 +71,11 @@ dashboard:
       min: 0
       queries: [{expr: 'pg_stat_database_numbackends{agent=~"$agent",datname!=""}', legend: '{{datname}}'}]
     - {title: Latest errors, type: logs, w: 12, h: 4, limit: 50, queries: [{expr: 'app:postgres agent:~"$agent" (level:ERROR or level:FATAL or level:PANIC)'}]}
+queries:
+  - name: PostgreSQL connections per database
+    query: pg_stat_database_numbackends{datname!=""}
+  - name: PostgreSQL commits per second
+    query: sum by (datname) (rate(pg_stat_database_xact_commit[2m]))
+  - name: PostgreSQL errors
+    type: logs
+    query: app:postgres (level:ERROR or level:FATAL or level:PANIC)

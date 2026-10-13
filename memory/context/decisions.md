@@ -54,6 +54,14 @@ it has the last word: it then holds only what differs from the defaults,
 which change with the version. Overriding by group name alone was rejected
 because changing one threshold would mean copying the whole group.
 
+**A saved query is personal unless an admin shares it.** Viewers save
+too, since a personal query changes nothing for anyone else; the shared
+list stays short because only admins add to it. The time range is not
+saved: picking a query should not move what one is looking at. Queries
+that come with vigil or an integration are computed, not stored, so they
+follow the version and need none of the "was it changed" bookkeeping the
+dashboards have; the price is that they cannot be edited, only copied.
+
 **A stopped container alerts only with a non-zero exit code.** Exit 0 is a
 job that finished; a removed container is gone on purpose. A container
 stopped by hand usually ends with 137 or 143 and does alert, which was

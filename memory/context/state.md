@@ -1,6 +1,6 @@
 # State
 
-Last updated: 2026-10-12.
+Last updated: 2026-10-13.
 
 ## Built (steps 1–6 of the original plan)
 
@@ -372,6 +372,35 @@ Last updated: 2026-10-12.
   removed from the page.
 - Not built: a count of what each rule drops; log files as a source of a
   rule; a minimum level per source; a rate limit per container.
+
+## Saved queries in Explore (built 2026-10-13)
+
+- `internal/server/queries.go`, table `saved_queries`: a query is personal
+  (its owner only, viewers may have them) or shared (everyone sees it,
+  admins change it). `GET/POST /api/v1/queries`, `PUT/DELETE
+  /api/v1/queries/{id}`. Deleting an account deletes its personal ones.
+- Queries that come with vigil are not stored: `starter_queries.yaml` in
+  the server, and `queries:` in an integration (all nine built-in ones
+  have some), listed while the integration is in use. Read-only.
+- Shared ones can come from files: `vigil apply` reads `DIR/queries/*.yaml`
+  (`fleet.ParseQueries`), origin `files`, `-prune` as for profiles.
+- UI in `saved.js`: the Saved menu (search, yours / shared / comes with
+  vigil / recent), Save (new, or update the one it came from), and for
+  admins "Add to": a dashboard panel through the dashboard's own
+  `PanelEditor`, or an alert rule.
+- Recent queries are in the browser's localStorage per account, 20 each
+  for metrics and logs; the server knows nothing of them.
+- `POST /api/v1/rules/config/alerts` (`rulealert.go`) writes one alert into
+  the rule file as YAML nodes, keeping comments, then saves through the
+  same check as the whole file. It refuses the names of built-in alerts
+  and the group names `builtin` and anything with a slash.
+  `GET /api/v1/rules/config/groups` lists the file's groups.
+- Verified live on the Lima host: every shipped query is accepted by its
+  store; save, update, share, pick, both "Add to" paths, a viewer's view,
+  and `vigil apply` with save, unchanged, change and prune.
+- Not built: folders or tags for saved queries, saving the time range,
+  hiding a query that comes with vigil, removing an alert again from
+  Explore (edit the rule file), `vigil apply` for the rule file itself.
 
 ## Next
 

@@ -95,3 +95,16 @@ dashboard:
       fill: true
       queries: [{expr: 'source:kubernetes-events type:Warning cluster:~"$cluster" namespace:~"$namespace" | stats by (reason) count() as events', legend: '{{reason}}'}]
     - {title: Latest warning events, type: logs, w: 12, h: 4, limit: 50, queries: [{expr: 'source:kubernetes-events type:Warning cluster:~"$cluster" namespace:~"$namespace"'}]}
+queries:
+  - name: Nodes not ready
+    query: kube_node_status_condition{condition="Ready"} == 0
+  - name: Deployments with replicas missing
+    query: kube_deployment_status_replicas_unavailable > 0
+  - name: Failed jobs
+    query: kube_job_status_failed > 0
+  - name: Warning events by reason
+    type: logs
+    query: source:kubernetes-events type:Warning | stats by (reason) count() as events | sort by (events desc)
+  - name: Why was a pod not scheduled
+    type: logs
+    query: source:kubernetes-events reason:FailedScheduling

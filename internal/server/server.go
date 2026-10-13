@@ -219,6 +219,7 @@ func (s *Server) Handler() http.Handler {
 	s.securityRoutes(mux)
 	s.enrollRoutes(mux)
 	s.dashboardRoutes(mux)
+	s.queryRoutes(mux)
 	mux.Handle("GET /docs/", ui.DocsHandler())
 	mux.Handle("/", ui.Handler())
 	return s.hardened(mux)

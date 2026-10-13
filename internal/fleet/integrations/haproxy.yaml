@@ -181,3 +181,18 @@ dashboard:
       h: 4
       queries: [{expr: '_time:15m app:haproxy agent:~"$agent" status:~"[45].." | stats by (status, backend, path) count() as responses | sort by (responses desc) | limit 15'}]
     - {title: Latest 5xx and aborted requests, type: logs, w: 12, h: 4, limit: 50, queries: [{expr: 'app:haproxy agent:~"$agent" (status:~"5.." or status:"-1")'}]}
+queries:
+  - name: HAProxy requests per second by backend
+    query: sum by (proxy) (rate(haproxy_backend_http_requests_total[2m])) > 0
+  - name: HAProxy share of 5xx responses
+    query: sum(rate(haproxy_frontend_http_responses_total{code="5xx"}[5m])) / sum(rate(haproxy_frontend_http_responses_total[5m]))
+  - name: HAProxy backends that are down
+    query: haproxy_backend_status{state="DOWN"} == 1
+  - name: HAProxy response time by backend (s)
+    query: haproxy_backend_response_time_average_seconds > 0
+  - name: HAProxy 4xx and 5xx by backend and path
+    type: logs
+    query: app:haproxy status:~"[45].." | stats by (status, backend, path) count() as responses | sort by (responses desc) | limit 20
+  - name: HAProxy slowest paths
+    type: logs
+    query: app:haproxy total_ms:* | stats by (backend, path) avg(total_ms) as avg_ms, count() as requests | filter requests:>2 | sort by (avg_ms desc) | limit 20

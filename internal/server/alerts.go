@@ -97,6 +97,8 @@ func (s *Server) loadRules(ctx context.Context) error {
 func (s *Server) alertingRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/rules/config", s.viewer(s.getSetting(settingRules, "groups: []\n")))
 	mux.HandleFunc("PUT /api/v1/rules/config", s.admin(s.putRules))
+	mux.HandleFunc("GET /api/v1/rules/config/groups", s.viewer(s.handleRuleGroups))
+	mux.HandleFunc("POST /api/v1/rules/config/alerts", s.admin(s.addAlert))
 	mux.HandleFunc("GET /api/v1/rules/builtin", s.viewer(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/yaml")
 		io.WriteString(w, builtinRules)
@@ -215,29 +217,37 @@ func (s *Server) putRules(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if s.saveRules(w, r, text) {
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// saveRules checks a rule file, stores it and starts running it. When it
+// answers false it has written the reason, and nothing was changed.
+func (s *Server) saveRules(w http.ResponseWriter, r *http.Request, text string) bool {
 	f, err := rules.Parse(text)
 	if err != nil {
 		http.Error(w, "invalid rules: "+err.Error(), http.StatusBadRequest)
-		return
+		return false
 	}
 	if err := s.rules.Check(r.Context(), f); err != nil {
 		var qe *rules.QueryError
 		if errors.As(err, &qe) && qe.Bad {
 			http.Error(w, "invalid rules: "+err.Error(), http.StatusBadRequest)
-			return
+			return false
 		}
 		http.Error(w, "rules not saved, their expressions could not be checked: "+err.Error(), http.StatusServiceUnavailable)
-		return
+		return false
 	}
 	if err := s.store.SetSetting(settingRules, text); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return false
 	}
 	if err := s.applyRules(s.runCtx); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return false
 	}
-	w.WriteHeader(http.StatusNoContent)
+	return true
 }
 
 // putAlerting replaces the Alertmanager configuration (routes, receivers,
