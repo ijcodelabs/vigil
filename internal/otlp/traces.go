@@ -78,6 +78,41 @@ var tokenAttributes = []struct{ attr, typ string }{
 	{"gen_ai.usage.reasoning_tokens", "reasoning"}, {"gen_ai.usage.reasoning.output_tokens", "reasoning"},
 }
 
+// selfReporting are services that report their own model usage as
+// metrics, more completely than their spans could: Claude Code sends
+// claude_code_token_usage and claude_code_cost_usage, and its spans carry
+// gen_ai.* names without gen_ai.usage.* tokens. Counting the spans too
+// would show its calls twice, once without tokens.
+var selfReporting = map[string]bool{"claude-code": true, "claude-code-desktop": true}
+
+// redactSpan masks secrets in a span's attributes and in its events (a
+// tool's output arrives as an event).
+func redactSpan(sp *tracepb.Span, mask func(string) string) {
+	redactKVs(sp.GetAttributes(), mask)
+	for _, e := range sp.GetEvents() {
+		redactKVs(e.GetAttributes(), mask)
+	}
+}
+
+func redactKVs(kvs []*commonpb.KeyValue, mask func(string) string) {
+	for _, kv := range kvs {
+		redactValue(kv.GetValue(), mask)
+	}
+}
+
+func redactValue(v *commonpb.AnyValue, mask func(string) string) {
+	switch x := v.GetValue().(type) {
+	case *commonpb.AnyValue_StringValue:
+		x.StringValue = mask(x.StringValue)
+	case *commonpb.AnyValue_ArrayValue:
+		for _, e := range x.ArrayValue.GetValues() {
+			redactValue(e, mask)
+		}
+	case *commonpb.AnyValue_KvlistValue:
+		redactKVs(x.KvlistValue.GetValues(), mask)
+	}
+}
+
 // observeGenAI counts a call to a language model: one request, and the
 // tokens it used by kind. Called with r.mu held.
 func (r *Receiver) observeGenAI(service, status string, seconds float64, attrs []*commonpb.KeyValue, now time.Time) {
@@ -172,10 +207,15 @@ func (r *Receiver) convertTraces(in *coltrace.ExportTraceServiceRequest, now tim
 					status = "error"
 				}
 				r.observe(service, sp.GetName(), kind, status, seconds, sp.GetAttributes(), now, opts.MaxNames)
-				r.observeGenAI(service, status, seconds, sp.GetAttributes(), now)
+				if !selfReporting[service] {
+					r.observeGenAI(service, status, seconds, sp.GetAttributes(), now)
+				}
 
 				slow := opts.SlowerThan > 0 && seconds >= opts.SlowerThan.Seconds()
 				if keepTrace(sp.GetTraceId(), opts.Sample) || status == "error" || slow {
+					if r.Redact != nil {
+						redactSpan(sp, r.Redact)
+					}
 					kept = append(kept, sp)
 				}
 			}

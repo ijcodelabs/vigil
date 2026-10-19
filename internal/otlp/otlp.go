@@ -57,6 +57,11 @@ type Receiver struct {
 	Spans  func(otlpRequest []byte) error
 	Traces TraceOptions
 	Log    *slog.Logger
+	// DropLabels are metric labels (as stored) left out of every point.
+	DropLabels map[string]bool
+	// Redact, if set, masks secrets in the attributes and events of the
+	// spans that are passed on. Log entries are masked by the caller.
+	Redact func(string) string
 
 	// Sums and histograms sent as differences since the last report are
 	// added up here, because the metric store wants running totals.
@@ -271,6 +276,17 @@ func labelsOf(base map[string]string, attrs []*commonpb.KeyValue) map[string]str
 	return out
 }
 
+// metricLabels are the labels of one point, without the dropped ones.
+func (r *Receiver) metricLabels(base map[string]string, attrs []*commonpb.KeyValue) map[string]string {
+	out := labelsOf(base, attrs)
+	for k, drop := range r.DropLabels {
+		if drop {
+			delete(out, k)
+		}
+	}
+	return out
+}
+
 func seriesKey(name string, labels map[string]string) uint64 {
 	keys := make([]string, 0, len(labels))
 	for k := range labels {
@@ -351,7 +367,7 @@ func (r *Receiver) convertMetrics(in *colmetrics.ExportMetricsServiceRequest) []
 				switch d := m.GetData().(type) {
 				case *metricspb.Metric_Gauge:
 					for _, p := range d.Gauge.GetDataPoints() {
-						add(name, labelsOf(base, p.GetAttributes()), number(p), millis(p.GetTimeUnixNano(), now))
+						add(name, r.metricLabels(base, p.GetAttributes()), number(p), millis(p.GetTimeUnixNano(), now))
 					}
 				case *metricspb.Metric_Sum:
 					delta := d.Sum.GetAggregationTemporality() == metricspb.AggregationTemporality_AGGREGATION_TEMPORALITY_DELTA
@@ -359,7 +375,7 @@ func (r *Receiver) convertMetrics(in *colmetrics.ExportMetricsServiceRequest) []
 						name += "_total"
 					}
 					for _, p := range d.Sum.GetDataPoints() {
-						labels, v := labelsOf(base, p.GetAttributes()), number(p)
+						labels, v := r.metricLabels(base, p.GetAttributes()), number(p)
 						if delta && !math.IsNaN(v) {
 							t := r.total(name, labels, now)
 							t.sum += v
@@ -370,7 +386,7 @@ func (r *Receiver) convertMetrics(in *colmetrics.ExportMetricsServiceRequest) []
 				case *metricspb.Metric_Histogram:
 					delta := d.Histogram.GetAggregationTemporality() == metricspb.AggregationTemporality_AGGREGATION_TEMPORALITY_DELTA
 					for _, p := range d.Histogram.GetDataPoints() {
-						labels, ts := labelsOf(base, p.GetAttributes()), millis(p.GetTimeUnixNano(), now)
+						labels, ts := r.metricLabels(base, p.GetAttributes()), millis(p.GetTimeUnixNano(), now)
 						counts := make([]float64, len(p.GetBucketCounts()))
 						for i, c := range p.GetBucketCounts() {
 							counts[i] = float64(c)
@@ -407,7 +423,7 @@ func (r *Receiver) convertMetrics(in *colmetrics.ExportMetricsServiceRequest) []
 					}
 				case *metricspb.Metric_Summary:
 					for _, p := range d.Summary.GetDataPoints() {
-						labels, ts := labelsOf(base, p.GetAttributes()), millis(p.GetTimeUnixNano(), now)
+						labels, ts := r.metricLabels(base, p.GetAttributes()), millis(p.GetTimeUnixNano(), now)
 						for _, q := range p.GetQuantileValues() {
 							ql := labelsOf(labels, nil)
 							ql["quantile"] = strconv.FormatFloat(q.GetQuantile(), 'g', -1, 64)
@@ -423,7 +439,7 @@ func (r *Receiver) convertMetrics(in *colmetrics.ExportMetricsServiceRequest) []
 						if d.ExponentialHistogram.GetAggregationTemporality() == metricspb.AggregationTemporality_AGGREGATION_TEMPORALITY_DELTA {
 							continue
 						}
-						labels, ts := labelsOf(base, p.GetAttributes()), millis(p.GetTimeUnixNano(), now)
+						labels, ts := r.metricLabels(base, p.GetAttributes()), millis(p.GetTimeUnixNano(), now)
 						add(name+"_sum", labels, p.GetSum(), ts)
 						add(name+"_count", labelsOf(labels, nil), float64(p.GetCount()), ts)
 					}

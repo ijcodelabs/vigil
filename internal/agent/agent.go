@@ -37,6 +37,7 @@ import (
 	"github.com/ijcodelabs/vigil/internal/probe"
 	"github.com/ijcodelabs/vigil/internal/procmetrics"
 	"github.com/ijcodelabs/vigil/internal/promwire"
+	"github.com/ijcodelabs/vigil/internal/redact"
 	"github.com/ijcodelabs/vigil/internal/spool"
 	"github.com/ijcodelabs/vigil/internal/systemd"
 )
@@ -251,7 +252,15 @@ func (a *Agent) collect(ctx context.Context, col *config.Collection) {
 			a.log.Error("metric batch lost", "samples", len(batch), "err", err)
 		}
 	}
+	// Secrets are masked before the limits count the bytes, so what is
+	// counted is what is sent.
+	red, err := redact.New(col.Redact)
+	if err != nil { // the config was checked when it was loaded
+		a.log.Error("redaction rules not usable, only the built-in ones apply", "err", err)
+		red, _ = redact.New(config.Redact{Builtin: col.Redact.Builtin})
+	}
 	emitLogs := func(batch []model.LogEntry) error {
+		red.Entries(batch)
 		if batch = a.limits.logs(batch); len(batch) == 0 {
 			return nil
 		}
@@ -404,7 +413,7 @@ func (a *Agent) collect(ctx context.Context, col *config.Collection) {
 		}
 	}
 	if col.OTLP.Enabled {
-		rcv := &otlp.Receiver{Listen: col.OTLP.Listen, Log: a.log,
+		rcv := &otlp.Receiver{Listen: col.OTLP.Listen, Log: a.log, DropLabels: col.OTLP.Metrics.DropLabels,
 			Metrics: func(batch []model.Sample) {
 				for i := range batch {
 					for k, v := range col.Labels {
@@ -427,6 +436,9 @@ func (a *Agent) collect(ctx context.Context, col *config.Collection) {
 			rcv.Traces = otlp.TraceOptions{Sample: 1, SlowerThan: t.SlowerThan.Std()}
 			if t.Sample != nil {
 				rcv.Traces.Sample = *t.Sample
+			}
+			if red.Active() {
+				rcv.Redact = red.String
 			}
 			// Spans go on as the application sent them. They share the
 			// byte allowance of the logs, so a chatty application cannot

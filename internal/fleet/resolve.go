@@ -19,6 +19,7 @@ var keyed = map[string]string{
 	"scrape.static":  "job",
 	"logs.files":     "name",
 	"logs.drop":      "name",
+	"redact.rules":   "name",
 	"security.rules": "name",
 	"probes":         "name",
 	"processes":      "name",

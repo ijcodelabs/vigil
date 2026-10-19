@@ -30,3 +30,32 @@ not commitments, and most are not started.
 - **FinOps for AI:** tracking token usage and cost.
 - **AI investigator and MCP server:** deliberately last, because building
   the rest was expected to change what it should be.
+
+## AI modules: Claude Code first (agreed 2026-10-19)
+
+Watching AI coding agents is a family of integrations named
+`ai_module_<tool>` (`ai_module_claude` first), each switched on and off by
+profiles like any integration. The Sessions page is shared by all of them
+and shows when any `ai_module_*` is in use.
+
+`ai_module_claude` takes Claude Code's own OpenTelemetry output
+(`CLAUDE_CODE_ENABLE_TELEMETRY`): cost and token metrics, one event per API
+call, prompt and tool call, and (beta) traces with the subagent tree. Plan:
+
+1. Record a real session with a subagent on a local server; settle what
+   Claude Code really sends (empty event bodies, GenAI span attributes).
+2. Agent: event name as message when the body is empty;
+   `otlp.metrics.drop_labels`; `otlp.resource_labels`; no double count
+   between `claude_code_*` and `genai_*`.
+3. The integration (rules: over budget, runaway session, API error bursts;
+   a dashboard; saved queries) and `docs/claude-code.md`.
+4. Sessions page from events (list by session, prompts in order, cost by
+   main/subagent and agent name), then the subagent tree from traces.
+5. Redaction in the agent before storage; `vigil claude-hook` for an audit
+   trail of tool calls and permission decisions.
+6. Later: compare with the Claude Code Analytics API.
+
+Defaults: `user_email` stays a metric label; `session_id` does not. Whether
+prompt text is stored is open: it is recorded locally first, to see what it
+holds, and decided after. Viewers would see it, because log queries pass
+through to the store.
