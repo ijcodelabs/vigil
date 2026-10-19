@@ -140,7 +140,66 @@ Claude Code is set to send them (see above). Where traces are kept, a
 prompt links to its trace, with subagents nested under the tool call that
 started them.
 
+## Audit trail: who ran what, where
+
+Claude Code's telemetry counts and prices; it says which command ran in
+which folder, and as which account on the machine, only with every content
+setting on. Claude Code's hooks see exactly that, one call at a time.
+`vigil claude-hook` is a hook that sends one log line per call to the
+agent on the same machine:
+
+| Hook | Line says |
+|---|---|
+| `PostToolUse`, `PostToolUseFailure` | the tool, its command, file, pattern or address, how long it took, the size of its output, the error |
+| `PermissionRequest`, `PermissionDenied` | which tool asked, and why it was refused (auto mode) |
+| `SubagentStart`, `SubagentStop` | which subagent ran |
+| `UserPromptSubmit` | that a prompt came, and its length |
+| `SessionStart`, `SessionEnd` | how a session began and ended |
+
+Every line carries the session and prompt, the folder, the operating-system
+account, and the subagent a call came from. A tool's output is never sent,
+only its size: when Claude Code reads a `.env` file, the hook is given the
+file. The agent masks secrets in a command line as in any log line.
+
+Register it in `~/.claude/settings.json`, or in managed settings so that
+it cannot be removed:
+
+```json
+{
+  "hooks": {
+    "PostToolUse":        [{"hooks": [{"type": "command", "command": "vigil claude-hook", "async": true}]}],
+    "PostToolUseFailure": [{"hooks": [{"type": "command", "command": "vigil claude-hook", "async": true}]}],
+    "PermissionRequest":  [{"hooks": [{"type": "command", "command": "vigil claude-hook", "async": true}]}],
+    "PermissionDenied":   [{"hooks": [{"type": "command", "command": "vigil claude-hook", "async": true}]}],
+    "SubagentStart":      [{"hooks": [{"type": "command", "command": "vigil claude-hook", "async": true}]}],
+    "SubagentStop":       [{"hooks": [{"type": "command", "command": "vigil claude-hook", "async": true}]}],
+    "UserPromptSubmit":   [{"hooks": [{"type": "command", "command": "vigil claude-hook", "async": true}]}],
+    "SessionStart":       [{"hooks": [{"type": "command", "command": "vigil claude-hook", "async": true}]}],
+    "SessionEnd":         [{"hooks": [{"type": "command", "command": "vigil claude-hook"}]}]
+  }
+}
+```
+
+`vigil` is the same binary as the agent; give its full path if it is not on
+the `PATH` Claude Code sees. `async` lets Claude Code carry on without
+waiting (a call takes about 80 ms, at most half a second when the agent
+does not answer); `SessionEnd` is not async because Claude Code is about to
+exit. The hook prints nothing and always exits 0: for some events Claude
+Code would hand its output to the model, and exit code 2 would block a
+prompt. A line that cannot be sent is lost.
+
+Options: `-endpoint` (default `http://127.0.0.1:4318`, or
+`VIGIL_OTLP_ENDPOINT`) and `-content`, which adds the text of prompts and
+the full instructions given to subagents. Telemetry cuts those
+instructions off after a couple of hundred characters; with `-content` the
+hook has all of them (up to 2,000 characters a value). The same caution as
+for Claude Code's content settings applies.
+
+The lines arrive as `service="claude-code-hook"`, as events named
+`claude_code.hook.<Hook>`. The dashboard's "Audit" panels show tool calls
+by account, denied permissions and the latest shell commands, and a
+session's page puts them in line with Claude Code's own events.
+
 ## Not yet
 
-- An audit trail from Claude Code's hooks.
 - Comparing with the bill (the Claude Code Analytics API).
