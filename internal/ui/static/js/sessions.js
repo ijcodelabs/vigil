@@ -16,6 +16,8 @@ const num = v => { const n = Number(v); return isFinite(n) ? n : 0; };
 const usd = v => '$' + (v >= 1 ? v.toFixed(2) : v >= 0.01 ? v.toFixed(3) : v.toFixed(4));
 const secs = (a, b) => fmtUnit(Math.max(0, (Date.parse(b) - Date.parse(a)) / 1000), 'seconds');
 const isSub = qs => (qs || '').startsWith('agent:');
+// Claude Code sends this in place of text it was not told to send.
+const shown = v => (v && v !== '<REDACTED>' ? v : null);
 
 async function lines(query, from, to, limit = 1000) {
   return parseLines(await api('/api/v1/logs/query', form({ query, start: Math.floor(from), end: Math.ceil(to), limit })));
@@ -121,7 +123,9 @@ function SessionView({ id, params }) {
   const { data: events, error } = useLoad(async () => {
     const [from, to] = win();
     const rows = await lines(`${BASE} session_id:=${q(id)} -_msg:in(${NOISE.join(',')}) | sort by (_time) | limit 5000`, from, to, 5000);
-    return rows.sort((a, b) => num(a.event_sequence) - num(b.event_sequence) || (a._time < b._time ? -1 : 1));
+    // By time; Claude Code's sequence number orders its own events that
+    // share a millisecond (hook lines have none).
+    return rows.sort((a, b) => Date.parse(a._time) - Date.parse(b._time) || num(a.event_sequence) - num(b.event_sequence));
   }, [range, id], 30000);
 
   const view = useMemo(() => {
@@ -139,10 +143,11 @@ function SessionView({ id, params }) {
     const prompts = groups.map(g => {
       const ev = g.events, c = ev.filter(e => kind(e) === 'api_request');
       const prompt = ev.find(e => kind(e) === 'user_prompt');
-      const text = prompt && (prompt.prompt_text || prompt.prompt);
+      const hooked = ev.find(e => e.hook_event === 'UserPromptSubmit' && e.prompt); // vigil claude-hook -content
+      const text = (prompt && (shown(prompt.prompt_text) || shown(prompt.prompt))) || (hooked && hooked.prompt);
       return {
         key: g.key, events: ev, start: ev[0]._time, end: ev[ev.length - 1]._time,
-        text: text && text !== '<REDACTED>' ? text : null, length: prompt ? num(prompt.prompt_length) : 0,
+        text: text || null, length: prompt ? num(prompt.prompt_length) : hooked ? num(hooked.prompt_length) : 0,
         usd: sum(c, 'cost_usd'), subUsd: sum(c.filter(e => isSub(e.query_source)), 'cost_usd'), calls: c.length,
         tools: ev.filter(e => kind(e) === 'tool_result').length, failed: ev.filter(e => kind(e) === 'tool_result' && e.success === 'false').length,
         subagents: ev.filter(e => kind(e) === 'subagent_completed').map(e => e.agent_type || 'subagent'),
@@ -155,9 +160,13 @@ function SessionView({ id, params }) {
       r.usd += num(e.cost_usd); r.calls++; r.output += num(e.output_tokens);
       parts.set(k, r);
     }
-    const first = events[0];
+    // Claude Code's own events say whose session it is; hook lines know
+    // only the operating-system account.
+    const first = events.find(e => e.user_email) || events[0];
+    const osUser = (events.find(e => e.os_user) || {}).os_user;
     return {
-      person: first.user_email, agent: first.agent, service: first.service, start: first._time, end: events[events.length - 1]._time,
+      person: first.user_email || osUser || '', agent: first.agent, service: first.service, start: events[0]._time, end: events[events.length - 1]._time,
+      osUser, cwd: (events.find(e => e.cwd) || {}).cwd,
       usd: sum(calls, 'cost_usd'), calls: calls.length, input: sum(calls, 'input_tokens'), output: sum(calls, 'output_tokens'),
       cacheRead: sum(calls, 'cache_read_tokens'), cacheWrite: sum(calls, 'cache_creation_tokens'),
       models: [...new Set(calls.map(e => e.model).filter(Boolean))],
@@ -182,7 +191,7 @@ function SessionView({ id, params }) {
         <section class="panel tile" style="grid-column: span 2; height: 110px"><header><h2>${t}</h2></header>
           <div class="tile-body"><div class="stat">${v}</div></div></section>`)}
     </div>
-    <p class="muted">${view.person} on ${view.agent} (${view.service}) · ${new Date(view.start).toLocaleString()} · ${view.models.join(', ')}</p>
+    <p class="muted">${view.person} on ${view.agent} (${view.service})${view.osUser ? ` · account ${view.osUser}` : ''}${view.cwd ? ` · in ${view.cwd}` : ''} · ${new Date(view.start).toLocaleString()} · ${view.models.join(', ')}</p>
 
     <h2 class="section">Who spent it</h2>
     <div class="panel flush"><table>
@@ -212,20 +221,39 @@ function SessionView({ id, params }) {
     <p class="muted">Click a prompt for what happened in it, in order. A trace, where one is kept, shows subagents nested under the tool call that started them.</p>`;
 }
 
+// hookLine describes a line from vigil claude-hook: the audit trail, with
+// who ran what where, next to Claude Code's own telemetry.
+function hookLine(e) {
+  const what = e.tool_command || e.tool_file_path || e.tool_pattern || e.tool_url || e.tool_query || e.tool_description || '';
+  const by = e.agent_type ? ` (in subagent ${e.agent_type})` : '';
+  switch (e.hook_event) {
+    case 'PostToolUse': return ['audit: ran', `${e.tool_name} ${what}${by} · ${e.os_user || ''} in ${e.cwd || ''}`];
+    case 'PostToolUseFailure': return ['audit: failed', `${e.tool_name} ${what}${by} · ${e.error || ''}`, 'warn'];
+    case 'PermissionRequest': return ['audit: asked', `${e.tool_name} ${what}${by}`];
+    case 'PermissionDenied': return ['audit: denied', `${e.tool_name} ${what}${by} · ${e.reason || ''}`, 'warn'];
+    case 'SubagentStart': return ['audit: subagent', `${e.agent_type} started`];
+    case 'SubagentStop': return ['audit: subagent', `${e.agent_type} stopped`];
+    case 'UserPromptSubmit': return ['audit: prompt', e.prompt || `${e.prompt_length} characters`];
+    case 'SessionStart': return ['audit: session', `started (${e.start_source || ''}) by ${e.os_user || ''} in ${e.cwd || ''}`];
+    case 'SessionEnd': return ['audit: session', `ended (${e.reason || ''})`];
+    default: return ['audit', e.hook_event || ''];
+  }
+}
+
 // Events lists what happened within one prompt, one line each.
 function Events({ events }) {
   const t0 = Date.parse(events[0]._time);
   const line = e => {
     switch (e._msg) {
-      case 'claude_code.user_prompt': return ['prompt', e.prompt_text || (e.prompt !== '<REDACTED>' && e.prompt) || `${e.prompt_length} characters`];
+      case 'claude_code.user_prompt': return ['prompt', shown(e.prompt_text) || shown(e.prompt) || `${e.prompt_length} characters`];
       case 'claude_code.api_request': return ['API call', `${who(e)} · ${e.model} · ${fmtNum(num(e.input_tokens) + num(e.cache_read_tokens) + num(e.cache_creation_tokens))} in, ${fmtNum(num(e.output_tokens))} out · ${usd(num(e.cost_usd))} · ${fmtUnit(num(e.duration_ms) / 1000, 'seconds')}`];
       case 'claude_code.api_error': return ['API error', `${e.status_code || ''} ${e.error || ''} (attempt ${e.attempt || 1})`, 'bad'];
-      case 'claude_code.assistant_response': return ['reply', `${who(e)}: ${e.response ? e.response.slice(0, 300) : num(e.response_length) + ' characters'}`];
+      case 'claude_code.assistant_response': return ['reply', `${who(e)}: ${shown(e.response) ? e.response.slice(0, 300) : num(e.response_length) + ' characters'}`];
       case 'claude_code.tool_decision': return ['permission', `${e.tool_name} ${e.decision === 'reject' ? 'refused' : 'allowed'}${e.attr_source ? ' (' + e.attr_source + ')' : ''}`, e.decision === 'reject' ? 'warn' : ''];
       case 'claude_code.tool_result': return ['tool', `${e.tool_name}${e.tool_input ? ' ' + e.tool_input.slice(0, 200) : ''} · ${fmtUnit(num(e.duration_ms) / 1000, 'seconds')}${e.success === 'false' ? ' · failed ' + (e.error || '') : ''}`, e.success === 'false' ? 'warn' : ''];
       case 'claude_code.subagent_completed': return ['subagent done', `${e.agent_type} · ${fmtNum(num(e.total_tokens))} tokens · ${e.total_tool_uses} tool uses · ${fmtUnit(num(e.duration_ms) / 1000, 'seconds')}`];
       case 'claude_code.api_refusal': return ['refusal', `${e.model} ${e.category || ''}`, 'warn'];
-      default: return [e._msg.replace(/^claude_code\./, '').replaceAll('_', ' '), ''];
+      default: return e._msg.startsWith('claude_code.hook.') ? hookLine(e) : [e._msg.replace(/^claude_code\./, '').replaceAll('_', ' '), ''];
     }
   };
   return html`<table class="events">${events.map(e => { const [k, text, lvl] = line(e); return html`<tr>

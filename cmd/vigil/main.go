@@ -26,6 +26,7 @@ func usage() {
   vigil server -config /etc/vigil/server.yaml
   vigil relay  -config /etc/vigil/relay.yaml     pass on what agents send to the server
   vigil tracegen [-endpoint http://127.0.0.1:4318] [-rate 2]   send demo traces to an agent's OTLP endpoint
+  vigil claude-hook [-endpoint http://127.0.0.1:4318] [-content]   a Claude Code hook: one audit line per call to the agent
   vigil events [-config /etc/vigil/agent.yaml]   print runtime events as they happen (Linux, root)
   vigil apply -f DIR -server URL [-prune] [-dry-run] [-immediate]   make the server's profiles match a directory
   vigil enroll -server URL -token T [-ca-pin sha256:...] [-id NAME] [-label k=v]   enrol this host and write its agent config
@@ -43,6 +44,11 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	if os.Args[1] == "claude-hook" {
+		runClaudeHook(os.Args[2:]) // never fails; see its comment
+		return
+	}
 
 	var err error
 	switch os.Args[1] {

@@ -506,7 +506,6 @@ Last updated: 2026-10-13.
   its store, all three rules healthy, ClaudeCodeOverBudget fired with a
   profile's `daily_budget`, spend from metrics equal to the sum of the
   events' `cost_usd`, the dashboard checked in the browser.
-- Not yet: hooks for an audit trail (step 5).
 
 ## AI module for Claude Code, step 4: the Sessions page (built 2026-10-19)
 
@@ -527,6 +526,30 @@ Last updated: 2026-10-13.
   event lines, the trace link.
 - Not built: colouring the trace by `agent_id`, searching sessions by
   prompt text, a session's tokens over time.
+
+## AI module for Claude Code, step 5: audit trail from hooks (built 2026-10-19)
+
+- `vigil claude-hook` (`cmd/vigil/claudehook.go`, `internal/claudehook`):
+  a Claude Code command hook that sends one OTLP log line per call to the
+  local agent (`service="claude-code-hook"`, `claude_code.hook.<Hook>`):
+  session, prompt, cwd, OS account, subagent, tool and its command /
+  file / pattern, sizes, errors, reasons. Tool output is never sent;
+  prompt text and subagent instructions only with `-content` (telemetry
+  cuts the instructions off, the hook has them whole). Prints nothing,
+  always exits 0 (hook output reaches the model for some events, exit 2
+  blocks a prompt), 500 ms timeout; about 80 ms a call.
+- The fixture is every hook call of one real run, scrubbed
+  (`internal/claudehook/testdata/hooks.jsonl`).
+- The dashboard gained three audit panels and a saved query; the
+  Sessions page shows hook lines in time order with Claude Code's events,
+  takes a prompt's text from the hook when telemetry did not send it, and
+  shows a length where Claude Code sent `<REDACTED>`.
+- Verified live with `claude -p --settings` registering the hook on nine
+  events: all 12 calls stored, the `.env` value absent, the session page
+  showing who ran what where.
+- Not built: a way to tell that hooks were removed from a machine (the
+  absence of lines is the only sign); PreToolUse (it would sit in the
+  path of every call).
 
 ## Next
 
