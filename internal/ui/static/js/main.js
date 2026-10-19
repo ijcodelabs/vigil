@@ -5,11 +5,13 @@ import { Fleet } from './fleet.js';
 import { Captures } from './captures.js';
 import { Dashboards } from './dashboards.js';
 import { Services } from './services.js';
+import { Sessions } from './sessions.js';
 
 const pages = [
   ['dashboards', 'Dashboards', Dashboards],
   ['explore', 'Explore', Explore],
   ['services', 'Services', Services],
+  ['sessions', 'Sessions', Sessions, 'ai'],
   ['alerts', 'Alerts', Alerts],
   ['captures', 'Captures', Captures],
   ['fleet', 'Fleet', Fleet],
@@ -21,7 +23,13 @@ function App() {
   const [route, setRoute] = useState({ ...parseHash(), nav: 0 });
   const [dialog, setDialog] = useState(null);
 
-  const check = () => api('/api/v1/me').then(setMe, () => setMe(null));
+  // Sessions shows while an AI module (an integration named ai_module_…)
+  // is switched on somewhere.
+  const [ai, setAi] = useState(false);
+  const check = () => api('/api/v1/me').then(m => {
+    setMe(m);
+    api('/api/v1/fleet/integrations').then(list => setAi(list.some(i => i.name.startsWith('ai_module_') && i.enabled > 0)), () => {});
+  }, () => setMe(null));
   useEffect(() => {
     setSignedOutHandler(() => setMe(null));
     check();
@@ -37,7 +45,7 @@ function App() {
   if (me === null) return html`<${Login} onDone=${check} />`;
 
   const admin = me.role === 'admin';
-  const visible = pages.filter(p => !p[3] || admin);
+  const visible = pages.filter(p => !p[3] || (p[3] === 'admin' && admin) || (p[3] === 'ai' && (ai || route.parts[0] === 'sessions')));
   const [id, , Page] = visible.find(p => p[0] === route.parts[0]) || visible[0];
   const logout = () => api('/api/v1/logout', { method: 'POST' }).then(() => setMe(null));
 

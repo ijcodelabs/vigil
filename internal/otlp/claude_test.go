@@ -52,6 +52,9 @@ func TestClaudeCodeEvents(t *testing.T) {
 		if e.Stream["service"] != "claude-code" {
 			t.Errorf("stream %v", e.Stream)
 		}
+		if e.Msg == "claude_code.tool_decision" && e.Fields["attr_source"] != "config" {
+			t.Errorf("tool_decision lost who decided: %v", e.Fields)
+		}
 		if e.Msg == "claude_code.user_prompt" {
 			prompts++
 			if e.Fields["prompt_id"] == "" || e.Fields["session_id"] == "" || e.Fields["trace_id"] == "" {

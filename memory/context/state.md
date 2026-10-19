@@ -506,8 +506,27 @@ Last updated: 2026-10-13.
   its store, all three rules healthy, ClaudeCodeOverBudget fired with a
   profile's `daily_budget`, spend from metrics equal to the sum of the
   events' `cost_usd`, the dashboard checked in the browser.
-- Not yet: the Sessions page (step 4), hooks and redaction docs for
-  audit (step 5).
+- Not yet: hooks for an audit trail (step 5).
+
+## AI module for Claude Code, step 4: the Sessions page (built 2026-10-19)
+
+- `internal/ui/static/js/sessions.js`, `#/sessions`: in the menu while an
+  integration named `ai_module_*` is switched on. The list is LogsQL
+  stats over `claude_code.api_request` (plus prompt and error counts) by
+  session; a session's page reads its events (without the startup noise:
+  plugin, MCP, settings, raw body and hook events) and groups them by
+  `prompt_id`, with cost by part (main, each subagent, helper calls) and
+  a line per event when a prompt is opened. A prompt links to its trace
+  (the existing waterfall). No new server endpoint.
+- Found and fixed: an OTLP log attribute with the name of a stream label
+  was lost (Claude Code's `tool_decision` says who decided in `source`,
+  which `source=otlp` overwrote). The agent keeps such an attribute as
+  `attr_<name>`; the dashboard's "Refused tool calls" uses `attr_source`.
+- Verified in the browser against the local capture (nine sessions,
+  desktop and terminal): list, a session with an Explore subagent, its
+  event lines, the trace link.
+- Not built: colouring the trace by `agent_id`, searching sessions by
+  prompt text, a session's tokens over time.
 
 ## Next
 

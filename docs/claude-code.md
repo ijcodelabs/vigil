@@ -122,9 +122,25 @@ subagent and model; the most expensive sessions; tools with their failures
 and duration; subagent runs; refused tool calls; the latest API errors.
 The `person` picker narrows everything to one person.
 
+## Sessions
+
+The Sessions page (in the menu while an AI module is switched on) lists
+the sessions of the shown time: person, machine, prompts, API calls,
+tokens, cost, the share spent by subagents, how long it ran and API
+errors. Most recent or most expensive first, for everyone or one person.
+
+A session's page shows its cost split by who spent it (the main
+conversation, each subagent, small helper calls such as the session
+title) and its prompts in order: what each cost, its API calls, tools and
+subagents, and how long it took. Click a prompt for everything that
+happened in it, line by line: API calls with model, tokens and cost,
+permission decisions, tool calls with their input, replies, finished
+subagents and errors. Prompt text, tool input and replies show only when
+Claude Code is set to send them (see above). Where traces are kept, a
+prompt links to its trace, with subagents nested under the tool call that
+started them.
+
 ## Not yet
 
-- A page for one session (its prompts, calls, tools and subagents in
-  order).
 - An audit trail from Claude Code's hooks.
 - Comparing with the bill (the Claude Code Analytics API).
