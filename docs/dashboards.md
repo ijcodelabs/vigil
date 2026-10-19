@@ -58,6 +58,10 @@ instead; such a query has to end in `| stats …`:
 level:error | stats by (app) count() as errors
 ```
 
+In a table, a LogsQL query with several results gets a column for each,
+titled by the result's name:
+`| stats by (path) count() as requests, avg(ms) as avg_ms`.
+
 **Legend** names each line, with labels in double braces:
 `{{agent}} in`, `{{namespace}}/{{pod}}`.
 

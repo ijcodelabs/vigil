@@ -466,9 +466,36 @@ Last updated: 2026-10-13.
 - Verified live: the masked `.env` line in VictoriaTraces, no session or
   account labels on `claude_code_token_usage_total`, no new `genai_*`
   samples from Claude Code.
-- Not yet: the `ai_module_claude` integration, the Sessions page, hooks.
-  Sessions started by the desktop app did not export at all in the
+- Sessions started by the desktop app did not export at all in the
   capture (terminal `claude` did); not understood yet.
+
+## AI module for Claude Code, step 3: the integration (built 2026-10-19)
+
+- `ai_module_claude` (`internal/fleet/integrations/ai_module_claude.yaml`,
+  example profile `configs/profiles/ai-module-claude.yaml`,
+  `docs/claude-code.md`): detects the `claude` process, opens OTLP on
+  the agent and drops the session and account labels; rules
+  ClaudeCodeOverBudget (metrics), ClaudeCodeRunawaySession and
+  ClaudeCodeApiErrors (logs); dashboard "Claude Code"; six saved queries.
+- Found on the way and fixed:
+  - Integration parameters never reached rules: `${...}` stayed in the
+    expressions, so GpuHot and GpuIdle could never have worked. Rules are
+    filled now, with the parameters of the highest-priority profile that
+    switches the integration on (rules run once per server).
+  - A sum sent as differences was written once per report, so the store
+    had single samples and `rate()` was wrong (1.5 USD/h for 0.007 USD).
+    The agent now writes a 0 when such a counter first appears and repeats
+    its running total every 15 s for an hour after the last report.
+  - Dashboard tables kept one result of a LogsQL query with several
+    (`count() as calls, avg(ms) as avg_ms`); each now gets a column. This
+    also fixes the HAProxy "slowest paths" table.
+- Verified live on the Mac (agent and server native, stores in the
+  vigil-test VM): detection, every dashboard and saved query accepted by
+  its store, all three rules healthy, ClaudeCodeOverBudget fired with a
+  profile's `daily_budget`, spend from metrics equal to the sum of the
+  events' `cost_usd`, the dashboard checked in the browser.
+- Not yet: the Sessions page (step 4), hooks and redaction docs for
+  audit (step 5).
 
 ## Next
 

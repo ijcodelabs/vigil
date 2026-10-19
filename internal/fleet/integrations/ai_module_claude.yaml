@@ -1,0 +1,150 @@
+title: "AI module: Claude Code"
+description: "What Claude Code costs and does: spend and tokens by person, model and subagent, sessions, tools, refused calls and API errors, from Claude Code's own OpenTelemetry output. Each Claude Code has to be pointed at its agent; see the Claude Code page of the docs."
+detect:
+  process: [claude]
+params:
+  daily_budget:
+    default: "50"
+    description: A person whose Claude Code use cost more than this in the last 24 hours (in USD, at API prices) raises a warning.
+  runaway_usd:
+    default: "5"
+    description: One session that cost more than this in 15 minutes raises a warning - a loop, or a task far bigger than meant.
+  error_burst:
+    default: "10"
+    description: More API errors than this from one machine in 5 minutes (rate limits, overload) raise a warning.
+config:
+  otlp:
+    enabled: true
+    metrics:
+      # Claude Code puts these on every point; with them each session and
+      # account would be a series of its own. Sessions stay in the events.
+      drop_labels: {session_id: true, user_id: true, user_account_uuid: true, user_account_id: true, organization_id: true}
+rules:
+  - name: alerts
+    interval: 1m
+    rules:
+      - alert: ClaudeCodeOverBudget
+        expr: sum by (user_email) (increase(claude_code_cost_usage_total[1d])) > ${daily_budget}
+        labels: {severity: warning}
+        annotations:
+          summary: 'Claude Code use of {{ $labels.user_email }} cost {{ $value | printf "%.2f" }} USD in the last 24 hours (budget ${daily_budget})'
+  - name: logs
+    type: logs
+    interval: 1m
+    rules:
+      - alert: ClaudeCodeRunawaySession
+        expr: '_time:15m service:~"claude-code" _msg:"claude_code.api_request" | stats by (agent, user_email, session_id) sum(cost_usd) as usd | filter usd:>${runaway_usd}'
+        labels: {severity: warning}
+        annotations:
+          summary: 'A Claude Code session of {{ $labels.user_email }} on {{ $labels.agent }} cost {{ $value }} USD in 15 minutes (session {{ $labels.session_id }})'
+      - alert: ClaudeCodeApiErrors
+        expr: '_time:5m service:~"claude-code" _msg:"claude_code.api_error" | stats by (agent) count() as errors | filter errors:>${error_burst}'
+        labels: {severity: warning}
+        annotations:
+          summary: 'Claude Code on {{ $labels.agent }} got {{ $value }} API errors in 5 minutes'
+dashboard:
+  title: Claude Code
+  variables:
+    - {name: person, label: user_email, match: claude_code_token_usage_total}
+  panels:
+    - {title: Spend in the shown time (USD), type: stat, w: 2, h: 2, queries: [{expr: 'sum(increase(claude_code_cost_usage_total{user_email=~"$person"}[$__range]))'}]}
+    - {title: Tokens in the shown time, type: stat, w: 2, h: 2, queries: [{expr: 'sum(increase(claude_code_token_usage_total{user_email=~"$person"}[$__range]))'}]}
+    - {title: Sessions started, type: stat, w: 2, h: 2, queries: [{expr: 'sum(increase(claude_code_session_count_total{user_email=~"$person"}[$__range]))'}]}
+    - {title: People, type: stat, w: 2, h: 2, queries: [{expr: 'count(sum by (user_email) (increase(claude_code_cost_usage_total{user_email=~"$person"}[$__range])) > 0) or vector(0)'}]}
+    - title: Read from cache
+      type: stat
+      w: 2
+      h: 2
+      unit: ratio
+      queries: [{expr: 'sum(increase(claude_code_token_usage_total{user_email=~"$person",type="cacheRead"}[$__range])) / sum(increase(claude_code_token_usage_total{user_email=~"$person",type=~"input|cacheRead|cacheCreation"}[$__range]))'}]
+    - title: Spent by subagents
+      type: stat
+      w: 2
+      h: 2
+      unit: ratio
+      queries: [{expr: '(sum(increase(claude_code_cost_usage_total{user_email=~"$person",query_source="subagent"}[$__range])) or vector(0)) / sum(increase(claude_code_cost_usage_total{user_email=~"$person"}[$__range]))'}]
+    - title: Spend per hour by model (USD)
+      type: timeseries
+      w: 6
+      h: 3
+      min: 0
+      queries: [{expr: 'sum by (model) (rate(claude_code_cost_usage_total{user_email=~"$person"}[10m])) * 3600', legend: '{{model}}'}]
+    - title: Spend per hour, main conversation and subagents (USD)
+      type: timeseries
+      w: 6
+      h: 3
+      min: 0
+      queries: [{expr: 'sum by (query_source) (rate(claude_code_cost_usage_total{user_email=~"$person"}[10m])) * 3600', legend: '{{query_source}}'}]
+    - title: Tokens per minute by kind
+      type: timeseries
+      w: 6
+      h: 3
+      min: 0
+      queries: [{expr: 'sum by (type) (rate(claude_code_token_usage_total{user_email=~"$person"}[10m])) * 60', legend: '{{type}}'}]
+    - title: Spend by person (USD)
+      type: table
+      w: 6
+      h: 3
+      columns: [user_email]
+      queries:
+        - {expr: 'sort_desc(sum by (user_email) (increase(claude_code_cost_usage_total{user_email=~"$person"}[$__range])))', legend: USD}
+        - {expr: 'sum by (user_email) (increase(claude_code_token_usage_total{user_email=~"$person"}[$__range]))', legend: tokens}
+    - title: Spend by subagent (USD)
+      type: table
+      w: 4
+      h: 3
+      queries: [{expr: 'sort_desc(sum by (agent_name) (increase(claude_code_cost_usage_total{user_email=~"$person",query_source="subagent"}[$__range])))', legend: '{{agent_name}}'}]
+    - title: Spend by model (USD)
+      type: table
+      w: 4
+      h: 3
+      queries: [{expr: 'sort_desc(sum by (model) (increase(claude_code_cost_usage_total{user_email=~"$person"}[$__range])))', legend: '{{model}}'}]
+    - title: Code
+      type: table
+      w: 4
+      h: 3
+      queries:
+        - {expr: 'sum by (type) (increase(claude_code_lines_of_code_count_total{user_email=~"$person"}[$__range]))', legend: 'lines {{type}}'}
+        - {expr: 'sum(increase(claude_code_commit_count_total{user_email=~"$person"}[$__range]))', legend: commits}
+        - {expr: 'sum(increase(claude_code_pull_request_count_total{user_email=~"$person"}[$__range]))', legend: pull requests}
+    - title: Most expensive sessions
+      type: table
+      source: logs
+      w: 12
+      h: 4
+      queries: [{expr: 'service:~"claude-code" _msg:"claude_code.api_request" user_email:~"$person" | stats by (session_id, user_email, agent) sum(cost_usd) as usd, count() as calls, sum(output_tokens) as output_tokens | sort by (usd desc) | limit 15'}]
+    - title: Tools
+      type: table
+      source: logs
+      w: 4
+      h: 4
+      queries: [{expr: 'service:~"claude-code" _msg:"claude_code.tool_result" user_email:~"$person" | stats by (tool_name) count() as calls, count() if (success:false) as failed, avg(duration_ms) as avg_ms | sort by (calls desc) | limit 15'}]
+    - title: Subagent runs
+      type: table
+      source: logs
+      w: 4
+      h: 4
+      queries: [{expr: 'service:~"claude-code" _msg:"claude_code.subagent_completed" user_email:~"$person" | stats by (agent_type) count() as runs, sum(total_tokens) as tokens, avg(duration_ms) as avg_ms | sort by (tokens desc)'}]
+    - title: Refused tool calls
+      type: table
+      source: logs
+      w: 4
+      h: 4
+      queries: [{expr: 'service:~"claude-code" _msg:"claude_code.tool_decision" decision:reject user_email:~"$person" | stats by (tool_name, source) count() as refused | sort by (refused desc)'}]
+    - {title: Latest API errors, type: logs, w: 12, h: 3, limit: 30, queries: [{expr: 'service:~"claude-code" _msg:"claude_code.api_error" user_email:~"$person"'}]}
+queries:
+  - name: Claude Code spend per person (USD, last 24 hours)
+    query: sort_desc(sum by (user_email) (increase(claude_code_cost_usage_total[1d])))
+  - name: Claude Code spend by model and main or subagent (USD per hour)
+    query: sum by (model, query_source) (rate(claude_code_cost_usage_total[10m])) * 3600
+  - name: Claude Code tokens by kind (per minute)
+    query: sum by (type) (rate(claude_code_token_usage_total[10m])) * 60
+  - name: Claude Code most expensive sessions
+    type: logs
+    query: service:~"claude-code" _msg:"claude_code.api_request" | stats by (session_id, user_email) sum(cost_usd) as usd, count() as calls | sort by (usd desc) | limit 20
+  - name: Claude Code tool calls
+    type: logs
+    query: service:~"claude-code" _msg:"claude_code.tool_result" | stats by (tool_name) count() as calls, count() if (success:false) as failed, avg(duration_ms) as avg_ms | sort by (calls desc)
+  - name: Claude Code refused tool calls
+    type: logs
+    query: service:~"claude-code" _msg:"claude_code.tool_decision" decision:reject

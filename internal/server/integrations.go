@@ -44,6 +44,22 @@ func (f *fleetState) usedIntegrations() []string {
 	return slices.Sorted(maps.Keys(used))
 }
 
+// ruleParams are the parameters an integration's rules run with. The rules
+// run once for the whole server while profiles may each give their own
+// values, so the profile of the highest priority that switches the
+// integration on decides; parameters it leaves out keep their defaults.
+// Called with f.mu held.
+func (f *fleetState) ruleParams(name string) map[string]string {
+	var params map[string]string
+	found, best := false, 0
+	for _, p := range f.profiles {
+		if ps, ok := p.Integrations[name]; ok && (!found || p.Priority > best) {
+			params, found, best = ps, true, p.Priority
+		}
+	}
+	return params
+}
+
 // syncIntegrations brings the server-side parts of the integrations in use
 // up to date: their dashboards are installed once, their rule groups run
 // next to the user's own.
@@ -79,9 +95,13 @@ func (s *Server) applyRules(ctx context.Context) error {
 	f := &s.fleet
 	f.mu.Lock()
 	used, catalog := f.usedIntegrations(), f.catalog
+	params := map[string]map[string]string{}
+	for _, name := range used {
+		params[name] = f.ruleParams(name)
+	}
 	f.mu.Unlock()
 	for _, name := range used {
-		groups, err := catalog[name].RuleGroups()
+		groups, err := catalog[name].RuleGroups(params[name])
 		if err != nil {
 			continue
 		}

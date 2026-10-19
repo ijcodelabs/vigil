@@ -328,17 +328,31 @@ function show(panel, data, height, onZoom) {
     if (!data.values.length) return none;
     // One row per series, one value column per query: the rows of the
     // queries are matched by their labels, whatever the metric is called.
+    // A log query whose stats give several results (count() as calls,
+    // avg(ms) as avg_ms) gets a column for each, named by the result.
+    const logs = panel.source === 'logs';
+    const named = new Map(); // query index -> result names, in the order seen
+    for (const r of data.values) {
+      const n = logs ? r.metric.__name__ : undefined;
+      if (!named.has(r.q || 0)) named.set(r.q || 0, []);
+      if (n != null && !named.get(r.q || 0).includes(n)) named.get(r.q || 0).push(n);
+    }
+    const qs = panel.queries;
+    const columns = qs.flatMap((q, i) => {
+      const names = named.get(i) || [];
+      if (names.length > 1) return names.map(n => ({ q, key: i + ':' + n, title: n }));
+      return [{ q, key: i + ':' + (names[0] ?? ''), title: qs.length > 1 ? q.legend || 'Value ' + (i + 1) : 'Value' }];
+    });
     const rows = new Map();
     for (const r of data.values) {
       const labels = Object.entries(r.metric).filter(([k]) => k !== '__name__').sort(([a], [b]) => (a < b ? -1 : 1));
       const key = JSON.stringify(labels);
-      if (!rows.has(key)) rows.set(key, { metric: r.metric, cells: [] });
-      rows.get(key).cells[r.q || 0] = r.value;
+      if (!rows.has(key)) rows.set(key, { metric: r.metric, cells: {} });
+      rows.get(key).cells[(r.q || 0) + ':' + ((logs ? r.metric.__name__ : undefined) ?? '')] = r.value;
     }
     const all = [...rows.values()];
     const cols = panel.columns && panel.columns.length ? panel.columns
       : [...new Set(all.flatMap(r => Object.keys(r.metric)))].filter(k => k !== '__name__').sort();
-    const qs = panel.queries;
     // Yellow and red by the query's thresholds; with red below yellow, low is bad.
     const level = (q, v) => {
       if (v == null || (q.warn == null && q.crit == null)) return '';
@@ -347,9 +361,9 @@ function show(panel, data, height, onZoom) {
       return past(q.crit) ? 'lvl-bad' : past(q.warn) ? 'lvl-warn' : 'lvl-ok';
     };
     return html`<div class="scroll"><table><thead><tr>${cols.map(c => html`<th>${c}</th>`)}
-      ${qs.map((q, i) => html`<th style="text-align: right">${qs.length > 1 ? q.legend || 'Value ' + (i + 1) : 'Value'}</th>`)}</tr></thead>
+      ${columns.map(c => html`<th style="text-align: right">${c.title}</th>`)}</tr></thead>
       <tbody>${all.slice(0, 200).map(r => html`<tr>${cols.map(c => html`<td class="mono">${r.metric[c] ?? ''}</td>`)}
-        ${qs.map((q, i) => html`<td class="num mono ${level(q, r.cells[i])}">${r.cells[i] == null ? '' : fmtUnit(r.cells[i], q.unit || panel.unit)}</td>`)}</tr>`)}</tbody></table></div>`;
+        ${columns.map(c => html`<td class="num mono ${level(c.q, r.cells[c.key])}">${r.cells[c.key] == null ? '' : fmtUnit(r.cells[c.key], c.q.unit || panel.unit)}</td>`)}</tr>`)}</tbody></table></div>`;
   }
   if (panel.type !== 'logs') return html`<div class="error" style="margin: 0">Unknown panel type “${panel.type}”.</div>`;
   if (!data.rows.length) return html`<div class="empty">No log lines in this time range.</div>`;

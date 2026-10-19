@@ -154,3 +154,40 @@ func TestClaudeCodeSpans(t *testing.T) {
 		}
 	}
 }
+
+// Claude Code sends each counter as a difference, once, when it changed.
+// The agent writes the running total again on its clock, so the store
+// sees an ordinary counter, and stops an hour after the last report.
+func TestDeltaTotalsRepeated(t *testing.T) {
+	in := &colmetrics.ExportMetricsServiceRequest{}
+	fixture(t, "metrics.json", in)
+	r := &Receiver{DropLabels: map[string]bool{"session_id": true}}
+	latest := map[uint64]float64{}
+	first := map[uint64]int64{}
+	for _, s := range r.convertMetrics(in) {
+		k := seriesKey(s.Name, s.Labels)
+		if _, seen := latest[k]; !seen {
+			// A new counter starts with a zero, before its first total.
+			if s.Value != 0 {
+				t.Errorf("%s %v starts at %v", s.Name, s.Labels, s.Value)
+			}
+			first[k] = s.TS
+		} else if s.TS <= first[k] {
+			t.Errorf("%s: the zero is not before the total", s.Name)
+		}
+		latest[k] = s.Value
+	}
+	now := time.Now().Add(15 * time.Second)
+	again := r.repeatTotals(now)
+	if len(again) != len(latest) {
+		t.Fatalf("%d samples repeated, %d series", len(again), len(latest))
+	}
+	for _, s := range again {
+		if v, ok := latest[seriesKey(s.Name, s.Labels)]; !ok || v != s.Value || s.TS != now.UnixMilli() {
+			t.Errorf("%s %v: %v at %d, want %v now", s.Name, s.Labels, s.Value, s.TS, v)
+		}
+	}
+	if n := len(r.repeatTotals(time.Now().Add(repeatFor + time.Minute))); n != 0 {
+		t.Errorf("%d samples repeated after an hour of silence", n)
+	}
+}

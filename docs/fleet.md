@@ -184,6 +184,11 @@ The dashboard is yours to change or delete; what happens to it when a
 newer vigil brings a newer version is described under
 [Dashboards](dashboards.md#dashboards-that-come-with-vigil).
 
+Parameters reach the alert rules as well as the agents' config. The rules
+run once for the whole server, so when several profiles switch an
+integration on with different values, the profile with the highest
+priority decides; parameters it does not give keep their defaults.
+
 nginx, PostgreSQL and Redis metrics come from their usual Prometheus
 exporters, which must run next to the service. The integration's parameters
 say where each is expected.

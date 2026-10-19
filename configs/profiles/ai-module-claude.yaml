@@ -1,0 +1,9 @@
+# Machines where people run Claude Code: the agent takes its OpenTelemetry
+# output, and the rules and the dashboard come with it. Claude Code itself
+# has to be pointed at the agent; see docs/claude-code.md.
+select:
+  - detected_ai_module_claude="true"
+priority: 15
+integrations:
+  ai_module_claude: {}
+config: {}

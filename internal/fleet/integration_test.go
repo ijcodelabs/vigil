@@ -13,7 +13,7 @@ func TestBuiltinIntegrations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Join(cat.Names(), ","); got != "docker,gpu,haproxy,kubernetes,kubernetes_cluster,nginx,postgres,redis,victoriametrics" {
+	if got := strings.Join(cat.Names(), ","); got != "ai_module_claude,docker,gpu,haproxy,kubernetes,kubernetes_cluster,nginx,postgres,redis,victoriametrics" {
 		t.Fatalf("catalog: %s", got)
 	}
 	// Each one, switched on with its defaults, gives an agent a valid config.
@@ -23,7 +23,7 @@ func TestBuiltinIntegrations(t *testing.T) {
 		if err != nil || len(r.Integrations) != 1 {
 			t.Errorf("%s: %v", name, err)
 		}
-		if groups, err := cat[name].RuleGroups(); err != nil || (len(groups) > 0 && !strings.HasPrefix(groups[0].Name, name+"/")) {
+		if groups, err := cat[name].RuleGroups(nil); err != nil || (len(groups) > 0 && !strings.HasPrefix(groups[0].Name, name+"/")) {
 			t.Errorf("%s rules: %v %+v", name, err, groups)
 		}
 	}
@@ -236,5 +236,42 @@ func TestQueries(t *testing.T) {
 	}
 	if _, err := ParseIntegration("shop", "queries: [{name: Orders, type: sql, query: x}]"); err == nil || !strings.Contains(err.Error(), "queries: ") {
 		t.Errorf("an integration with a bad query: %v", err)
+	}
+}
+
+// Parameters reach the rules as well as the config: GpuHot uses the
+// default 88, or the value a profile gives.
+func TestRuleParams(t *testing.T) {
+	cat, _ := Builtin()
+	expr := func(params map[string]string) string {
+		groups, err := cat["gpu"].RuleGroups(params)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, g := range groups {
+			for _, r := range g.Rules {
+				if r.Alert == "GpuHot" {
+					return r.Expr
+				}
+			}
+		}
+		t.Fatal("no GpuHot rule")
+		return ""
+	}
+	if e := expr(nil); e != "gpu_temperature_celsius > 88" {
+		t.Errorf("defaults: %q", e)
+	}
+	if e := expr(map[string]string{"hot_celsius": "92"}); e != "gpu_temperature_celsius > 92" {
+		t.Errorf("given: %q", e)
+	}
+	for _, name := range cat.Names() {
+		groups, _ := cat[name].RuleGroups(nil)
+		for _, g := range groups {
+			for _, r := range g.Rules {
+				if strings.Contains(r.Expr, "${") || strings.Contains(r.Annotations["summary"], "${") {
+					t.Errorf("%s %s: a parameter is left in %q", name, r.Alert, r.Expr)
+				}
+			}
+		}
 	}
 }

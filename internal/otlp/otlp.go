@@ -14,9 +14,11 @@ import (
 	"hash/fnv"
 	"io"
 	"log/slog"
+	"maps"
 	"math"
 	"net"
 	"net/http"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -74,7 +76,16 @@ type running struct {
 	sum, count float64
 	buckets    []float64
 	seen       time.Time
+	// last are the samples written from this series' latest report. A
+	// sender of differences reports only when something changed, so they
+	// are written again on a clock (repeatTotals); a counter with a single
+	// sample has no rate.
+	last []model.Sample
 }
+
+// repeatFor is how long the running total of a series that stopped
+// reporting is still written.
+const repeatFor = time.Hour
 
 // Run serves until ctx is cancelled.
 func (r *Receiver) Run(ctx context.Context) error {
@@ -89,24 +100,27 @@ func (r *Receiver) Run(ctx context.Context) error {
 		defer cancel()
 		srv.Shutdown(shut)
 	}()
-	if r.Spans != nil {
-		// The span counters are running totals; they are sent on a clock,
-		// like a scrape, whether or not spans arrived in between.
-		go func() {
-			t := time.NewTicker(15 * time.Second)
-			defer t.Stop()
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case now := <-t.C:
-					if samples := r.traceMetrics(now); len(samples) > 0 {
-						r.Metrics(samples)
-					}
+	// Running totals (span counters, and sums sent as differences) are
+	// written on a clock, like a scrape, whether or not anything arrived
+	// in between.
+	go func() {
+		t := time.NewTicker(15 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case now := <-t.C:
+				samples := r.repeatTotals(now)
+				if r.Spans != nil {
+					samples = append(samples, r.traceMetrics(now)...)
+				}
+				if len(samples) > 0 {
+					r.Metrics(samples)
 				}
 			}
-		}()
-	}
+		}
+	}()
 	r.Log.Info("OTLP endpoint on", "addr", ln.Addr().String(), "traces", r.Spans != nil)
 	if err := srv.Serve(ln); !errors.Is(err, http.ErrServerClosed) {
 		return err
@@ -287,6 +301,25 @@ func (r *Receiver) metricLabels(base map[string]string, attrs []*commonpb.KeyVal
 	return out
 }
 
+// repeatTotals returns the latest samples of every series sent as
+// differences that reported within repeatFor, stamped now.
+func (r *Receiver) repeatTotals(now time.Time) []model.Sample {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []model.Sample
+	for _, t := range r.totals {
+		if now.Sub(t.seen) > repeatFor {
+			continue
+		}
+		for _, s := range t.last {
+			s.Labels = maps.Clone(s.Labels)
+			s.TS = now.UnixMilli()
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 func seriesKey(name string, labels map[string]string) uint64 {
 	keys := make([]string, 0, len(labels))
 	for k := range labels {
@@ -378,8 +411,23 @@ func (r *Receiver) convertMetrics(in *colmetrics.ExportMetricsServiceRequest) []
 						labels, v := r.metricLabels(base, p.GetAttributes()), number(p)
 						if delta && !math.IsNaN(v) {
 							t := r.total(name, labels, now)
+							ts := millis(p.GetTimeUnixNano(), now)
+							if t.last == nil {
+								// A new counter starts at zero, at the start of
+								// the first difference; without that sample the
+								// store cannot tell how fast it rose.
+								start := millis(p.GetStartTimeUnixNano(), now)
+								if start >= ts || p.GetStartTimeUnixNano() == 0 {
+									start = ts - 1000
+								}
+								add(name, labels, 0, start)
+							}
 							t.sum += v
 							v = t.sum
+							from := len(out)
+							add(name, labels, v, ts)
+							t.last = slices.Clone(out[from:])
+							continue
 						}
 						add(name, labels, v, millis(p.GetTimeUnixNano(), now))
 					}
@@ -392,8 +440,10 @@ func (r *Receiver) convertMetrics(in *colmetrics.ExportMetricsServiceRequest) []
 							counts[i] = float64(c)
 						}
 						sum, count := p.GetSum(), float64(p.GetCount())
+						var t *running
+						from := len(out)
 						if delta {
-							t := r.total(name, labels, now)
+							t = r.total(name, labels, now)
 							if len(t.buckets) != len(counts) {
 								t.buckets = make([]float64, len(counts))
 							}
@@ -420,6 +470,9 @@ func (r *Receiver) convertMetrics(in *colmetrics.ExportMetricsServiceRequest) []
 							add(name+"_sum", labelsOf(labels, nil), sum, ts)
 						}
 						add(name+"_count", labelsOf(labels, nil), count, ts)
+						if t != nil {
+							t.last = slices.Clone(out[from:])
+						}
 					}
 				case *metricspb.Metric_Summary:
 					for _, p := range d.Summary.GetDataPoints() {
