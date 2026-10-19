@@ -314,6 +314,10 @@ Its metrics and logs arrive labelled `service="checkout"`, and its traces
 feed the Services pages; see [Services and traces](apm.md) for sampling
 (`otlp.traces`) and what is shown. gRPC (port 4317) is not supported yet.
 
+Attributes of log records become fields of the line. One with the name of
+a stream label (`service`, `source`) is kept as `attr_<name>`, because the
+log store holds one value per name.
+
 Every attribute of a metric point becomes a label. Some tools put an id
 on every point (a session, a user account), which makes a new series each
 time. Leave such labels out by their stored name (dots become `_`):

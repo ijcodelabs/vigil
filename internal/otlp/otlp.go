@@ -525,7 +525,14 @@ func convertLogs(in *collogs.ExportLogsServiceRequest) []model.LogEntry {
 				e := model.LogEntry{Time: int64(ts), Msg: anyString(rec.GetBody()), Stream: stream, Fields: map[string]string{}}
 				for _, kv := range rec.GetAttributes() {
 					if v := anyString(kv.Value); v != "" {
-						e.Fields[sanitize(kv.Key)] = v
+						k := sanitize(kv.Key)
+						if _, taken := stream[k]; taken {
+							// The log store keeps one value per name, and the
+							// stream label would win: Claude Code's
+							// tool_decision says who decided in "source".
+							k = "attr_" + k
+						}
+						e.Fields[k] = v
 					}
 				}
 				level := strings.ToLower(rec.GetSeverityText())

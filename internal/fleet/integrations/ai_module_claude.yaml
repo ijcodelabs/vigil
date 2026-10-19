@@ -130,7 +130,7 @@ dashboard:
       source: logs
       w: 4
       h: 4
-      queries: [{expr: 'service:~"claude-code" _msg:"claude_code.tool_decision" decision:reject user_email:~"$person" | stats by (tool_name, source) count() as refused | sort by (refused desc)'}]
+      queries: [{expr: 'service:~"claude-code" _msg:"claude_code.tool_decision" decision:reject user_email:~"$person" | stats by (tool_name, attr_source) count() as refused | sort by (refused desc)'}]
     - {title: Latest API errors, type: logs, w: 12, h: 3, limit: 30, queries: [{expr: 'service:~"claude-code" _msg:"claude_code.api_error" user_email:~"$person"'}]}
 queries:
   - name: Claude Code spend per person (USD, last 24 hours)
