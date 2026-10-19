@@ -466,8 +466,20 @@ Last updated: 2026-10-13.
 - Verified live: the masked `.env` line in VictoriaTraces, no session or
   account labels on `claude_code_token_usage_total`, no new `genai_*`
   samples from Claude Code.
-- Sessions started by the desktop app did not export at all in the
-  capture (terminal `claude` did); not understood yet.
+- Why desktop-app sessions did not export (found 2026-10-19, Claude Code
+  2.1.299 and 2.1.303): telemetry `env` from a project's
+  `.claude/settings.local.json` is obeyed only by interactive terminal
+  sessions; `claude -p` and the desktop app (which runs Claude Code
+  without a terminal, `--setting-sources=user,project,local`) ignore it,
+  also in a trusted folder. The same env in `~/.claude/settings.json` or
+  `--settings` exports from both. The desktop app sets
+  `OTEL_SERVICE_NAME=claude-code-desktop` and its own
+  `OTEL_RESOURCE_ATTRIBUTES`, which wins over one from settings, so
+  `team` has to come from the agent's labels there. Confirmed with real
+  desktop sessions after putting the env in `~/.claude/settings.json`
+  and restarting the app: events and metrics arrive as
+  `claude-code-desktop`. Seen there besides the known events:
+  `hook_execution_start`/`_complete` and `retention_sweep`.
 
 ## AI module for Claude Code, step 3: the integration (built 2026-10-19)
 
