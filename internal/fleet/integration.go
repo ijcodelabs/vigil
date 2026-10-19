@@ -96,7 +96,7 @@ func ParseIntegration(name, text string) (*Integration, error) {
 	if err := fdec.Decode(&config.Collection{}); err != nil && !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("config: %w", err)
 	}
-	if _, err := in.RuleGroups(); err != nil {
+	if _, err := in.RuleGroups(nil); err != nil {
 		return nil, fmt.Errorf("rules: %w", err)
 	}
 	if err := CheckQueries(in.Queries); err != nil {
@@ -118,7 +118,21 @@ func (in *Integration) Fragment(params map[string]string) (map[string]any, error
 			return nil, fmt.Errorf("integration %s has no parameter %q (it has: %s)", in.Name, k, strings.Join(known, ", "))
 		}
 	}
-	var missing string
+	filled, missing := in.fill(in.Config, params)
+	if missing != "" {
+		return nil, fmt.Errorf("integration %s: config uses ${%s}, which is not declared under params", in.Name, missing)
+	}
+	frag, _ := filled.(map[string]any)
+	if frag == nil {
+		frag = map[string]any{}
+	}
+	return frag, nil
+}
+
+// fill replaces ${param} in every string of v (and in map keys) by the
+// given value, or the parameter's default. missing names a parameter that
+// is used but not declared.
+func (in *Integration) fill(v any, params map[string]string) (out any, missing string) {
 	sub := func(s string) string {
 		return paramRe.ReplaceAllStringFunc(s, func(m string) string {
 			k := m[2 : len(m)-1]
@@ -152,23 +166,25 @@ func (in *Integration) Fragment(params map[string]string) (map[string]any, error
 		}
 		return v
 	}
-	frag, _ := walk(in.Config).(map[string]any)
-	if missing != "" {
-		return nil, fmt.Errorf("integration %s: config uses ${%s}, which is not declared under params", in.Name, missing)
-	}
-	if frag == nil {
-		frag = map[string]any{}
-	}
-	return frag, nil
+	return walk(v), missing
 }
 
-// RuleGroups returns the integration's rule groups, named after it so they
+// RuleGroups returns the integration's rule groups with the given
+// parameters filled in (defaults for the rest), named after it so they
 // cannot collide with the user's own.
-func (in *Integration) RuleGroups() ([]rules.Group, error) {
+func (in *Integration) RuleGroups(params map[string]string) ([]rules.Group, error) {
 	if len(in.Rules) == 0 {
 		return nil, nil
 	}
-	text, _ := yaml.Marshal(map[string]any{"groups": in.Rules})
+	groups := make([]any, len(in.Rules))
+	for i, g := range in.Rules {
+		groups[i] = map[string]any(g)
+	}
+	filled, missing := in.fill(groups, params)
+	if missing != "" {
+		return nil, fmt.Errorf("integration %s: rules use ${%s}, which is not declared under params", in.Name, missing)
+	}
+	text, _ := yaml.Marshal(map[string]any{"groups": filled})
 	f, err := rules.Parse(string(text))
 	if err != nil {
 		return nil, err
