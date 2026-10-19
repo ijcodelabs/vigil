@@ -314,6 +314,36 @@ type OTLP struct {
 		// SlowerThan: spans at least this slow are stored whatever Sample says.
 		SlowerThan Duration `yaml:"slower_than"`
 	} `yaml:"traces"`
+	Metrics struct {
+		// DropLabels removes attributes from every metric point before it
+		// is stored, by label name as stored (session.id is session_id).
+		// A map so that profiles add to it; false keeps a label another
+		// profile dropped. Points that differ only in a dropped label are
+		// added up when they are differences (delta temporality), which is
+		// what tools that put a session id on every point send.
+		DropLabels map[string]bool `yaml:"drop_labels"`
+	} `yaml:"metrics"`
+}
+
+// Redact masks secrets in what the agent sends: the message and fields of
+// every log line, from every source, and the attributes and events of
+// stored spans. It runs on the agent, so a secret never reaches the
+// server or the stores.
+type Redact struct {
+	// Builtin masks common credentials: private keys, cloud and API keys,
+	// bearer tokens, passwords in URLs, and values named password, secret,
+	// token or api_key. Default true.
+	Builtin *bool        `yaml:"builtin"`
+	Rules   []RedactRule `yaml:"rules"`
+}
+
+// RedactRule replaces what Match finds with Replace, in which $1 and
+// ${name} refer to groups of Match. Replace defaults to [redacted].
+type RedactRule struct {
+	Name    string `yaml:"name"`
+	Match   string `yaml:"match"`
+	Replace string `yaml:"replace"`
+	Enabled *bool  `yaml:"enabled"`
 }
 
 // Limits protect the stores from one host. What goes over is dropped on
@@ -338,6 +368,7 @@ type Collection struct {
 	Systemd     Systemd           `yaml:"systemd"`
 	GPU         GPU               `yaml:"gpu"`
 	OTLP        OTLP              `yaml:"otlp"`
+	Redact      Redact            `yaml:"redact"`
 	Limits      Limits            `yaml:"limits"`
 	Cluster     Cluster           `yaml:"cluster"`
 }
@@ -504,6 +535,25 @@ func (c *Collection) Check() error {
 			return fmt.Errorf("log source %s is defined twice", f.Name)
 		}
 		names[f.Name] = true
+	}
+	redacts := map[string]bool{}
+	for i, r := range c.Redact.Rules {
+		if !itemNameRe.MatchString(r.Name) {
+			return fmt.Errorf("redact.rules[%d]: name is required (letters, digits, . _ -)", i)
+		}
+		if redacts[r.Name] {
+			return fmt.Errorf("redact rule %s is defined twice", r.Name)
+		}
+		redacts[r.Name] = true
+		if Off(r.Enabled) {
+			continue
+		}
+		if r.Match == "" {
+			return fmt.Errorf("redact rule %s: match is required", r.Name)
+		}
+		if _, err := regexp.Compile(r.Match); err != nil {
+			return fmt.Errorf("redact rule %s: match: %v", r.Name, err)
+		}
 	}
 	return nil
 }

@@ -24,6 +24,11 @@ true}` on the agents, and the application pointed at its agent. Every call
 is counted whatever the trace sampling is. The calls also show as traces,
 with the model as something the service depends on.
 
+Claude Code is not counted here: it reports its own usage and cost
+(`claude_code_token_usage_total`, `claude_code_cost_usage_total`), and
+its spans name the model but carry no `gen_ai.usage.*` tokens, so counting
+them too would show its calls twice.
+
 `model` is the model that answered (`gen_ai.response.model`), which usually
 carries a version date. How `input` relates to `cache_read` differs by
 provider and library: some report cached tokens inside the input count,

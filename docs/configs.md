@@ -314,6 +314,53 @@ Its metrics and logs arrive labelled `service="checkout"`, and its traces
 feed the Services pages; see [Services and traces](apm.md) for sampling
 (`otlp.traces`) and what is shown. gRPC (port 4317) is not supported yet.
 
+Every attribute of a metric point becomes a label. Some tools put an id
+on every point (a session, a user account), which makes a new series each
+time. Leave such labels out by their stored name (dots become `_`):
+
+```yaml
+otlp:
+  enabled: true
+  metrics:
+    drop_labels: {session_id: true, user_account_uuid: true}
+```
+
+It is a map so that profiles add to it; `false` keeps a label that
+another profile dropped. Points that differ only in a dropped label are
+added up when they are sent as differences (delta temporality, as Claude
+Code sends them). Two running totals that differ only in a dropped label
+cannot be added up and overwrite each other, so drop only labels that
+cumulative senders do not need.
+
+### Secrets in what is sent
+
+The agent masks secrets before anything leaves the host: in the message
+and fields of every log line, from every source, and in the attributes
+and events of stored spans (a tool's output arrives as a span event). A
+secret masked here is never in the server's stores.
+
+The built-in rules are on unless switched off. They mask private keys,
+Anthropic, OpenAI, GitHub, GitLab, Slack, AWS and Google keys, JSON web
+tokens, bearer and basic credentials, passwords in URLs, and any value
+named password, secret, token, api_key, access_key, private_key,
+client_secret or auth (`DB_PASSWORD=...` becomes `DB_PASSWORD=[redacted]`;
+`input_tokens=1225` is left alone). Add rules of your own:
+
+```yaml
+redact:
+  # builtin: false                    # only the rules below
+  rules:
+    - name: card                      # keep the first and last four digits
+      match: '\b(\d{4})\d{8}(\d{4})\b'
+      replace: '$1********$2'         # default [redacted]
+    - name: customer
+      match: 'customer=\S+'
+```
+
+Rules merge by name across profiles, and `enabled: false` switches one
+off. Stream labels (container, unit, app) are not masked, and neither are
+metrics.
+
 ### Limits
 
 ```yaml

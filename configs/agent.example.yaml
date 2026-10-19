@@ -80,6 +80,15 @@ otlp:
   # traces:
   #   sample: 1                     # share of traces stored in full; failed spans always are
   #   slower_than: 1s               # always store spans at least this slow
+  # metrics:
+  #   drop_labels: {session_id: true}   # attributes not to keep as labels
+
+# Secrets are masked before anything is sent (log lines, span attributes
+# and events). Built-in rules for keys, tokens and passwords are on.
+# redact:
+#   builtin: true
+#   rules:
+#     - {name: customer, match: 'customer=\S+'}
 
 # What this host may send at most. Anything over is dropped here and counted
 # in vigil_agent_dropped_total.

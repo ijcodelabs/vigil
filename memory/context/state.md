@@ -442,6 +442,34 @@ Last updated: 2026-10-13.
 - Not built: exporting vigil's dashboards as Grafana JSON, tokens limited
   to some agents or labels, a limit on query load per token.
 
+## AI module for Claude Code, step 2 of the plan: agent side (built 2026-10-19)
+
+- A real Claude Code session (2.1.303, every content flag on, one Explore
+  subagent, `cat .env`) was recorded through a local capture and is kept,
+  scrubbed, as `internal/otlp/testdata/claude_code/` (protojson).
+- What it sends: the event name as the body (no change needed), `team`
+  and every resource attribute copied onto points and events, about 17
+  labels per metric point including `session_id` and four account ids,
+  `prompt.id` and the interaction's trace id on every event, `agent_id`
+  on subagent spans, and a tool's output as a `tool.output` span event.
+  With `OTEL_LOG_TOOL_CONTENT` the output of `cat .env` arrived in clear.
+- `otlp.metrics.drop_labels` (a map, merged across profiles): labels left
+  out of every OTLP point; delta points that then coincide are added up.
+- `redact` (`internal/redact`): built-in rules for keys, tokens, private
+  keys, passwords in URLs and values named password/secret/token/api_key,
+  on unless `builtin: false`; `rules` merge by name. Applied on the agent
+  to every log line from every source (message and fields, not stream
+  labels) and to the attributes and events of stored spans.
+- Spans of `claude-code` / `claude-code-desktop` are not counted into
+  `genai_*`: Claude Code reports its usage itself, and its spans carry
+  model names without `gen_ai.usage.*` tokens.
+- Verified live: the masked `.env` line in VictoriaTraces, no session or
+  account labels on `claude_code_token_usage_total`, no new `genai_*`
+  samples from Claude Code.
+- Not yet: the `ai_module_claude` integration, the Sessions page, hooks.
+  Sessions started by the desktop app did not export at all in the
+  capture (terminal `claude` did); not understood yet.
+
 ## Next
 
 - The config-at-scale list is done. Open: step 7 (AI investigator, MCP
