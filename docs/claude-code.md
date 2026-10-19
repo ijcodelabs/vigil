@@ -26,7 +26,7 @@ integrations:
 This opens the agent's OpenTelemetry endpoint on `127.0.0.1:4318`, starts
 the rules and installs the "Claude Code" dashboard.
 
-Then point Claude Code at the agent. In `~/.claude/settings.json` for one
+Then point Claude Code at the agent, in `~/.claude/settings.json` for one
 person, or in Claude Code's managed settings for everyone on the machine
 (so that it cannot be switched off):
 
@@ -37,15 +37,24 @@ person, or in Claude Code's managed settings for everyone on the machine
     "OTEL_METRICS_EXPORTER": "otlp",
     "OTEL_LOGS_EXPORTER": "otlp",
     "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf",
-    "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318",
-    "OTEL_RESOURCE_ATTRIBUTES": "team=platform"
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318"
   }
 }
 ```
 
-`team` (any name of yours) arrives on every metric and event, so spend can
-be split by team. A Claude Code started from a terminal sends; sessions
-started from the Claude desktop app did not send in our tests.
+It has to be one of those two. A project's `.claude/settings.json` or
+`.claude/settings.local.json` is only obeyed by Claude Code running
+interactively in a terminal: `claude -p` and the sessions of the Claude
+desktop app ignore telemetry settings from there, even in a trusted folder.
+(Tried with Claude Code 2.1.299 and 2.1.303.)
+
+Sessions of the desktop app report as `claude-code-desktop`, the terminal
+as `claude-code`; the dashboard and rules take both. To split spend by
+team, give the agent a label (`labels: {team: platform}` in its file or a
+profile): every metric and event it passes on carries it.
+`OTEL_RESOURCE_ATTRIBUTES` in Claude Code's settings works for the
+terminal, but the desktop app sets that variable itself and the app's
+value wins.
 
 ## What arrives
 
