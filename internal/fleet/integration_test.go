@@ -3,9 +3,12 @@ package fleet
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ijcodelabs/vigil/internal/config"
 	"github.com/ijcodelabs/vigil/internal/logs"
+	"github.com/ijcodelabs/vigil/internal/rules"
+	"github.com/prometheus/common/model"
 )
 
 func TestBuiltinIntegrations(t *testing.T) {
@@ -273,5 +276,40 @@ func TestRuleParams(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// Integrations that spend money write the common cost metric. The AI costs
+// dashboard adds its samples up as one minute each, and tells billed money
+// from subscription use by the billing label.
+func TestCostRules(t *testing.T) {
+	cat, _ := Builtin()
+	cost := func(name string, params map[string]string) (rules.Group, rules.Rule) {
+		t.Helper()
+		groups, err := cat[name].RuleGroups(params)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, g := range groups {
+			for _, r := range g.Rules {
+				if r.Record == "ai_cost_usd_per_minute" {
+					return g, r
+				}
+			}
+		}
+		t.Fatalf("%s: no ai_cost_usd_per_minute rule", name)
+		return rules.Group{}, rules.Rule{}
+	}
+	for _, name := range []string{"ai_module_claude", "gpu"} {
+		g, r := cost(name, nil)
+		if g.Interval != model.Duration(time.Minute) || r.Labels["source"] == "" || r.Labels["billing"] == "" || !strings.Contains(r.Expr, `"owner"`) {
+			t.Errorf("%s: interval %v, labels %v, expr %q", name, g.Interval, r.Labels, r.Expr)
+		}
+	}
+	if _, r := cost("ai_module_claude", nil); r.Labels["billing"] != "api" || r.Labels["tool"] != "claude_code" {
+		t.Errorf("claude by default: %v", r.Labels)
+	}
+	if _, r := cost("ai_module_claude", map[string]string{"billing": "subscription"}); r.Labels["billing"] != "subscription" {
+		t.Errorf("claude on a subscription: %v", r.Labels)
 	}
 }

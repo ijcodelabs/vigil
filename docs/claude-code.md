@@ -69,7 +69,16 @@ every metric point out of the metrics (`otlp.metrics.drop_labels`): with
 them, every session would be a new series. Sessions are in the events.
 
 Cost is what Claude Code computes at API prices. On a subscription that is
-what the same use would cost through the API, not what is billed.
+what the same use would cost through the API, not what is billed. Say
+which it is with the integration's `billing` parameter, `api` (the
+default) or `subscription`; the [AI costs](finops.md) dashboard then counts
+it as billed or shows it apart as API-equivalent:
+
+```yaml
+integrations:
+  ai_module_claude:
+    billing: subscription
+```
 
 Traces need two more settings in Claude Code and a trace store in vigil
 (see [Services and traces](apm.md)):

@@ -44,6 +44,15 @@ rules:
         labels: {severity: info}
         annotations:
           summary: 'GPU {{ $labels.gpu }} of {{ $labels.agent }} has held memory for ${idle_hours} hours while computing almost nothing'
+  # What the GPUs cost, as part of the common cost metric (see the AI costs
+  # dashboard): the hour price from the server's costs.gpu_hours, a minute
+  # of it per GPU, used or not. GPUs without a price are left out.
+  - name: costs
+    interval: 1m
+    rules:
+      - record: ai_cost_usd_per_minute
+        expr: 'sum by (agent, owner, model) (label_replace(gpu_info, "owner", "$1", "agent", "(.*)") * on (model) group_left gpu_hour_price) / 60'
+        labels: {source: gpu, billing: hourly}
   - name: logs
     type: logs
     interval: 1m

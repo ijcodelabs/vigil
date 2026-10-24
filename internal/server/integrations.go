@@ -92,6 +92,13 @@ func (s *Server) applyRules(ctx context.Context) error {
 		file.Groups = append(file.Groups, g)
 		taken[g.Name] = true
 	}
+	if len(s.cfg.Costs.Tokens) > 0 {
+		for _, g := range costRuleGroups() {
+			if !taken[g.Name] {
+				file.Groups = append(file.Groups, g)
+			}
+		}
+	}
 	f := &s.fleet
 	f.mu.Lock()
 	used, catalog := f.usedIntegrations(), f.catalog

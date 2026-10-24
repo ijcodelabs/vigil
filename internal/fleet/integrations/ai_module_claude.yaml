@@ -12,6 +12,9 @@ params:
   error_burst:
     default: "10"
     description: More API errors than this from one machine in 5 minutes (rate limits, overload) raise a warning.
+  billing:
+    default: api
+    description: "How this Claude Code use is paid: api (an API key, paid per token) or subscription (Pro, Max, Team or Enterprise seats). Subscription use is shown on the AI costs dashboard apart from what is billed, as what it would cost through the API."
 config:
   otlp:
     enabled: true
@@ -28,6 +31,13 @@ rules:
         labels: {severity: warning}
         annotations:
           summary: 'Claude Code use of {{ $labels.user_email }} cost {{ $value | printf "%.2f" }} USD in the last 24 hours (budget ${daily_budget})'
+  # Claude Code's share of the common cost metric (see the AI costs dashboard).
+  - name: costs
+    interval: 1m
+    rules:
+      - record: ai_cost_usd_per_minute
+        expr: 'sum by (agent, owner, model) (label_replace(increase(claude_code_cost_usage_total[1m]), "owner", "$1", "user_email", "(.*)"))'
+        labels: {source: coding_tool, tool: claude_code, billing: "${billing}"}
   - name: logs
     type: logs
     interval: 1m

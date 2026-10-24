@@ -1,9 +1,12 @@
 package server
 
 import (
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/ijcodelabs/vigil/internal/config"
+	"github.com/prometheus/common/model"
 )
 
 func TestPriceMatching(t *testing.T) {
@@ -27,5 +30,21 @@ func TestPriceMatching(t *testing.T) {
 	}
 	if _, ok := gpuPrice(gpus[1:], "AMD 1002:744C"); ok {
 		t.Error("without a default entry an unknown card should have no price")
+	}
+}
+
+// The server's own share of the cost metric: model calls of applications,
+// one sample a minute like every other source.
+func TestCostRuleGroups(t *testing.T) {
+	groups := costRuleGroups()
+	if len(groups) != 1 || groups[0].Name != "ai_costs" || groups[0].Interval != model.Duration(time.Minute) || len(groups[0].Rules) != 2 {
+		t.Fatalf("groups: %+v", groups)
+	}
+	r := groups[0].Rules[0]
+	if r.Record != "ai_cost_usd_per_minute" || r.Labels["source"] != "application" || r.Labels["billing"] != "api" || !strings.Contains(r.Expr, "genai_token_price") {
+		t.Errorf("rule: %+v", r)
+	}
+	if own := groups[0].Rules[1]; own.Labels["source"] != "vigil" || !strings.Contains(own.Expr, "vigil_ai_cost_total") {
+		t.Errorf("vigil's own: %+v", own)
 	}
 }
