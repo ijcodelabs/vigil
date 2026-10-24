@@ -281,6 +281,9 @@ func TestAgentTokensAndProfiles(t *testing.T) {
 	if code, body, _ := admin("POST", "/api/v1/fleet/match", `{"select":["kernel=~\"6\\\\..*\""]}`); code != 200 || !strings.Contains(body, `"matched":2`) || !strings.Contains(body, `"of":3`) {
 		t.Errorf("match preview: %d %s", code, body)
 	}
+	if code, body, _ := admin("POST", "/api/v1/fleet/match", `{"select":["role=\"none\""]}`); code != 200 || !strings.Contains(body, `"matched":0`) || !strings.Contains(body, `"agents":[]`) {
+		t.Errorf("match preview of nothing: %d %s", code, body)
+	}
 
 	// Each agent gets its own merge.
 	code, cfgDB, h := poll("ingest", "db-01", `{"labels":{"env":"prod","role":"db"},"facts":{"os":"linux","kernel":"6.8.0"}}`)

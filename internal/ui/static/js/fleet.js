@@ -389,8 +389,8 @@ function ProfileEditor({ name, initial, readOnly, onClose }) {
       <textarea rows="20" spellcheck="false" readonly=${readOnly} value=${text || ''} onInput=${e => setText(e.target.value)} onKeyDown=${tab} aria-label="Profile"></textarea>`}
     ${preview && (preview.invalid
       ? html`<div class="error">${preview.invalid}</div>`
-      : html`<p class="muted" style="margin: 8px 0 0">Applies to <strong>${preview.matched}</strong> of ${preview.of} agents${preview.agents.length ? ': ' : '.'}
-          ${preview.agents.slice(0, 12).map(a => html`<span class="chip">${a}</span>`)}${preview.matched > 12 ? ` and ${preview.matched - 12} more` : ''}</p>
+      : html`<p class="muted" style="margin: 8px 0 0">Applies to <strong>${preview.matched}</strong> of ${preview.of} agents${preview.agents?.length ? ': ' : '.'}
+          ${(preview.agents || []).slice(0, 12).map(a => html`<span class="chip">${a}</span>`)}${preview.matched > 12 ? ` and ${preview.matched - 12} more` : ''}</p>
         ${preview.problem && html`<div class="error">Saving this would be refused: ${preview.problem}</div>`}`)}
     <${ErrorBox} error=${error} />
     ${versions && versions.length > 0 && html`<details style="margin-top: 12px"><summary class="muted" style="cursor: pointer">History (${versions.length} versions)</summary>

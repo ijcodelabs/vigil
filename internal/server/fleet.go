@@ -638,7 +638,7 @@ func (s *Server) handleMatch(w http.ResponseWriter, r *http.Request) {
 	}
 	f := &s.fleet
 	f.mu.Lock()
-	var ids []string
+	ids := []string{} // [] rather than null when nothing matches: the editor reads its length
 	for id, attrs := range f.attrs {
 		if p.Matches(attrs) {
 			ids = append(ids, id)
