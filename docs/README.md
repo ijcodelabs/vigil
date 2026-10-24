@@ -37,6 +37,7 @@ every host or Kubernetes node and as the **server** in the middle.
 | see how your applications do: requests, errors, latency, traces | [Services and traces](apm.md) |
 | watch GPUs and what AI use costs | [GPUs and AI machines](gpu.md), [AI costs](finops.md) |
 | see what Claude Code costs and does | [Claude Code](claude-code.md) |
+| see at a glance what needs attention | [Home](home.md) |
 | be told when something is wrong | [Alerts](alerts.md) |
 | see what processes do, and catch intrusions | [Runtime events](security.md) |
 | know what a metric means | [Metric reference](metrics.md) |

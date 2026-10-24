@@ -23,6 +23,7 @@ var pages = []struct{ name, title string }{
 	{"fleet", "Fleet: profiles and integrations"},
 	{"kubernetes", "Kubernetes"},
 	{"relay", "Relays"},
+	{"home", "Home"},
 	{"explore", "Explore"},
 	{"apm", "Services and traces"},
 	{"gpu", "GPUs and AI machines"},

@@ -678,6 +678,9 @@ type Server struct {
 	// models and hours of GPUs. Without them usage is still counted, just
 	// not priced.
 	Costs Costs `yaml:"costs"`
+	// AI explains incidents with a language model. Off unless a provider
+	// is set.
+	AI AI `yaml:"ai"`
 	// TrustedProxies are the addresses (or networks) of reverse proxies in
 	// front of the server. Only from them is X-Forwarded-For believed, so
 	// that sign-in limits and the addresses shown are those of the real
@@ -750,6 +753,35 @@ type Costs struct {
 	// GPUHours: price of one GPU for one hour, matched the same way against
 	// the model the card reports; an entry with an empty model is the default.
 	GPUHours []GPUPrice `yaml:"gpu_hours"`
+}
+
+// AI is the language model that explains incidents on the Home page.
+type AI struct {
+	Provider string `yaml:"provider"` // anthropic; empty: no AI
+	Model    string `yaml:"model"`    // default claude-opus-5-5
+	Effort   string `yaml:"effort"`   // low, medium, high, xhigh or max; default low
+	// APIKeyFile holds the provider's key; read on every call, so a new key
+	// needs no restart.
+	APIKeyFile string `yaml:"api_key_file"`
+	BaseURL    string `yaml:"base_url"` // a proxy or gateway in front of the provider
+	// Data lists what may be sent besides metadata (names, states, numbers):
+	// "logs", masked log excerpts chosen for the incident. Captures,
+	// command lines and prompt or tool content are never sent.
+	Data []string `yaml:"data"`
+	// MonthlyBudget stops explanations once this much was spent in the
+	// calendar month (in the currency of costs; the model needs a price
+	// there). Required: nothing runs without a ceiling.
+	MonthlyBudget float64 `yaml:"monthly_budget"`
+}
+
+// Allows says whether a data class may be sent.
+func (a AI) Allows(class string) bool {
+	for _, d := range a.Data {
+		if d == class {
+			return true
+		}
+	}
+	return false
 }
 
 type TokenPrice struct {
@@ -867,6 +899,9 @@ func LoadServer(path string) (*Server, error) {
 			return nil, fmt.Errorf("%s: costs.tokens[%d] needs a model, and prices cannot be negative", path, i)
 		}
 	}
+	if err := c.AI.check(c.Costs); err != nil {
+		return nil, fmt.Errorf("%s: ai: %w", path, err)
+	}
 	for i, g := range c.Costs.GPUHours {
 		if g.Price < 0 {
 			return nil, fmt.Errorf("%s: costs.gpu_hours[%d]: the price cannot be negative", path, i)
@@ -922,6 +957,48 @@ func LoadServer(path string) (*Server, error) {
 		c.Interval = Duration(15 * time.Second)
 	}
 	return c, nil
+}
+
+func (a *AI) check(costs Costs) error {
+	switch a.Provider {
+	case "":
+		return nil
+	case "anthropic":
+	default:
+		return fmt.Errorf("provider %q is not known (anthropic)", a.Provider)
+	}
+	if a.Model == "" {
+		a.Model = "claude-opus-5-5"
+	}
+	if a.Effort == "" {
+		a.Effort = "low"
+	}
+	switch a.Effort {
+	case "low", "medium", "high", "xhigh", "max":
+	default:
+		return fmt.Errorf("effort %q is not one of low, medium, high, xhigh, max", a.Effort)
+	}
+	if a.APIKeyFile == "" {
+		return fmt.Errorf("api_key_file is required")
+	}
+	for _, d := range a.Data {
+		if d != "logs" {
+			return fmt.Errorf("data %q is not known (logs)", d)
+		}
+	}
+	if a.MonthlyBudget <= 0 {
+		return fmt.Errorf("monthly_budget is required, so that explanations cannot run up a bill")
+	}
+	priced := false
+	for _, t := range costs.Tokens {
+		if strings.HasPrefix(strings.ToLower(a.Model), strings.ToLower(t.Model)) {
+			priced = true
+		}
+	}
+	if !priced {
+		return fmt.Errorf("model %s needs a price in costs.tokens, so that the monthly budget can be kept", a.Model)
+	}
+	return nil
 }
 
 func btoi(b bool) int {
