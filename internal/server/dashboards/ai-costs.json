@@ -10,7 +10,108 @@
   ],
   "panels": [
     {
-      "title": "Token cost in the shown time",
+      "title": "All AI: billed in the shown time",
+      "type": "stat",
+      "w": 3,
+      "h": 2,
+      "unit": "",
+      "queries": [
+        {
+          "expr": "sum(sum_over_time(ai_cost_usd_per_minute{billing!=\"subscription\"}[$__range])) or vector(0)"
+        }
+      ]
+    },
+    {
+      "title": "Billed per day, at this hour's rate",
+      "type": "stat",
+      "w": 3,
+      "h": 2,
+      "unit": "",
+      "queries": [
+        {
+          "expr": "(sum(sum_over_time(ai_cost_usd_per_minute{billing!=\"subscription\"}[1h])) or vector(0)) * 24"
+        }
+      ]
+    },
+    {
+      "title": "Subscriptions, at API prices",
+      "type": "stat",
+      "w": 3,
+      "h": 2,
+      "unit": "",
+      "queries": [
+        {
+          "expr": "sum(sum_over_time(ai_cost_usd_per_minute{billing=\"subscription\"}[$__range])) or vector(0)"
+        }
+      ]
+    },
+    {
+      "title": "Models and GPUs without a price",
+      "type": "stat",
+      "w": 3,
+      "h": 2,
+      "unit": "",
+      "warn": 1,
+      "queries": [
+        {
+          "expr": "(count(count by (model) (genai_tokens_total) unless on (model) genai_token_price) or vector(0)) + (count(count by (model) (gpu_info) unless on (model) gpu_hour_price) or vector(0))"
+        }
+      ]
+    },
+    {
+      "title": "All AI: cost per hour, by source (USD)",
+      "type": "timeseries",
+      "w": 12,
+      "h": 3,
+      "unit": "",
+      "min": 0,
+      "fill": true,
+      "queries": [
+        {
+          "expr": "sum by (source, billing) (sum_over_time(ai_cost_usd_per_minute[15m])) * 4",
+          "legend": "{{source}} ({{billing}})"
+        }
+      ]
+    },
+    {
+      "title": "All AI: by who spent it, in the shown time (USD)",
+      "type": "table",
+      "w": 6,
+      "h": 4,
+      "unit": "",
+      "columns": [
+        "owner",
+        "source",
+        "tool",
+        "billing"
+      ],
+      "queries": [
+        {
+          "expr": "sort_desc(sum by (owner, source, tool, billing) (sum_over_time(ai_cost_usd_per_minute{}[$__range])))",
+          "legend": "USD"
+        }
+      ]
+    },
+    {
+      "title": "All AI: by model, in the shown time (USD)",
+      "type": "table",
+      "w": 6,
+      "h": 4,
+      "unit": "",
+      "columns": [
+        "model",
+        "source",
+        "billing"
+      ],
+      "queries": [
+        {
+          "expr": "sort_desc(sum by (model, source, billing) (sum_over_time(ai_cost_usd_per_minute{}[$__range])))",
+          "legend": "USD"
+        }
+      ]
+    },
+    {
+      "title": "Applications: token cost in the shown time",
       "type": "stat",
       "w": 3,
       "h": 2,
@@ -22,7 +123,7 @@
       ]
     },
     {
-      "title": "At this rate, per day",
+      "title": "Applications: at this rate, per day",
       "type": "stat",
       "w": 3,
       "h": 2,
@@ -34,7 +135,7 @@
       ]
     },
     {
-      "title": "Model calls in the shown time",
+      "title": "Applications: model calls in the shown time",
       "type": "stat",
       "w": 3,
       "h": 2,
@@ -46,7 +147,7 @@
       ]
     },
     {
-      "title": "Cost per call",
+      "title": "Applications: cost per call",
       "type": "stat",
       "w": 3,
       "h": 2,
@@ -58,7 +159,7 @@
       ]
     },
     {
-      "title": "Cost per hour, by model",
+      "title": "Applications: cost per hour, by model",
       "type": "timeseries",
       "w": 6,
       "h": 3,
@@ -73,7 +174,7 @@
       "fill": true
     },
     {
-      "title": "Tokens per minute, by kind",
+      "title": "Applications: tokens per minute, by kind",
       "type": "timeseries",
       "w": 6,
       "h": 3,
@@ -87,7 +188,7 @@
       ]
     },
     {
-      "title": "Cost by service, in the shown time",
+      "title": "Applications: cost by service, in the shown time",
       "type": "table",
       "w": 6,
       "h": 4,
@@ -100,7 +201,7 @@
       ]
     },
     {
-      "title": "Cost by model, in the shown time",
+      "title": "Applications: cost by model, in the shown time",
       "type": "table",
       "w": 6,
       "h": 4,
@@ -113,7 +214,7 @@
       ]
     },
     {
-      "title": "Calls per minute, by model",
+      "title": "Applications: calls per minute, by model",
       "type": "timeseries",
       "w": 6,
       "h": 3,
@@ -127,7 +228,7 @@
       ]
     },
     {
-      "title": "Average seconds per call, by model",
+      "title": "Applications: average seconds per call, by model",
       "type": "timeseries",
       "w": 6,
       "h": 3,
@@ -141,7 +242,7 @@
       ]
     },
     {
-      "title": "Tokens per call, by service and model",
+      "title": "Applications: tokens per call, by service and model",
       "type": "table",
       "w": 6,
       "h": 4,
@@ -154,7 +255,7 @@
       ]
     },
     {
-      "title": "Models in use WITHOUT a price (not in the costs above)",
+      "title": "Applications: models in use WITHOUT a price",
       "type": "table",
       "w": 6,
       "h": 4,
@@ -191,7 +292,7 @@
       ]
     },
     {
-      "title": "Of that, spent on idle GPU time",
+      "title": "GPU cost spent on idle time",
       "type": "stat",
       "w": 3,
       "h": 2,

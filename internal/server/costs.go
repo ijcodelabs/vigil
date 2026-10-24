@@ -2,13 +2,30 @@ package server
 
 import (
 	"context"
+	_ "embed"
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/ijcodelabs/vigil/internal/config"
 	"github.com/ijcodelabs/vigil/internal/model"
 	"github.com/ijcodelabs/vigil/internal/promwire"
+	"github.com/ijcodelabs/vigil/internal/rules"
 )
+
+// costRules prices the model calls of applications into the common cost
+// metric; see the file's comment.
+//
+//go:embed cost_rules.yaml
+var costRules string
+
+func costRuleGroups() []rules.Group {
+	f, err := rules.Parse(costRules)
+	if err != nil {
+		panic(fmt.Sprintf("cost_rules.yaml: %v", err)) // a build mistake; the test catches it
+	}
+	return f.Groups
+}
 
 // Prices become series, so that cost is an ordinary query: usage times
 // price. For every model that agents report tokens for, and every GPU model

@@ -1,8 +1,10 @@
 # AI costs
 
-What your use of language models and GPUs costs, by service, by model and
-by machine: vigil counts the usage, you give it the prices, and cost is
-usage times price in any query, dashboard or alert.
+What your use of language models and GPUs costs, by service, by person,
+by model and by machine: vigil counts the usage, you give it the prices,
+and cost is usage times price in any query, dashboard or alert. All
+sources also add up into one metric, `ai_cost_usd_per_minute`, so one
+query answers "what does AI cost us".
 
 ## Tokens: who uses which model, and how much
 
@@ -27,7 +29,8 @@ with the model as something the service depends on.
 Claude Code is not counted here: it reports its own usage and cost
 (`claude_code_token_usage_total`, `claude_code_cost_usage_total`), and
 its spans name the model but carry no `gen_ai.usage.*` tokens, so counting
-them too would show its calls twice.
+them too would show its calls twice. Its cost joins the total below
+instead (see [Claude Code](claude-code.md)).
 
 `model` is the model that answered (`gen_ai.response.model`), which usually
 carries a version date. How `input` relates to `cache_read` differs by
@@ -76,13 +79,67 @@ exactly the models in use:
 | `genai_token_price{model, type}` | price of one token |
 | `gpu_hour_price{model}` | price of one such GPU for one hour |
 
+## All AI in one metric
+
+Every source of AI spending writes the same series, once a minute:
+
+```
+ai_cost_usd_per_minute{source, billing, owner, model, agent, tool}
+```
+
+Each sample is the money spent in that minute (in the currency of your
+prices; Claude Code reports US dollars), so the spend in a range is
+`sum_over_time` over it:
+
+| `source` | Written by | `owner` | `billing` |
+|---|---|---|---|
+| `application` | the server, from `genai_tokens_total` and `costs.tokens` (only while that list has entries) | the service | `api` |
+| `coding_tool` | each `ai_module_*` integration in use (`tool`: `claude_code`) | the person | `api` or `subscription`, from the integration's `billing` parameter |
+| `gpu` | the `gpu` integration, from `gpu_info` and `costs.gpu_hours` | the host | `hourly` |
+
+`billing="subscription"` is use on a plan paid per seat, such as Claude
+Pro, Max or Team: the figure is what the same use would cost through the
+API, not money spent, and the dashboard keeps it apart from what is
+billed.
+
+```
+# billed AI spend in the last 30 days, by source
+sum by (source) (sum_over_time(ai_cost_usd_per_minute{billing!="subscription"}[30d]))
+
+# who spent the most this week
+topk(10, sum by (owner, source) (sum_over_time(ai_cost_usd_per_minute[7d])))
+```
+
+Something else that spends money on AI joins by writing the same metric
+with a recording rule of your own, one sample a minute. For example, an
+application that counts its own tokens in a Prometheus counter:
+
+```yaml
+groups:
+  - name: shop-ai-costs
+    interval: 1m              # must be one minute: each sample is a minute's spend
+    rules:
+      - record: ai_cost_usd_per_minute
+        expr: |
+          sum(increase(shop_ai_tokens_total{kind="input"}[1m])) * 1.00 / 1e6
+          + sum(increase(shop_ai_tokens_total{kind="output"}[1m])) * 5.00 / 1e6
+        labels: {source: application, owner: shop-api, model: example-model, billing: api}
+```
+
+Counters go in as `increase(...[1m])`, not as a rate: added up minute by
+minute that matches the counter's increase over the whole range.
+
 ## The AI costs dashboard
 
-Comes with the server. Token cost in the shown time and at the current
-rate per day, cost per call, cost per hour by model, cost by service and by
-model, tokens per call; GPU cost per hour and in the shown time, **how much
-of it was idle time**, and which GPUs idled most. Two tables list what is
-in use but has **no price**, so nothing is silently missing from the sums.
+Comes with the server. At the top, all AI together: what is billed in the
+shown time and per day at the last hour's rate, subscription use at API
+prices beside it, cost per hour by source, and tables by who spent it and
+by model. Below, applications in detail (token cost, cost per call, cost
+per hour by model, cost by service and by model, tokens per call) and GPUs
+(cost per hour and in the shown time, **how much of it was idle time**,
+and which GPUs idled most). The [Claude Code](claude-code.md) dashboard has
+coding tools in detail. A count and two tables show what is in use but has
+**no price**, so nothing is silently missing from the sums.
 
 ## Queries and alerts
 
@@ -138,5 +195,10 @@ groups:
   price series use the span-derived `genai_*` metrics only.
 - Prices are per model, not per provider or per account; discounts, batch
   prices and free tiers are not modelled.
-- Changing prices needs a server restart, and applies from then on: past
-  usage is always shown at the current price.
+- Changing prices needs a server restart, and applies from then on.
+  `ai_cost_usd_per_minute` keeps the price of the minute it was written;
+  the queries over `genai_tokens_total` above show past usage at the
+  current price.
+- Minutes in which the server did not run its rules (a restart, an
+  outage) are missing from `ai_cost_usd_per_minute`; the counters
+  themselves still have them.

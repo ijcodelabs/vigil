@@ -1,0 +1,35 @@
+# Every source of AI spending writes the same metric, so that one query
+# adds them up:
+#
+#   ai_cost_usd_per_minute{source, billing, owner, model, agent, tool}
+#
+# One sample a minute, each the US dollars spent in that minute; the spend
+# in any range is sum_over_time() over it. `source` is application,
+# coding_tool or gpu. `billing` says whether the money is really paid:
+# api and hourly are, subscription is what the same use would cost through
+# the API, on a plan that is paid per seat. `owner` is who spent it: the
+# service, the person or the host.
+#
+# This group prices the model calls of applications (genai_tokens_total,
+# counted from their traces) with `costs.tokens`, and runs only while that
+# list has entries. Coding tools (the ai_module_* integrations) and GPUs
+# (the gpu integration) bring their own rule for the same metric.
+#
+# Counters are taken as increase() over exactly the minute, not as a rate:
+# summed minute by minute that matches increase() over the whole range,
+# where rate()[5m] counted series that live only a few minutes up to twice
+# (tried on the trial against Claude Code's cost counter).
+groups:
+  - name: ai_costs
+    interval: 1m
+    rules:
+      - record: ai_cost_usd_per_minute
+        expr: |
+          sum by (agent, owner, model) (
+            label_replace(increase(genai_tokens_total[1m]) * on (model, type) group_left genai_token_price, "owner", "$1", "service", "(.*)")
+          )
+        labels: {source: application, billing: api}
+      # vigil's own explanations of incidents (explain.go), priced when made.
+      - record: ai_cost_usd_per_minute
+        expr: 'sum by (model) (increase(vigil_ai_cost_total[1m]))'
+        labels: {source: vigil, owner: vigil, tool: explain, billing: api}
