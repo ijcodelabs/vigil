@@ -184,7 +184,7 @@ func (c *Collector) scrapeTarget(ctx context.Context, t discovery.Target) []mode
 	defer cancel()
 	start := time.Now()
 	samples, err := c.client.Scrape(sctx, scrape.Request{URL: t.URL, Insecure: t.Insecure,
-		BearerToken: t.BearerToken, Username: t.Username, Password: t.Password})
+		BearerToken: t.BearerToken, BearerTokenFile: t.BearerTokenFile, Username: t.Username, Password: t.Password})
 	up := 1.0
 	if err != nil {
 		up, samples = 0, nil

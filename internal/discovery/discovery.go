@@ -22,6 +22,7 @@ type Target struct {
 	Timeout  time.Duration
 	// At most one of BearerToken and Username is set.
 	BearerToken        string
+	BearerTokenFile    string // read on every scrape
 	Username, Password string
 	// Keep, if any, lists the only metric names to send; Drop removes names.
 	Keep, Drop []*regexp.Regexp

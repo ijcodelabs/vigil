@@ -49,7 +49,7 @@ func (s Static) Targets(context.Context) ([]Target, error) {
 				Labels:   j.Labels,
 				Insecure: j.TLSInsecure,
 				Interval: j.Interval.Std(), Timeout: j.Timeout.Std(),
-				BearerToken: j.BearerToken, Keep: keep, Drop: drop,
+				BearerToken: j.BearerToken, BearerTokenFile: j.BearerTokenFile, Keep: keep, Drop: drop,
 			}
 			if j.BasicAuth != nil {
 				tg.Username, tg.Password = j.BasicAuth.Username, j.BasicAuth.Password
