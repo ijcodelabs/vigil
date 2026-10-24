@@ -6,8 +6,10 @@ import { Captures } from './captures.js';
 import { Dashboards } from './dashboards.js';
 import { Services } from './services.js';
 import { Sessions } from './sessions.js';
+import { Home } from './home.js';
 
 const pages = [
+  ['home', 'Home', Home],
   ['dashboards', 'Dashboards', Dashboards],
   ['explore', 'Explore', Explore],
   ['services', 'Services', Services],

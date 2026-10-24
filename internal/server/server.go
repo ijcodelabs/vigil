@@ -22,10 +22,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ijcodelabs/vigil/internal/ai"
 	"github.com/ijcodelabs/vigil/internal/alerting"
 	"github.com/ijcodelabs/vigil/internal/collect"
 	"github.com/ijcodelabs/vigil/internal/config"
 	"github.com/ijcodelabs/vigil/internal/discovery"
+	"github.com/ijcodelabs/vigil/internal/incidents"
 	"github.com/ijcodelabs/vigil/internal/kube"
 	"github.com/ijcodelabs/vigil/internal/model"
 	"github.com/ijcodelabs/vigil/internal/pki"
@@ -93,6 +95,14 @@ type Server struct {
 	// to the integrations in use need not restart it.
 	rulesStarted atomic.Bool
 	http         *http.Client
+	// incidents is what the Home page reads (briefing.go); incidentState
+	// is how its last update went.
+	incidents     *incidents.Tracker
+	incidentState atomic.Pointer[incidentSync]
+	comingState   atomic.Pointer[comingState] // forecasts.go
+	spendState    atomic.Pointer[Spend]
+	// ai explains incidents (explain.go); nil when no provider is set up.
+	ai ai.Provider
 }
 
 func New(cfg *config.Server, log *slog.Logger) (*Server, error) {
@@ -117,12 +127,23 @@ func New(cfg *config.Server, log *slog.Logger) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("store: %w", err)
 	}
-	s := &Server{cfg: cfg, log: log, store: st, metrics: u, logs: lu, traces: tu, runCtx: context.Background(),
+	tracker, err := incidents.New(st.db)
+	if err == nil {
+		err = initExplanations(st.db)
+	}
+	if err != nil {
+		st.Close()
+		return nil, fmt.Errorf("store: %w", err)
+	}
+	s := &Server{cfg: cfg, log: log, store: st, metrics: u, logs: lu, traces: tu, runCtx: context.Background(), incidents: tracker,
 		logins:  loginLimiter{fails: map[string][]time.Time{}},
 		started: time.Now(),
 		limiter: ingestLimiter{buckets: map[string]*bucket{}},
 		tokens:  map[string]string{}, touched: map[string]touchState{},
 		http: &http.Client{Timeout: 30 * time.Second}}
+	if a := cfg.AI; a.Provider == "anthropic" {
+		s.ai = ai.NewAnthropic(a.Model, a.Effort, a.APIKeyFile, a.BaseURL)
+	}
 	for _, t := range cfg.TrustedProxies {
 		if !strings.Contains(t, "/") {
 			if ip := net.ParseIP(t); ip != nil && ip.To4() != nil {
@@ -179,6 +200,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/write", s.ingest(s.bounded(s.handleWrite)))
 	s.authRoutes(mux)
 	s.fleetRoutes(mux)
+	s.briefingRoutes(mux)
+	s.explainRoutes(mux)
 
 	// Read-only Prometheus query API, served by the metrics store.
 	proxy := httputil.NewSingleHostReverseProxy(s.metrics)
@@ -343,6 +366,9 @@ func (s *Server) Run(ctx context.Context) error {
 	s.waitForStore(ctx, 30*time.Second)
 	go s.heartbeatLoop(ctx)
 	go s.priceLoop(ctx)
+	go s.incidentLoop(ctx)
+	go s.forecastLoop(ctx)
+	go s.spendLoop(ctx)
 	go func() { // rollouts move on by themselves
 		t := time.NewTicker(10 * time.Second)
 		defer t.Stop()

@@ -240,3 +240,5 @@ h2.section { font-size: 14px; margin: 22px 0 8px; }
 .spanfields td { border: 0; padding: 2px 14px 2px 0; vertical-align: top; font-family: var(--mono); overflow-wrap: anywhere; }
 .spanfields td:first-child { color: var(--muted); white-space: nowrap; }
 .spanfields pre { margin: 0; white-space: pre-wrap; }
+.incident { padding: 8px 0; border-top: 1px solid var(--border); }
+.incident:first-child { border-top: 0; padding-top: 0; }

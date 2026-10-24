@@ -267,6 +267,41 @@ func (a *Alertmanager) Send(ctx context.Context, alerts []Alert) error {
 	return nil
 }
 
+// ActiveAlert is an alert that has not ended, as the incident view sees it.
+type ActiveAlert struct {
+	Alert
+	Silenced bool
+}
+
+// Active lists the alerts that have not ended, rule alerts and detections
+// alike, with whether a silence covers each. The second result is how many
+// silences are in effect.
+func (a *Alertmanager) Active(ctx context.Context) ([]ActiveAlert, int, error) {
+	var out []ActiveAlert
+	it := a.alerts.GetPending()
+	defer it.Close()
+	for al := range it.Next() {
+		if al.Data == nil || al.Data.Resolved() {
+			continue
+		}
+		in := ActiveAlert{Alert: Alert{Labels: map[string]string{}, Annotations: map[string]string{},
+			StartsAt: al.Data.StartsAt, EndsAt: al.Data.EndsAt, GeneratorURL: al.Data.GeneratorURL}}
+		for k, v := range al.Data.Labels {
+			in.Labels[string(k)] = string(v)
+		}
+		for k, v := range al.Data.Annotations {
+			in.Annotations[string(k)] = string(v)
+		}
+		in.Silenced = a.silencer.Mutes(ctx, al.Data.Labels)
+		out = append(out, in)
+	}
+	if err := it.Err(); err != nil {
+		return nil, 0, err
+	}
+	n, err := a.silences.CountState(ctx, silence.SilenceStateActive)
+	return out, n, err
+}
+
 // Close stops routing and writes silences and the notification log to disk.
 func (a *Alertmanager) Close() {
 	a.mu.Lock()

@@ -96,6 +96,7 @@ prices; Claude Code reports US dollars), so the spend in a range is
 | `application` | the server, from `genai_tokens_total` and `costs.tokens` (only while that list has entries) | the service | `api` |
 | `coding_tool` | each `ai_module_*` integration in use (`tool`: `claude_code`) | the person | `api` or `subscription`, from the integration's `billing` parameter |
 | `gpu` | the `gpu` integration, from `gpu_info` and `costs.gpu_hours` | the host | `hourly` |
+| `vigil` | the server, for its own [incident explanations](home.md#ai-explanations) (`tool`: `explain`) | `vigil` | `api` |
 
 `billing="subscription"` is use on a plan paid per seat, such as Claude
 Pro, Max or Team: the figure is what the same use would cost through the

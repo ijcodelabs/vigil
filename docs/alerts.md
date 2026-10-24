@@ -333,6 +333,35 @@ as alerts the moment they arrive, named after the rule that matched, with a
 link to the capture if there is one. They clear ten minutes after the last
 detection.
 
+## Incidents
+
+Every firing alert, from a rule or from a detection, is also an
+incident, which is what the [Home](home.md) page lists. Pending alerts
+are not. An incident is one thing that
+is wrong, with a history:
+
+- **One per alert.** Two alerts on the same host that differ in any label
+  are two incidents.
+- **A host that is down holds its other incidents.** While `HostDown`
+  fires for an agent, that agent's other incidents (its containers,
+  checks, detections) are listed under it instead of beside it, and come
+  back on their own when it reports again. The same holds for a HAProxy
+  backend and its servers. Correlation goes no further than that.
+- **Open, acknowledged, resolved.** An admin can acknowledge an incident
+  with a comment ("someone is on it"). It is resolved a minute after its
+  alert ends. If the same alert comes back within 30 minutes it is the
+  same incident, reopened (and needs acknowledging again); later, it is a
+  new one.
+- **Silenced** incidents stay listed, marked, below the others.
+- **If the server cannot read its alerts,** nothing is resolved: no data
+  is not the same as all clear.
+- Resolved incidents are kept for 30 days.
+
+The briefing also says how complete it is: how many agents report, which
+rules cannot be evaluated, how many silences are in effect. Each person
+has a "seen up to" marker, so the briefing can say what happened since
+they last looked.
+
 ## Good to know
 
 - Rules see data about 30 seconds late (see [Explore](explore.md)).

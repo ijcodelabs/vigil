@@ -88,6 +88,16 @@ func (s *Server) priceSamples(ctx context.Context, now time.Time) ([]model.Sampl
 			}
 		}
 	}
+	// What vigil's own explanations cost so far, for the cost metric.
+	if s.ai != nil {
+		spent, err := s.aiSpendTotal(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for m, usd := range spent {
+			out = append(out, model.Sample{Name: "vigil_ai_cost_total", Labels: map[string]string{"model": m}, Value: usd, TS: ts})
+		}
+	}
 	if len(costs.GPUHours) > 0 {
 		series, err := backend.Query(ctx, "", `group by (model) (gpu_info)`, now)
 		if err != nil {
