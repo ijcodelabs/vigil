@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/ijcodelabs/vigil/internal/model"
@@ -35,6 +37,7 @@ type Request struct {
 	URL                string
 	Insecure           bool // skip TLS verification
 	BearerToken        string
+	BearerTokenFile    string // read now, so that a new token needs no restart
 	Username, Password string
 }
 
@@ -46,6 +49,13 @@ func (c *Client) Scrape(ctx context.Context, r Request) ([]model.Sample, error) 
 		return nil, err
 	}
 	req.Header.Set("Accept", "text/plain;version=0.0.4")
+	if r.BearerTokenFile != "" {
+		tok, err := os.ReadFile(r.BearerTokenFile)
+		if err != nil {
+			return nil, fmt.Errorf("reading bearer_token_file: %w", err)
+		}
+		r.BearerToken = strings.TrimSpace(string(tok))
+	}
 	switch {
 	case r.BearerToken != "":
 		req.Header.Set("Authorization", "Bearer "+r.BearerToken)

@@ -59,6 +59,13 @@ scrape:
 `keep` is the opposite of `drop`: with it, only matching metrics are sent.
 Every job also reports `up` (1 or 0) and `scrape_duration_seconds`.
 
+In a profile, use `bearer_token_file: /path/on/the/host` instead of
+`bearer_token`: the agent reads the token from that file on its own host at
+every scrape, so the token never passes through the server or the profile,
+and a new token in the file needs no restart. The agent has to be able to
+read the file (it usually runs as root). Only one of `bearer_token`,
+`bearer_token_file` and `basic_auth` per job.
+
 ### Ship a log file
 
 ```yaml

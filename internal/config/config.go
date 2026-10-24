@@ -63,10 +63,14 @@ type StaticJob struct {
 	Labels      map[string]string `yaml:"labels"`
 	TLSInsecure bool              `yaml:"tls_insecure_skip_verify"`
 	// Interval and Timeout override the agent-wide ones for this job.
-	Interval    Duration   `yaml:"interval"`
-	Timeout     Duration   `yaml:"timeout"`
-	BearerToken string     `yaml:"bearer_token"`
-	BasicAuth   *BasicAuth `yaml:"basic_auth"`
+	Interval    Duration `yaml:"interval"`
+	Timeout     Duration `yaml:"timeout"`
+	BearerToken string   `yaml:"bearer_token"`
+	// BearerTokenFile is a file on the agent's host holding the token, read
+	// on every scrape: the token never passes through the server or a
+	// profile, and a new one needs no restart.
+	BearerTokenFile string     `yaml:"bearer_token_file"`
+	BasicAuth       *BasicAuth `yaml:"basic_auth"`
 	// Keep and Drop are regular expressions on metric names. With Keep set,
 	// only matching metrics are sent; Drop removes matching ones.
 	Keep []string `yaml:"keep"`
@@ -433,8 +437,8 @@ func (c *Collection) Check() error {
 		if j.Interval != 0 && j.Interval.Std() < time.Second {
 			return fmt.Errorf("%s: interval must be at least 1s", where)
 		}
-		if j.BearerToken != "" && j.BasicAuth != nil {
-			return fmt.Errorf("%s: set bearer_token or basic_auth, not both", where)
+		if n := btoi(j.BearerToken != "") + btoi(j.BearerTokenFile != "") + btoi(j.BasicAuth != nil); n > 1 {
+			return fmt.Errorf("%s: set only one of bearer_token, bearer_token_file and basic_auth", where)
 		}
 		for _, e := range append(append([]string{}, j.Keep...), j.Drop...) {
 			if _, err := regexp.Compile(e); err != nil {
@@ -918,4 +922,11 @@ func LoadServer(path string) (*Server, error) {
 		c.Interval = Duration(15 * time.Second)
 	}
 	return c, nil
+}
+
+func btoi(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
