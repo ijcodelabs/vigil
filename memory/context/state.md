@@ -551,6 +551,142 @@ Last updated: 2026-10-13.
   absence of lines is the only sign); PreToolUse (it would sit in the
   path of every call).
 
+## All AI costs in one metric (built 2026-10-24, uncommitted)
+
+- `ai_cost_usd_per_minute{source, billing, owner, model, agent, tool}`:
+  one sample a minute, each the money spent in that minute, so a range is
+  `sum_over_time`. Written by recording rules: the server's `ai_costs`
+  group (`internal/server/cost_rules.yaml`, applications from `genai_*`
+  and `costs.tokens`, only while that list has entries), a `costs` group
+  in `ai_module_claude` and in `gpu`. Anyone can add a source with a rule
+  of their own (docs/finops.md).
+- Counters go in as `increase(...[1m])`. A first version used
+  `rate(...[5m]) * 60` and counted short-lived series up to twice on the
+  trial (0.0164 against 0.0083 USD); `increase[1m]` summed minute by minute
+  matched `increase` over the range exactly.
+- `ai_module_claude` has a `billing` parameter, `api` (default) or
+  `subscription`; subscription use is shown apart, as API-equivalent.
+- The AI costs dashboard has an "All AI" section on top (billed, per day,
+  subscriptions at API prices, unpriced count, cost per hour by source,
+  by who and by model); the application and GPU panels stay below.
+- Also fixed: the profile dialog hung when a profile reached no agents
+  (`/api/v1/fleet/match` sent `agents: null`).
+- Verified on the trial with real Claude Code data. Not verified: the
+  application and GPU rules against real priced data (the trial has no
+  `costs` prices and no GPU).
+
+## Incidents and the briefing index (built 2026-10-24, uncommitted)
+
+Step 1 of the Home page plan in direction.md.
+
+- `internal/incidents`: every firing alert in the embedded Alertmanager
+  (rule alerts and security detections both end up there) is a signal;
+  `alerting.Alertmanager.Active` lists them with whether a silence covers
+  each, plus the number of silences in effect. Key: kind, resource and
+  alertname plus a hash of all labels, so two alerts that differ in any
+  label are two incidents. Kinds: `host_down` (alertname HostDown),
+  `security` (label source=security), `alert`. Resource from labels:
+  container, probe, pod, agent, service, in that order.
+- Lifecycle in SQLite (`incidents`, `incident_events`, `briefing_seen`):
+  resolved one minute after the signal is gone, reopened as the same
+  incident within 30 minutes, acknowledged by an admin with a comment
+  until resolved. A failed read of the alerts resolves nothing. A
+  `host_down` incident is the parent of the same agent's other open
+  incidents. Resolved incidents are pruned after 30 days. For 3 minutes
+  after the server starts nothing is resolved: Alertmanager keeps no
+  alerts across a restart and rules resend theirs only when they next run,
+  so before this every deploy resolved and reopened all incidents (seen on
+  the trial). A rule group with an interval above 3 minutes would still
+  flap once per restart.
+- `internal/server/briefing.go`: a pass every 15 s; `GET /api/v1/briefing`
+  (open with children, resolved in 24 h, `since` from the caller's marker,
+  coverage: agents reporting, rules failing, silences, the last pass),
+  `POST /api/v1/briefing/seen`, `GET /api/v1/incidents[/{id}]`,
+  `POST /api/v1/incidents/{id}/ack`.
+- Also a parent resource: a HAProxy server (`backend:<agent>/<proxy>/<server>`)
+  hangs under its backend's incident; nesting goes to any depth, a down
+  host still comes first.
+
+## Home page (built 2026-10-24, uncommitted)
+
+Step 2 of the plan. `#/home` is the first page (`home.js`), docs/home.md.
+
+- Greeting, "since you last looked" with Mark as seen, coverage badges,
+  Needs attention (ranked, nested, "I'm on it" with a note for admins,
+  links to logs / capture / site checks, silenced behind a toggle, an
+  explicit "nothing needs attention"), Coming up, AI spend (24 h against a
+  usual day, subscription apart, unpriced count), alerts that keep coming
+  back (5+ firings in a week, median duration, no threshold suggested),
+  resolved in 24 h, an incident history dialog. Refreshes every 30 s.
+- Forecasts (`internal/forecast`, `internal/server/forecasts.go`, every
+  10 min): disk time-to-full from 7 days of free space at 30-minute steps;
+  Theil-Sen slope (median of pairwise slopes, thinned to 200 points);
+  restart after a lasting rise (median of the next 6 samples above the
+  previous 6 by 2% of the size or 256 MB; a spike that comes back down is
+  not one); at least 72 h since then; the last 24 h and the whole must
+  give times to full within a factor of 3; shown within 30 days, "soon"
+  within 7; filesystems under 1 GB and pseudo file systems left out.
+  Certificates expiring in 14-30 days; agents limited in the last hour.
+- AI spend: a 1-minute loop over `ai_cost_usd_per_minute`; absent when
+  nothing writes it. Noisy alerts from `incident_events`.
+- Verified in the browser against a local server with alerts posted into
+  its Alertmanager (no stores there): ranking, nesting, acknowledge,
+  history, silenced toggle, "some forecasts could not be made". The
+  forecast math is tested on synthetic series only; not yet against a
+  filesystem that really fills.
+- Not built: AI budget burn (there is no budget setting), memory and other
+  trends as watch items, grading of security findings, ownership.
+
+## AI explanations of incidents (built 2026-10-24, uncommitted)
+
+Step 3 of the Home page plan.
+
+- `internal/ai`: a `Provider` interface (system prompt, one user message,
+  a JSON Schema; returns JSON and token usage) and the Anthropic client on
+  the official Go SDK (`anthropic-sdk-go`): structured outputs through
+  `output_config.format` (current models reject forced tool use), effort
+  from the config, the system prompt cached, the server-side refusal
+  fallback (`fallbacks: "default"`) on the models that take it.
+  `option.WithoutEnvironmentDefaults()`: an `ANTHROPIC_API_KEY`,
+  `ANTHROPIC_BASE_URL` or credential profile in the server's environment
+  is ignored (the SDK reads them by default; found by its own warning in a
+  test). The key file is read on every call.
+- Config `ai:` (provider, model default claude-opus-5-5, effort default
+  low, api_key_file, base_url, data, monthly_budget). Refused at load
+  without a budget, or when the model has no price in `costs.tokens`.
+- `internal/server/evidence.go`: the bundle by incident kind (incident,
+  history, other open incidents of the host, the alert rule, the agent,
+  profile changes in the 6 h before, metric summaries of the hour before
+  per kind, detections without command lines, log excerpts only with
+  `data: [logs]`); every text masked again (the agent's built-in rules and
+  e-mail addresses); 4 000 characters per item, 24 000 per bundle.
+- `internal/server/explain.go`: table `explanations` (the evidence as
+  sent, answer, model, tokens, cost, latency, verdict); preview, explain
+  (admin), list, verdict (anyone), `GET /api/v1/ai`, `PUT
+  /api/v1/ai/paused` (setting `ai_paused`). Claims citing ids that were
+  not sent are marked unsupported, uncited ones interpretation. Budget per
+  calendar month (UTC) from stored costs. Cost into the metric as
+  `vigil_ai_cost_total{model}` (written with the price series) and the
+  `ai_costs` rule `source="vigil"`.
+- Home page: Explain per incident (admins), the preview of what would be
+  sent, the answer with evidence that opens on a click, verdict with a
+  note, AI status and Pause.
+- Verified: unit and server tests against a fake Messages API, and in the
+  browser against a local fake API (preview, send, the unsupported-claim
+  mark, cost, verdict). Never run against the real API: no key on the
+  trial yet.
+- Not built: explanations made by themselves when an incident starts,
+  the staged-incident evaluation set, other providers, an outbound preview
+  for metadata-only installs that differs from the stored record.
+
+## Scrape tokens from a file (built 2026-10-24, uncommitted)
+
+- `bearer_token_file` on a static scrape job: the agent reads the token
+  from a file on its own host at every scrape (`internal/scrape`), so the
+  token never passes through the server or a profile and a new one needs
+  no restart. One of `bearer_token`, `bearer_token_file`, `basic_auth`.
+  First used on the trial for an application whose metrics need a token.
+
 ## Next
 
 - The config-at-scale list is done. Open: step 7 (AI investigator, MCP
