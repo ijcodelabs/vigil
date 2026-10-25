@@ -115,6 +115,21 @@ See [GPUs and AI machines](gpu.md#what-is-collected): `gpu_info`,
 `gpu_temperature_celsius`, `gpu_power_watts`, `gpu_ecc_errors_total`,
 `gpu_process_memory_bytes`, `gpu_count`, `gpu_collector_up`.
 
+## AI and costs
+
+See [AI costs](finops.md) and [Claude Code](claude-code.md).
+
+| Metric | Meaning | Labels |
+|---|---|---|
+| `genai_requests_total` | calls to a language model, counted from OpenTelemetry spans | `service`, `provider`, `model`, `operation`, `status` |
+| `genai_tokens_total` | tokens those calls used | `service`, `provider`, `model`, `type`: input, output, cache_read, cache_write, reasoning |
+| `genai_request_duration_seconds_sum`, `_count` | how long the calls took | as `genai_requests_total` |
+| `genai_token_price` | price of one token, from the server's `costs.tokens` (written by the server) | `model`, `type` |
+| `gpu_hour_price` | price of one GPU for an hour, from `costs.gpu_hours` (written by the server) | `model` |
+| `ai_cost_usd_per_minute` | money spent on AI in each minute, from every source; `sum_over_time` over a range is the spend in it (recording rules on the server) | `source`: application, coding_tool, gpu, vigil; `billing`: api, hourly, subscription; `owner`, `model`, `agent`, `tool` |
+| `vigil_ai_cost_total` | what vigil's own incident explanations have cost (written by the server) | `model` |
+| `claude_code_cost_usage_total`, `claude_code_token_usage_total`, … | Claude Code's own metrics; see [Claude Code](claude-code.md#what-arrives) | `model`, `user_email`, `query_source`, … |
+
 ## Traces
 
 Counted by the agent from every span it receives; see
