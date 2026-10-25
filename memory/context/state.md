@@ -721,7 +721,14 @@ Steps 2 and 3 of the Foundations build order in direction.md.
 - The home agents moved the same day: two run `vigil-agent`; a NixOS host
   runs the new `vigil agent` (with the warning) until its own NixOS config
   points at `vigil-agent`, as `deploy/vigil-agent.nix` does.
-- Not done: gRPC still comes in through the OTLP collector packages.
+- gRPC out of the agent (2026-10-25, uncommitted): the generated OTLP
+  collector packages, which bring grpc and grpc-gateway only for their
+  service stubs, are replaced by `internal/otlpwire` (the three export
+  requests as field 1 lists, byte-identical to the generated types, tested
+  both ways). Agent 21.0 → 15.6 MB, idle memory with OTLP on 27.3 → 25.1 MB
+  (macOS); `cmd/vigil-agent`'s guard now also forbids grpc, grpc-gateway and
+  the collector packages; the agent's size budget is 17 MB. What remains of
+  genproto is two message packages cel-go needs.
 
 ## Context and Explain for a log line (built 2026-10-25, uncommitted)
 
@@ -795,6 +802,44 @@ Steps 2 and 3 of the Foundations build order in direction.md.
   already there, over a network shared with vigil's server only; Explain on
   a log line ran there against the real API (about 3,200 tokens, 2.5 cents,
   8 s; asked again, answered from the cache).
+
+## Time range picker (2026-10-25, uncommitted)
+
+- `internal/ui/static/js/timerange.js` (`TimeRange`, `RANGES` moved there):
+  one picker for Explore (Metrics, Logs, Log volume), dashboards, Services
+  and Sessions. Quick ranges with a search; absolute From-To through the
+  browser's `datetime-local` (local time zone, shown); the last five
+  absolute ranges in localStorage (`vigil.recentRanges`); « and » shift by
+  the range's length, − doubles it; a range reaching now becomes the
+  matching quick range again. The URL keeps `from`/`to` or `last` as
+  before. Opens leftwards near the right edge, as a fixed panel under
+  700 px. Checked in the browser against a local server (no stores: another
+  project's Podman machine was running, so vigil-test could not start), and
+  by the user on the trial.
+
+## Docker log streams that stall (2026-10-25, uncommitted)
+
+- Seen on the trial: after the host agent started during a deploy (Docker
+  was rebuilding and recreating the server and gateway containers), all 53
+  container log streams sat 16 minutes with nothing from Docker (a SIGQUIT
+  goroutine dump: every stream in IO wait), while journald kept flowing; a
+  restart resumed from the positions and lost nothing.
+- `internal/logs/docker.go`: a watchdog per stream closes it after `Idle`
+  (10 min) without a line; the next scan (`Rescan`, 10 s) reopens it from
+  its position. A container first seen without a position now remembers
+  the time it was opened, so reopening a quiet one never starts at its
+  first line. Test `TestDockerStalledStreamIsReopened` (fails without the
+  watchdog). On the trial host agent since 13:21 UTC.
+
+## Hosts that sleep (2026-10-25)
+
+- Docs (Alerts): a laptop agent pages on every lid close, so the rule file
+  can carry an alert named HostDown (it replaces the built-in one) that
+  leaves out agents whose `vigil_agent_info` had `role="workstation"` in the
+  last week, plus WorkstationSilent after 72 h. `vigil_agent_up` carries
+  only `agent`, hence the join on the agent's own info series. On the trial
+  in its rule file since 2026-10-25 (the Mac had come and gone 19 times in
+  a week).
 
 ## Next
 
