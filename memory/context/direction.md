@@ -46,6 +46,249 @@ not commitments, and most are not started.
 - **AI investigator and MCP server:** deliberately last, because building
   the rest was expected to change what it should be. It now starts as the
   Home page and its incidents (below).
+- **SaaS as well, maybe** (raised 2026-10-25): many tenants, some with
+  thousands of hosts, next to self-hosted. The foundations below are
+  designed so that it stays possible.
+
+## Foundations: data pipeline, storage, modules, DORA (agreed 2026-10-25)
+
+Four designs, each reviewed with ChatGPT in three rounds (separate designs
+first, then each challenged the other's); these are the points both ended
+up agreeing on. They come before new features: the wire protocol and the
+store layout are the most expensive things to change once thousands of
+agents run mixed versions. Three shapes are designed for: small
+self-hosted (one server, one binary), large self-hosted (thousands of
+hosts and clusters, one organisation) and SaaS (many tenants).
+
+### Data pipeline: agent → relay → server → stores → archive
+
+- **Four data classes**, each with its own delivery, priority, retention
+  and loss rules: telemetry (metrics, logs, traces; may be sampled or
+  dropped), security (detections, captures), audit (compliance evidence)
+  and change (rollouts, deploys, package changes; feeds the ledger). Today
+  everything is one class: a single spool drops the oldest batch when full.
+- **A versioned batch envelope** for every class: tenant (set by the server
+  from the credential, never from a label), logical agent id, installation
+  and credential epoch, class and stream, batch id, sequence range, event /
+  observed / received times, schema version, integrity fields (hash chain).
+  Event ids only for security, audit and change; telemetry is tracked by
+  batch and sequence range.
+- **The promise:** no loss within declared capacity (a spool budget and
+  priority per class); beyond it a durable loss record (what, how much,
+  when) wherever possible. A missing loss record proves nothing.
+- **The agent's own health is evidence:** kernel ring-buffer loss, probe or
+  source failures, rule suppression, spool pressure, truncated captures,
+  clock state, coverage. Without it "no detection" proves nothing.
+- **Identity:** mTLS client certificates from vigil's CA (`internal/pki`),
+  renewed automatically, revocable, rotated; the logical agent id apart
+  from the installation's identity; designed for agents that are offline
+  for a while. TPM or workload attestation later. Relays authenticate to
+  the server too; `X-Vigil-Relay` stays display only; the original agent
+  address comes through a trusted chain.
+- Retries with jitter and the server's retry hints; overload shed by class
+  priority; cardinality admission and fairness between tenants next to the
+  byte and sample limits; detections and captures get limits too.
+- Redaction also covers stream labels; its rules are versioned and a masked
+  value records which rule masked it.
+- **Cluster agent:** a PVC for its identity, spool, position and
+  observations; any interruption writes a coverage-gap record. A Kubernetes
+  watch for rollouts; a re-list restores state, never the transitions it
+  missed. The Kubernetes API audit log is delivered on its own path, not
+  through that agent.
+- **Server:** durable receipts and the outbox for audit, security and
+  change; telemetry gets bounded deduplication plus a sequence watermark
+  saved periodically (whether VictoriaMetrics drops duplicate samples
+  depends on `-dedup.minScrapeInterval`: check, do not assume). An
+  append-only **server audit log**: sign-ins, users, roles, tokens,
+  enrolment and credentials, profiles, rules, rollouts, silences,
+  acknowledgements, exports, capture access, retention and legal-hold
+  actions, deletions, AI Explain sends, storage settings; each with actor,
+  decision, before/after hashes, request id, tenant and sequence. Switching
+  audit off is itself audited and alerted.
+- Clocks: agent time and server receive time are both kept, implausible
+  clocks quarantined, NTP state reported as a fact.
+- **Audit sources,** first-hand on the hosts and clusters vigil runs on:
+  auditd (primary where present) and sessions (logins, sudo, ssh), packages
+  and binaries, Kubernetes API audit, and file integrity monitoring
+  (baseline of paths with hash, owner, mode; a change source such as
+  fanotify or eBPF; rehash; re-baseline; a loss model) as a module, because
+  it needs extra privilege. eBPF exec/setuid/open enrich auditd; they do
+  not replace audit or FIM. Everything else (cloud IAM, identity provider,
+  CI/CD, source control) arrives through authenticated, classified generic
+  receivers (syslog, webhook, OTLP) that keep provenance; per-vendor
+  connectors only as modules once a user needs one. Receiving a webhook
+  does not prove its source was complete.
+- **Integrity claims by shape:** small self-hosted shows internal
+  consistency, and tampering only against a checkpoint kept outside (a
+  customer-held export, a timestamp service); large self-hosted and SaaS
+  can claim tamper resistance when object lock and the signing key are
+  administered apart from vigil. Not "immutable" for all three. vigil gives
+  evidence for controls (change management from DORA, incident response
+  from incidents, coverage from Fleet, the audit log), not compliance.
+
+### Storage
+
+- Small self-hosted: SQLite stays (one binary, one process, backups). Large
+  and SaaS: Postgres (HA) for all relational state; server replicas keep no
+  state; background loops are leased, with a fencing token checked at every
+  side effect.
+- Domain stores (`IncidentStore`, `FleetStore`, `LeaseStore`, `DoraStore`,
+  ...), not a generic SQL layer; SQLite and Postgres implementations where
+  they differ; migrations and invariants tested on both.
+- Tenant scope is a model through keys, unique constraints, authorization,
+  caches, object paths and audit records, not a column. New tables (ledgers,
+  observations) are tenant-qualified from the start; the existing 23 get
+  the model before SaaS. Row-level security is defence in depth.
+- **Transactional outbox:** a change and its event in one transaction;
+  idempotent publishers to VictoriaLogs (a searchable copy) and the
+  archive; neither is needed for correctness. No direct dual writes.
+- VictoriaMetrics, VictoriaLogs and VictoriaTraces are hot stores on block
+  storage; their object-storage support is backup only, and retention is
+  per instance. So hot retention is short, and long retention per class
+  lives in the archive.
+- **Archive:** Parquet on object storage (pure-Go writer), organised by
+  accepted ledger sequence ranges; per-tenant prefixes and envelope keys;
+  signed manifests sealed by risk (e.g. hourly for audit) with a sealed
+  watermark; WORM (object lock) for audit; legal holds override expiry;
+  reconciliation ledger → hot → archive; restore tests; no compaction
+  across tenants. Deletion covers manifests, retry queues and backups; a
+  tenant's key is destroyed only after retention ends; tombstones record
+  redactions. Captures kept short and access-controlled. A customer's own
+  bucket is an enterprise export target. Iceberg or DuckLake later.
+- **DuckDB:** never in core (it needs CGO). An optional, isolated job over
+  one tenant's archive, with limits and short-lived credentials, behind a
+  governed analytics service (also for "Ask vigil" over history); never
+  attached to the production Postgres.
+- **Alerting state:** vigil's own notification coordinator (silences,
+  grouping, deduplication, routing, attempts, retries, audit, outbox) on
+  SQLite or Postgres becomes the one path. An external Alertmanager cluster
+  is a bridge for large self-hosted; the embedded Alertmanager stays in
+  small installs until the coordinator matches the supported routing
+  features and has passed restart and failover tests.
+- **SaaS:** cells (Postgres, Victoria* with `AccountID`/`ProjectID`
+  tenants, server replicas); a small global database maps tenant → cell;
+  large tenants get a cell of their own; a cell is also the answer to data
+  residency.
+
+### Modules
+
+- "Small" means memory, CPU and what runs as root first; artifact size is a
+  release budget too. Measured 2026-10-25 (linux/amd64, stripped): `vigil`
+  is 51 MB; an agent-only binary was 26.5 MB, still pulling in
+  Alertmanager, the AWS SDK and Kafka through agent → inventory → fleet →
+  rules → alerting. Fixed the same day by moving `Inventory` to
+  `internal/model`: `vigil-agent` is 21.0 MB, `vigil-relay` 7.7 MB, and the
+  agent's idle memory with host metrics only is 27 MB against 41 MB for
+  `vigil agent` (macOS). gRPC stays, through the OTLP collector packages.
+- Integrations stay YAML data (detection, config, rules, dashboards); only
+  bundles from an outside catalog are signed.
+- Compiled into the agent only if mature, used by most agents, light on
+  dependencies and needing no extra privilege; the runtime-security eBPF
+  probe stays. Modules: eBPF HTTP/gRPC instrumentation, GPU vendor
+  collectors, the AI gateway, native database SDKs, FIM, DuckDB analytics.
+- Built-in capabilities are inert until a profile switches them on: no
+  goroutines, listeners or eBPF programs.
+- A module is a separate executable on a private Unix socket with a small,
+  versioned, typed protocol; not Go's `plugin` package; WASM only for user
+  parsers later. The agent supervises it and mediates everything it sends
+  (labels, limits, timestamps, redaction, spool, class). A module declares
+  its sources, data class, schema, privileges, health checks and retention.
+- First-party modules ship with the agent's version, signed, checksum
+  verified before they run; a module's security fix is an agent patch
+  release. Protocol and schema versions in the handshake.
+- Profiles request a module; the host's local config allows module names
+  and privilege classes (`modules.allow`), so the server alone can never
+  start a module that proxies API keys.
+- Activation states: pending, downloading, verified, starting, healthy,
+  failed, rolled back. Saving a profile shows which agents can take it;
+  only eligible agents are staged.
+- Artifacts hosted by the server, explicit import for offline sites; relays
+  stay stateless (mirrors only when bandwidth needs them). Modules run
+  unprivileged by default (own user, `no_new_privs`, sandbox, limits);
+  eBPF modules get only the capabilities they need.
+- Server features (DORA, catalog, AI) stay compiled in and inert until
+  enabled; no separate services for the sake of modularity.
+- First module: GPU (exists, low risk); second: the AI gateway.
+
+### DORA
+
+- Deployment frequency, lead time for changes, change failure rate and
+  failed deployment recovery time, per service and team, never per person.
+- Immutable Change, Release, Rollout and RolloutStep records; one
+  production deploy is one rollout, however many cells or pods it reaches.
+  Reported rollouts are keyed by the producer's rollout id plus attempt,
+  detected ones by a deterministic workload / target / version id; the
+  image digest is a relation, not a key.
+- Detection: a Kubernetes watch on workload identity, pod-template hash and
+  rollout progress, with persisted checkpoints and Argo/Flagger status
+  where present. Rollout observations are Kubernetes telemetry (change
+  class), recorded whenever the kubernetes integration is on, DORA or not,
+  so DORA backfills from the retained observations when it is enabled.
+  Plain-host and systemd changes are low-confidence evidence.
+- Detected deploys count without setup (`source=detected`, with
+  completeness); a CI report adds to the same record and never overwrites
+  it. CI reports with a token kind of its own (deploy reporting only,
+  scoped to tenant / service / environment, own rotation, never enrols
+  agents).
+- The ledger is relational (SQLite, Postgres later) with tenant-qualified
+  events and the outbox to the archive; DORA metrics in VictoriaMetrics are
+  versioned projections that can be recomputed.
+- Production targets are fixed when a rollout starts; autoscaled instances
+  belong to their parent target; a new cell or cluster is a separate target
+  expansion. Frequency counts completed production rollouts under a
+  versioned completion policy.
+- Lead time from CI-provided provenance (the revisions actually in the
+  artifact), measured from merge to trunk; vigil never clones a repository.
+- Service identity starts from labels and an OWNERS-style file, then becomes
+  a catalog object (stable ids, aliases, release units, owner history)
+  edited through the UI/API and `vigil apply`.
+- Failure attribution by scope (frozen rollout targets against the
+  incident's affected resources) and ordering, keeping competing rollouts.
+  Confirmed needs a person's link or an automatic rollback whose recorded
+  reason names the rollout; a single candidate is likely; several are
+  ambiguous and count against none. The headline change failure rate uses
+  confirmed links, with likely and ambiguous shown next to it, so a low
+  confirmed rate with many likely links reads as unknown. AI Explain may
+  propose a link; it never counts until confirmed.
+- A canary rolled back before users were affected is a caught release, not
+  a failure.
+- Recovery time: incident opened → resolved, labelled as such; sustained
+  SLO recovery added where an SLO exists.
+- Deploy markers on charts, on the Home page and in AI Explain bundles come
+  early, before the numbers.
+- Raw evidence stays in its region; release identities and compact ledger
+  facts replicate for a global view.
+
+### Build order
+
+1. On paper: data classes, tenant model, envelope (sequence, reset and drop
+   rules), retention and legal hold, integrity claims per shape.
+2. Separate `vigil-agent`, `vigil-server` and `vigil-relay` binaries; fix
+   the agent's import leak.
+3. CI budgets: forbidden agent imports, size, idle memory, CPU, goroutines,
+   open files and listeners, startup time; wire-protocol compatibility
+   fixtures, mixed-version tests, fault injection, load and retry tests.
+   Check that built-in capabilities are inert until enabled.
+4. Identity and durable edge state: mTLS enrolment, renewal, revocation,
+   installation epochs; the envelope and per-class spools on the agent; the
+   cluster agent's PVC and gap records.
+5. Rollout observations with a real watch (change class).
+6. Domain stores and the outbox: audit, change and security records,
+   receipts, the server audit log. The Postgres implementation before
+   large installs or SaaS.
+7. Audit sources: auditd and sessions, packages and binaries, Kubernetes
+   API audit on its own path, generic classified receivers.
+8. Hot stores and the archive from the outbox: manifests, sealing tiers,
+   reconciliation, restores, retention, holds, tombstones.
+9. The module system (manifest, signatures, allowlist, supervisor, mediated
+   ingestion, activation states), proven with GPU; then FIM as a module;
+   the AI gateway after it.
+10. DORA on the change ledger: deploy markers and frequency first, then CI
+    reports, incident linking (confirmed / likely / ambiguous), lead and
+    recovery time, the catalog.
+11. Later: server replicas with leases and fencing, the notification
+    coordinator, cells for SaaS, governed archive analytics with the
+    optional DuckDB job.
 
 ## Home page, incidents and AI explanations (agreed 2026-10-24)
 
