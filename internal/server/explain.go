@@ -59,6 +59,7 @@ var explainSchema = map[string]any{
 
 // Answer is what the model returns, checked by vigil.
 type Answer struct {
+	Assessment string   `json:"assessment,omitempty"` // log lines only: harmless, needs_attention or unknown
 	Summary    string   `json:"summary"`
 	Hypothesis string   `json:"hypothesis"`
 	Confidence string   `json:"confidence"`
@@ -101,6 +102,8 @@ func (a *Answer) check(items []Evidence) {
 type Explanation struct {
 	ID          int64      `json:"id"`
 	Incident    int64      `json:"incident"`
+	Subject     string     `json:"subject,omitempty"` // what it explains when it is not an incident
+	Cached      bool       `json:"cached,omitempty"`  // given again from an earlier call, at no cost
 	Created     time.Time  `json:"created"`
 	User        string     `json:"user"`
 	Provider    string     `json:"provider"`
@@ -126,6 +129,16 @@ func initExplanations(db *sql.DB) error {
 		verdict_note TEXT NOT NULL DEFAULT '')`)
 	if err == nil {
 		_, err = db.Exec(`CREATE INDEX IF NOT EXISTS explanations_incident ON explanations (incident)`)
+	}
+	// subject names what an explanation is of when it is not an incident
+	// (incident 0): a log line's pattern, "log:<key>". Added later.
+	if err == nil {
+		if _, aerr := db.Exec(`ALTER TABLE explanations ADD COLUMN subject TEXT NOT NULL DEFAULT ''`); aerr != nil && !strings.Contains(aerr.Error(), "duplicate column") {
+			err = aerr
+		}
+	}
+	if err == nil {
+		_, err = db.Exec(`CREATE INDEX IF NOT EXISTS explanations_subject ON explanations (subject)`)
 	}
 	return err
 }
@@ -232,25 +245,31 @@ func (s *Server) handleExplain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	st, err := s.aiState(ctx)
-	switch {
-	case err != nil:
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	case !st.Enabled:
-		http.Error(w, "no AI provider is set up on this server (ai in the server config)", http.StatusConflict)
-		return
-	case st.Paused:
-		http.Error(w, "AI explanations are paused", http.StatusConflict)
-		return
-	case st.Spent >= st.Budget:
-		http.Error(w, fmt.Sprintf("this month's AI budget (%.2f) is used up (%.2f spent)", st.Budget, st.Spent), http.StatusConflict)
+	if !s.aiReady(w, ctx) {
 		return
 	}
 	b := s.buildBundle(ctx, in, events)
-	ex := Explanation{Incident: in.ID, Created: time.Now().UTC(), User: caller(r).User, Provider: s.ai.Name(),
-		Model: s.ai.Model(), Prompt: promptVersion, BundleHash: b.Hash, Evidence: b.Items}
-	res, err := s.ai.Complete(ctx, ai.Request{System: explainSystem, User: explainQuestion(in, b), Schema: explainSchema, MaxTokens: 8000})
+	ex := Explanation{Incident: in.ID, User: caller(r).User, Prompt: promptVersion}
+	ex, err := s.explain(ctx, ex, b, ai.Request{System: explainSystem, User: explainQuestion(in, b), Schema: explainSchema, MaxTokens: 8000})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.log.Info("incident explained", "incident", in.ID, "by", ex.User, "model", ex.Model, "cost", ex.Cost,
+		"bytes", b.Bytes, "error", ex.Error)
+	if ex.Error != "" {
+		http.Error(w, ex.Error, http.StatusBadGateway)
+		return
+	}
+	writeJSON(w, ex)
+}
+
+// explain asks the model, checks the answer against the bundle and stores
+// the explanation, failed or not: what was sent is on record either way.
+// The error is only that storing failed; a failed call is in ex.Error.
+func (s *Server) explain(ctx context.Context, ex Explanation, b bundle, req ai.Request) (Explanation, error) {
+	ex.Created, ex.Provider, ex.Model, ex.BundleHash, ex.Evidence = time.Now().UTC(), s.ai.Name(), s.ai.Model(), b.Hash, b.Items
+	res, err := s.ai.Complete(ctx, req)
 	ex.Usage, ex.LatencyMS = res.Usage, res.Latency.Milliseconds()
 	if res.Model != "" {
 		ex.Model = res.Model
@@ -268,17 +287,27 @@ func (s *Server) handleExplain(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		ex.Error = err.Error()
 	}
-	if ex.ID, err = s.saveExplanation(ctx, ex); err != nil {
+	ex.ID, err = s.saveExplanation(ctx, ex)
+	return ex, err
+}
+
+// aiReady answers the request itself when no explanation may be made now:
+// no provider, paused, or the month's budget used up.
+func (s *Server) aiReady(w http.ResponseWriter, ctx context.Context) bool {
+	st, err := s.aiState(ctx)
+	switch {
+	case err != nil:
 		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+	case !st.Enabled:
+		http.Error(w, "no AI provider is set up on this server (ai in the server config)", http.StatusConflict)
+	case st.Paused:
+		http.Error(w, "AI explanations are paused", http.StatusConflict)
+	case st.Spent >= st.Budget:
+		http.Error(w, fmt.Sprintf("this month's AI budget (%.2f) is used up (%.2f spent)", st.Budget, st.Spent), http.StatusConflict)
+	default:
+		return true
 	}
-	s.log.Info("incident explained", "incident", in.ID, "by", ex.User, "model", ex.Model, "cost", ex.Cost,
-		"bytes", b.Bytes, "error", ex.Error)
-	if ex.Error != "" {
-		http.Error(w, ex.Error, http.StatusBadGateway)
-		return
-	}
-	writeJSON(w, ex)
+	return false
 }
 
 func explainQuestion(in incidents.Incident, b bundle) string {
@@ -306,9 +335,9 @@ func (s *Server) saveExplanation(ctx context.Context, ex Explanation) (int64, er
 	evidence, _ := json.Marshal(ex.Evidence)
 	answer, _ := json.Marshal(ex.Answer)
 	usage, _ := json.Marshal(ex.Usage)
-	res, err := s.store.db.ExecContext(ctx, `INSERT INTO explanations (incident, created, user, provider, model, prompt, bundle_hash,
-		evidence, answer, error, usage, cost, latency_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		ex.Incident, ex.Created.Unix(), ex.User, ex.Provider, ex.Model, ex.Prompt, ex.BundleHash, string(evidence), string(answer),
+	res, err := s.store.db.ExecContext(ctx, `INSERT INTO explanations (incident, subject, created, user, provider, model, prompt, bundle_hash,
+		evidence, answer, error, usage, cost, latency_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		ex.Incident, ex.Subject, ex.Created.Unix(), ex.User, ex.Provider, ex.Model, ex.Prompt, ex.BundleHash, string(evidence), string(answer),
 		ex.Error, string(usage), ex.Cost, ex.LatencyMS)
 	if err != nil {
 		return 0, err
@@ -321,11 +350,20 @@ func (s *Server) handleExplanations(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	rows, err := s.store.db.QueryContext(r.Context(), `SELECT id, incident, created, user, provider, model, prompt, bundle_hash,
-		evidence, answer, error, usage, cost, latency_ms, verdict, verdict_by, verdict_note FROM explanations WHERE incident = ? ORDER BY id DESC LIMIT 10`, id)
+	out, err := s.explanations(r.Context(), `incident = ? ORDER BY id DESC LIMIT 10`, id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+	writeJSON(w, out)
+}
+
+// explanations reads stored explanations.
+func (s *Server) explanations(ctx context.Context, where string, args ...any) ([]Explanation, error) {
+	rows, err := s.store.db.QueryContext(ctx, `SELECT id, incident, subject, created, user, provider, model, prompt, bundle_hash,
+		evidence, answer, error, usage, cost, latency_ms, verdict, verdict_by, verdict_note FROM explanations WHERE `+where, args...)
+	if err != nil {
+		return nil, err
 	}
 	defer rows.Close()
 	out := []Explanation{}
@@ -335,10 +373,9 @@ func (s *Server) handleExplanations(w http.ResponseWriter, r *http.Request) {
 			created                 int64
 			evidence, answer, usage string
 		)
-		if err := rows.Scan(&ex.ID, &ex.Incident, &created, &ex.User, &ex.Provider, &ex.Model, &ex.Prompt, &ex.BundleHash,
+		if err := rows.Scan(&ex.ID, &ex.Incident, &ex.Subject, &created, &ex.User, &ex.Provider, &ex.Model, &ex.Prompt, &ex.BundleHash,
 			&evidence, &answer, &ex.Error, &usage, &ex.Cost, &ex.LatencyMS, &ex.Verdict, &ex.VerdictBy, &ex.VerdictNote); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+			return nil, err
 		}
 		ex.Created = time.Unix(created, 0).UTC()
 		json.Unmarshal([]byte(evidence), &ex.Evidence)
@@ -346,7 +383,7 @@ func (s *Server) handleExplanations(w http.ResponseWriter, r *http.Request) {
 		json.Unmarshal([]byte(usage), &ex.Usage)
 		out = append(out, ex)
 	}
-	writeJSON(w, out)
+	return out, rows.Err()
 }
 
 // handleVerdict records whether an explanation was right: the only way to

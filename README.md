@@ -111,6 +111,9 @@ large fleets. Expect rough edges, and please say what you find.
 - **Web interface**: Home, Dashboards, Explore (with saved queries),
   Services, Sessions, Alerts, Captures, Fleet, Users; admin and viewer
   accounts.
+- **Context and Explain on a log line** in Explore: how often lines like
+  it come, the lines around it, what happened on the host then, and, with
+  a language model set up, what it means. [Explore](docs/explore.md#a-lines-context)
 - **Grafana, if you want it**: the server answers Grafana's data sources
   for metrics, logs, traces and alerts, through read-only tokens.
 - **An API** for everything the interface does.

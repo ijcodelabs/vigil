@@ -162,7 +162,40 @@ Most of these are under **Saved** already.
   what they may be; edit it down to what the unwanted lines have in common.
   Before anything is saved it shows how many lines of that source in the
   last hour the pattern would have dropped and kept, with examples of both.
+- **Context** (under the fields of an opened line) shows what you would
+  otherwise look up by hand before deciding whether a line matters; see
+  [A line's context](#a-lines-context). **Explain…** (admins, with a
+  language model set up) asks the model about it, from that context.
 - The newest lines up to the chosen limit are shown.
+
+### A line's context
+
+**Context** gathers, without any AI:
+
+- **Lines like it**: lines of the same source (the container, pod, unit or
+  app) that match a pattern made from this one, with numbers and ids
+  replaced, counted in the last hour, 24 hours and 7 days, when the first
+  and last came, and on which agents. **show them** opens them in Explore.
+- **Around it**: up to ten lines before and after it in the same stream,
+  the line itself highlighted.
+- **On the host, 10 minutes either side**: the vigil agent starting,
+  containers stopping or starting, container restarts, out-of-memory kills,
+  and profile changes; and the incidents of that host open at the time.
+- **What stands out**, said plainly, for example: the text says *error*
+  but the line's level is *info*; it is the only line like it in a week;
+  the agent started in the same second (a request it had open was cut off
+  by its own restart).
+
+**Explain…** sends that context to the language model, after showing
+exactly what would be sent, the same way as for an incident (see
+[Home → AI explanations](home.md#ai-explanations)). The answer says whether
+the line is **harmless**, **needs attention** or is **unclear**, what it
+means, why it happened and what to check, each fact citing the evidence it
+rests on. A line is log content, so this needs `data: [logs]` in the
+server's `ai` settings; without it nothing is sent. Lines like each other
+(same pattern, source and host, on the same day) share one explanation:
+asking about the next one shows the earlier answer at no cost, and
+**Explain again…** makes a new one.
 
 ### What a log line has
 

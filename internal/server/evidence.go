@@ -337,8 +337,19 @@ func (bb *bundler) detections(agent, rule string, at time.Time) {
 
 // logLines runs a LogsQL query against the log store, newest lines last.
 func (s *Server) logLines(ctx context.Context, query string, from, to time.Time, limit int) ([]map[string]string, error) {
-	form := url.Values{"query": {query + " | sort by (_time desc)"}, "start": {from.UTC().Format(time.RFC3339)},
-		"end": {to.UTC().Format(time.RFC3339)}, "limit": {strconv.Itoa(limit)}}
+	out, err := s.logQuery(ctx, query+" | sort by (_time desc)", from, to, limit)
+	// Oldest first, as a person reads a log.
+	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
+		out[i], out[j] = out[j], out[i]
+	}
+	return out, err
+}
+
+// logQuery runs a LogsQL query against the log store and returns its rows
+// in the order the store gives them.
+func (s *Server) logQuery(ctx context.Context, query string, from, to time.Time, limit int) ([]map[string]string, error) {
+	form := url.Values{"query": {query}, "start": {from.UTC().Format(time.RFC3339Nano)},
+		"end": {to.UTC().Format(time.RFC3339Nano)}, "limit": {strconv.Itoa(limit)}}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.logs.JoinPath("/select/logsql/query").String(), strings.NewReader(form.Encode()))
 	if err != nil {
 		return nil, err
@@ -361,10 +372,6 @@ func (s *Server) logLines(ctx context.Context, query string, from, to time.Time,
 		if json.Unmarshal(sc.Bytes(), &m) == nil {
 			out = append(out, m)
 		}
-	}
-	// Oldest first, as a person reads a log.
-	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
-		out[i], out[j] = out[j], out[i]
 	}
 	return out, sc.Err()
 }

@@ -714,9 +714,46 @@ Steps 2 and 3 of the Foundations build order in direction.md.
   (with the warning) all report and send host metrics; `vigil-agent enroll`
   enrols against it; the docs anchor resolves and the served `fleet.js`
   carries the new commands (the Fleet page itself was not opened signed in).
-- Not done: the trial host (its deploy files are changed, not deployed);
-  the home agents, which still run `vigil agent`; gRPC still comes in
-  through the OTLP collector packages.
+- On the trial since 2026-10-25 (server, host agent, OTLP gateway). Agent
+  memory (`vigil_agent_memory_bytes`, average over an hour): host agent 45
+  MB against 60–66 MB with `vigil agent` the day before, gateway 28 MB
+  against 43–47 MB.
+- The home agents moved the same day: two run `vigil-agent`; a NixOS host
+  runs the new `vigil agent` (with the warning) until its own NixOS config
+  points at `vigil-agent`, as `deploy/vigil-agent.nix` does.
+- Not done: gRPC still comes in through the OTLP collector packages.
+
+## Context and Explain for a log line (built 2026-10-25, uncommitted)
+
+- Explore → Logs, an opened line: **Context** (everyone) and **Explain…**
+  (admins, with `ai` set up). `internal/server/logcontext.go`: `POST
+  /api/v1/loglines/context` with the line as the store returned it (needs
+  `_time`, `agent`, `_stream_id`). Lines like it: same source (container,
+  pod, unit or app, else the stream) matching `linePattern` (the Go twin of
+  `suggestPattern` in explore.js, tested to agree), counted 1 h / 24 h /
+  7 d by agent with first and last; 10 lines before and after in the
+  stream; ±10 min on the host: agent starts (`vigil_agent_start_time_seconds`
+  every 15 s), container stops and starts, restarts, OOM kills, profile
+  changes; the agent's incidents open then (`Tracker.Around`); notes for
+  "says error but level is info", "only one in 7 days", "the agent started
+  N s before/after".
+- `internal/server/logexplain.go`: the context becomes the bundle (the line
+  and its neighbours as class logs, the rest metadata; the pattern is the
+  line's text, so it is withheld too without `data: [logs]`); its own
+  prompt and schema with `assessment` (harmless, needs_attention,
+  unknown). Refused (409) without `data: [logs]`. Cached by agent, source,
+  pattern and day (`explanations.subject = log:<hash>`, a column added
+  then): a second ask returns the stored answer at no cost; `again` makes a
+  new one. The shared steps of incident Explain moved into `explain()`,
+  `aiReady()` and `explanations()`.
+- Found while building: the trial's "error" in dockerd's `request cancelled
+  by client … broken pipe` (status 499, level info) was the agent being
+  restarted mid-request by a deploy; once in 7 days.
+- Verified: server tests with fake stores and a fake model API (context,
+  notes, cache, refusal, nothing sent without logs); in the browser against
+  a local server with the test VM's stores, an agent tailing a file and a
+  fake model API: the panel, the preview, the answer, the cache (one call
+  for two asks), a verdict, Explain again. Not against the real API.
 
 ## Next
 
