@@ -1,13 +1,13 @@
 # vigil
 
-Monitoring for servers and clusters in one Go binary: metrics, logs,
-alerts, site checks, traces and runtime security events, the dashboards to
-look at them, and a Home page that says what needs attention.
+Monitoring for servers and clusters in a few static Go binaries: metrics,
+logs, alerts, site checks, traces and runtime security events, the
+dashboards to look at them, and a Home page that says what needs attention.
 
 It is for people who would otherwise wire an agent, a log shipper,
 Alertmanager, a dashboard tool and a runtime-security tool together. The
-same binary runs as the agent on every host or Kubernetes node
-(`vigil agent`) and as the central server (`vigil server`).
+agent runs on every host or Kubernetes node (`vigil-agent`), the central
+server is `vigil-server`, and each is a static binary of its own.
 VictoriaMetrics and VictoriaLogs store the data; VictoriaTraces, if you
 add it, keeps traces.
 
@@ -84,7 +84,7 @@ large fleets. Expect rough edges, and please say what you find.
 
 - **Claude Code**: its own telemetry shows cost and tokens by person, model
   and subagent; a **Sessions** page shows each session's prompts and cost;
-  `vigil claude-hook` keeps an audit trail of what it ran and what was
+  `vigil-agent claude-hook` keeps an audit trail of what it ran and what was
   refused. [Claude Code](docs/claude-code.md)
 - **Applications that call language models**: their OpenTelemetry spans are
   counted by model and priced with the prices you give.
@@ -144,8 +144,9 @@ pages under `/docs/` (the **Docs** link in the interface).
 
 ## Build
 
-    make build     # bin/vigil for this machine
-    make linux     # static bin/vigil-linux-{amd64,arm64}
+    make build     # bin/vigil-agent, vigil-server, vigil-relay and vigil for this machine
+    make linux     # static bin/<name>-linux-{amd64,arm64}
+    make size      # the agent's and relay's size budgets
     make test
     make bpf       # only after changing internal/events/bpf/events.c (needs podman or docker)
 

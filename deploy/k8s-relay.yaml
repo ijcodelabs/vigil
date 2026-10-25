@@ -29,8 +29,8 @@ spec:
       securityContext: {runAsNonRoot: true, runAsUser: 65534}
       containers:
         - name: relay
-          image: vigil:dev          # replace with your registry/image
-          args: ["relay", "-config", "/etc/vigil/relay.yaml"]
+          image: vigil-relay:dev    # docker build --target relay; replace with your registry/image
+          args: ["-config", "/etc/vigil/relay.yaml"]
           env:
             - name: VIGIL_CA_PIN
               valueFrom: {secretKeyRef: {name: vigil-agent, key: ca-pin, optional: true}}

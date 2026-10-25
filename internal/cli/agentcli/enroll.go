@@ -1,16 +1,14 @@
-package main
+package agentcli
 
 import (
 	"context"
 	"errors"
 	"flag"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -31,20 +29,9 @@ func (l labelFlags) Set(v string) error {
 	return nil
 }
 
-// trustedClient builds an HTTP client for the command-line tools.
-func trustedClient(server, caFile, caPin string) (*http.Client, error) {
-	tc, err := pki.ClientTLS(pki.ClientOptions{ServerURL: server, CAFile: caFile, CAPin: caPin})
-	if err != nil {
-		return nil, err
-	}
-	tr := http.DefaultTransport.(*http.Transport).Clone()
-	tr.TLSClientConfig = tc
-	return &http.Client{Timeout: 30 * time.Second, Transport: tr}, nil
-}
-
-// runEnroll exchanges an enrolment token for this host's own token and
+// Enroll exchanges an enrolment token for this host's own token and
 // writes the agent's config file with it.
-func runEnroll(ctx context.Context, args []string) error {
+func Enroll(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("enroll", flag.ExitOnError)
 	server := fs.String("server", os.Getenv("VIGIL_SERVER"), "server address (or $VIGIL_SERVER)")
 	token := fs.String("token", os.Getenv("VIGIL_ENROLL_TOKEN"), "enrolment token (or $VIGIL_ENROLL_TOKEN)")
@@ -84,7 +71,7 @@ func runEnroll(ctx context.Context, args []string) error {
 		}
 	}()
 
-	hc, err := trustedClient(*server, *caFile, *caPin)
+	hc, err := pki.HTTPClient(pki.ClientOptions{ServerURL: *server, CAFile: *caFile, CAPin: *caPin})
 	if err != nil {
 		return err
 	}
@@ -104,7 +91,7 @@ func runEnroll(ctx context.Context, args []string) error {
 		srv["ca_file"] = *caFile
 	}
 	var b strings.Builder
-	b.WriteString("# Written by `vigil enroll`. The token belongs to this agent id only.\nserver:\n")
+	b.WriteString("# Written by `vigil-agent enroll`. The token belongs to this agent id only.\nserver:\n")
 	for _, k := range []string{"url", "token", "ca_pin", "ca_file"} {
 		if v, ok := srv[k]; ok {
 			q, _ := yaml.Marshal(v)
@@ -133,6 +120,6 @@ func runEnroll(ctx context.Context, args []string) error {
 		return fmt.Errorf("enrolled as %s, but writing %s failed: %w. Revoke the agent's token on the Fleet page before trying again", *id, *out, err)
 	}
 	done = true
-	fmt.Printf("enrolled as %s; wrote %s\nstart the agent with: vigil agent -config %s\n", *id, *out, *out)
+	fmt.Printf("enrolled as %s; wrote %s\nstart the agent with: vigil-agent -config %s\n", *id, *out, *out)
 	return nil
 }

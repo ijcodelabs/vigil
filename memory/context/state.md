@@ -687,6 +687,37 @@ Step 3 of the Home page plan.
   no restart. One of `bearer_token`, `bearer_token_file`, `basic_auth`.
   First used on the trial for an application whose metrics need a token.
 
+## Separate binaries (built 2026-10-25, uncommitted)
+
+Steps 2 and 3 of the Foundations build order in direction.md.
+
+- `vigil-agent` (agent, `enroll`, `events`, `claude-hook`, `version`; with
+  no subcommand it runs the agent), `vigil-server`, `vigil-relay`, each in
+  `cmd/` with its commands in `internal/cli/{agentcli,servercli,relaycli}`.
+  `vigil` keeps `apply` and `tracegen` (`internal/cli/opscli`) and, for one
+  release, every old subcommand, logging a warning (`claude-hook` silently).
+- One version for all: `internal/version.Version`, set with `-X`.
+- The leak: `inventory` imported `fleet` for one struct, which pulled the
+  rule engine and Alertmanager (with an AWS SDK and Kafka) into the agent.
+  `Inventory` is now in `internal/model`. linux/amd64 stripped: agent 21.0
+  MB (26.5 with the leak), relay 7.7, server 49.9, `vigil` 51.1.
+- Guards: `internal/depcheck` and a test in `cmd/vigil-agent` and
+  `cmd/vigil-relay` that fail on server packages and libraries
+  (`go list -deps`); `make size` checks the agent (23 MB) and relay (9 MB)
+  budgets, and CI runs it.
+- Dockerfile targets `agent`, `server`, `relay`, and `all` (the default,
+  the old image). `deploy/` and the docs use the new binaries; Install has
+  "From `vigil` to the separate binaries".
+- Verified in the vigil-test VM: all four image targets build; the compose
+  stack runs the `server` target; on the Mac a `vigil-agent` direct, one
+  through `vigil-relay` (shown with its `via`) and an old `vigil agent`
+  (with the warning) all report and send host metrics; `vigil-agent enroll`
+  enrols against it; the docs anchor resolves and the served `fleet.js`
+  carries the new commands (the Fleet page itself was not opened signed in).
+- Not done: the trial host (its deploy files are changed, not deployed);
+  the home agents, which still run `vigil agent`; gRPC still comes in
+  through the OTLP collector packages.
+
 ## Next
 
 - The config-at-scale list is done. Open: step 7 (AI investigator, MCP

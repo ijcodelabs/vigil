@@ -5,7 +5,8 @@
 #   services.vigil-agent.enable = true;
 #
 # The binary and the agent's config are not built by Nix: copy the static
-# binary to /opt/vigil/vigil and let `vigil enroll` write /etc/vigil/agent.yaml
+# binary to /opt/vigil/vigil-agent and let `vigil-agent enroll` write
+# /etc/vigil/agent.yaml
 # (docs/install-by-ai.md), then `nixos-rebuild switch`.
 { config, lib, pkgs, ... }:
 
@@ -17,13 +18,13 @@ in
     enable = lib.mkEnableOption "the vigil monitoring agent";
     binary = lib.mkOption {
       type = lib.types.str;
-      default = "/opt/vigil/vigil";
-      description = "Path of the static vigil binary on the host.";
+      default = "/opt/vigil/vigil-agent";
+      description = "Path of the static vigil-agent binary on the host.";
     };
     configFile = lib.mkOption {
       type = lib.types.str;
       default = "/etc/vigil/agent.yaml";
-      description = "The agent's config file, as written by `vigil enroll`.";
+      description = "The agent's config file, as written by `vigil-agent enroll`.";
     };
   };
 
@@ -38,7 +39,7 @@ in
       path = [ pkgs.systemd ];
       # A changed binary does not change this unit; restart by hand after an upgrade.
       serviceConfig = {
-        ExecStart = "${cfg.binary} agent -config ${cfg.configFile}";
+        ExecStart = "${cfg.binary} -config ${cfg.configFile}";
         EnvironmentFile = "-/etc/vigil/agent.env";
         StateDirectory = "vigil";
         Restart = "always";

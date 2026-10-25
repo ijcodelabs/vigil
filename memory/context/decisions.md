@@ -5,8 +5,11 @@ ingest and query API. Writing a time-series or log database was ruled out
 at the start. Agents never talk to the stores; the server stamps every
 series and log entry with `agent=<id>`, so an agent cannot write as another.
 
-**One static binary, no cgo.** It must run on Debian, RHEL and Ubuntu
-without packaging. That is why journald is read by running `journalctl`,
+**Static binaries, no cgo.** They must run on Debian, RHEL and Ubuntu
+without packaging. Since 2026-10-25 there is one per part (`vigil-agent`,
+`vigil-server`, `vigil-relay`) instead of one for all, so the agent on
+every host does not carry the server's code and libraries; a test keeps it
+that way. That is why journald is read by running `journalctl`,
 SQLite is the pure-Go `modernc.org/sqlite`, and Docker is spoken to over its
 socket directly.
 

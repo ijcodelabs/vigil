@@ -142,7 +142,7 @@ dashboard:
       h: 4
       queries: [{expr: 'service:~"claude-code" _msg:"claude_code.tool_decision" decision:reject user_email:~"$person" | stats by (tool_name, attr_source) count() as refused | sort by (refused desc)'}]
     - {title: Latest API errors, type: logs, w: 12, h: 3, limit: 30, queries: [{expr: 'service:~"claude-code" _msg:"claude_code.api_error" user_email:~"$person"'}]}
-    # The audit trail, from vigil claude-hook (docs: Claude Code). It knows
+    # The audit trail, from vigil-agent claude-hook (docs: Claude Code). It knows
     # the operating-system account, not the Claude account.
     - title: Audit - tool calls by account and tool
       type: table

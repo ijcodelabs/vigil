@@ -2,8 +2,8 @@
 # Set VIGIL_INGEST_TOKEN and VIGIL_ADMIN_TOKEN in a .env file next to this one.
 services:
   vigil:
-    build: ..
-    command: ["server", "-config", "/etc/vigil/server.yaml"]
+    build: {context: .., target: server}
+    command: ["-config", "/etc/vigil/server.yaml"]
     environment:
       VIGIL_INGEST_TOKEN: ${VIGIL_INGEST_TOKEN:?set VIGIL_INGEST_TOKEN}
       VIGIL_ADMIN_TOKEN: ${VIGIL_ADMIN_TOKEN:?set VIGIL_ADMIN_TOKEN}

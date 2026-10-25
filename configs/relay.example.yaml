@@ -1,4 +1,4 @@
-# vigil relay: agents send here, the relay passes it on to the server.
+# vigil-relay: agents send here, the relay passes it on to the server.
 listen: ":8080"
 # relay_id: site-zagreb             # shown next to its agents; defaults to the hostname
 

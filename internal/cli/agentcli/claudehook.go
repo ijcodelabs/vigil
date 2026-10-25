@@ -1,4 +1,4 @@
-package main
+package agentcli
 
 import (
 	"context"
@@ -11,12 +11,12 @@ import (
 	"github.com/ijcodelabs/vigil/internal/claudehook"
 )
 
-// runClaudeHook is a Claude Code command hook: it reads the hook's input
+// ClaudeHook is a Claude Code command hook: it reads the hook's input
 // from stdin and sends it to the local agent as one log line. It prints
 // nothing and returns nil whatever happens, because Claude Code gives a
 // hook's output to the model and blocks a prompt on exit code 2; an audit
 // line that cannot be sent is lost rather than getting in the way.
-func runClaudeHook(args []string) error {
+func ClaudeHook(args []string) error {
 	fs := flag.NewFlagSet("claude-hook", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	endpoint := fs.String("endpoint", envOr("VIGIL_OTLP_ENDPOINT", "http://127.0.0.1:4318"), "the agent's OTLP endpoint")

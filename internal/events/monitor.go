@@ -176,7 +176,7 @@ func EncodeDetections(ds []Detection) []byte {
 }
 
 // Dump prints every event (and every detection) as a JSON line until ctx is
-// cancelled. It is what `vigil events` runs: a way to see what the probes
+// cancelled. It is what `vigil-agent events` runs: a way to see what the probes
 // report on a host and to try rules out.
 func Dump(ctx context.Context, cfg *config.Security, w io.Writer, log *slog.Logger) error {
 	engine, err := NewEngine(cfg)

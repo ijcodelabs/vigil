@@ -79,8 +79,8 @@ spec:
         - operator: Exists
       containers:
         - name: agent
-          image: vigil:dev       # replace with your registry/image
-          args: ["agent", "-config", "/etc/vigil/agent.yaml"]
+          image: vigil-agent:dev # docker build --target agent; replace with your registry/image
+          args: ["-config", "/etc/vigil/agent.yaml"]
           # Root for the pod log files. Privileged is only needed for runtime
           # events (security.enabled); without them, drop it.
           securityContext: {runAsUser: 0, privileged: true}

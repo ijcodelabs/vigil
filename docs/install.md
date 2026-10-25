@@ -1,7 +1,8 @@
 # Install
 
 You need one **server** and an **agent** on each host you want to watch.
-Both are the same binary.
+Each is a static binary of its own: `vigil-server` and `vigil-agent`, plus
+`vigil-relay` for sites whose agents cannot reach the server.
 
 Having an AI assistant do it? Give it [Install with an AI
 assistant](install-by-ai.md): the same steps written as a runbook, with the
@@ -12,9 +13,13 @@ questions to ask first and a check after every stage.
 Go 1.26 or newer is the only requirement.
 
 ```bash
-make build      # bin/vigil for this machine
-make linux      # bin/vigil-linux-amd64 and bin/vigil-linux-arm64
+make build      # bin/vigil-agent, bin/vigil-server, bin/vigil-relay, bin/vigil for this machine
+make linux      # the same as bin/<name>-linux-amd64 and bin/<name>-linux-arm64
 ```
+
+`vigil` itself holds the operator tools (`vigil apply`, `vigil tracegen`).
+For one release it can also still run as agent, server and relay; see
+[Upgrading](#upgrading).
 
 The Linux binaries are statically linked: copy one file to any Debian, Red
 Hat or Ubuntu host and it runs. There are no packages to install.
@@ -41,10 +46,11 @@ The server then listens on port 8080.
 ### Without containers
 
 Run the two stores as their own services (each is a single binary from
-VictoriaMetrics' releases), then:
+VictoriaMetrics' releases), copy `bin/vigil-server-linux-amd64` to
+`/usr/local/bin/vigil-server`, then:
 
 ```bash
-vigil server -config /etc/vigil/server.yaml
+vigil-server -config /etc/vigil/server.yaml
 ```
 
 ```yaml
@@ -226,14 +232,14 @@ it keeps working for scripts.
 1. Copy the binary:
 
    ```bash
-   scp bin/vigil-linux-amd64 host:/usr/local/bin/vigil
+   scp bin/vigil-agent-linux-amd64 host:/usr/local/bin/vigil-agent
    ```
 
 2. In the interface, **Fleet → Enrolment → New enrolment token**. Run the
    command it shows on the host, as root:
 
    ```bash
-   vigil enroll -server https://vigil.example.com:8080 \
+   vigil-agent enroll -server https://vigil.example.com:8080 \
      -token vge_… -ca-pin sha256:… \
      -label env=prod -label role=web
    ```
@@ -286,8 +292,11 @@ docker run -d --name vigil-agent --pid host --network host \
   -v /proc:/host/proc:ro -v /sys:/host/sys:ro -v /etc:/host/etc:ro -v /:/host/root:ro \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v /etc/vigil:/etc/vigil:ro -v /var/lib/vigil:/var/lib/vigil \
-  vigil:dev agent -config /etc/vigil/agent.yaml
+  vigil-agent:dev -config /etc/vigil/agent.yaml
 ```
+
+The image is built with `docker build --target agent -t vigil-agent:dev .`
+(`--target server` and `--target relay` for the others).
 
 The `HOST_*` variables tell the agent where the host's files are, so the
 numbers describe the host and not the container. Add `--privileged` if you
@@ -302,7 +311,7 @@ Deployment for the cluster as a whole.
 ## Many hosts at once
 
 One enrolment token serves any number of hosts, so it fits in an image,
-an Ansible role or cloud-init. Either run `vigil enroll` as above in your
+an Ansible role or cloud-init. Either run `vigil-agent enroll` as above in your
 provisioning, or ship the same file everywhere and let each agent enrol
 itself when it first starts:
 
@@ -372,3 +381,26 @@ Data becomes visible to queries about 30 seconds after it was sent.
 Replace the binary and restart. The server's state is in `data_dir`; an
 agent's unsent data and its place in each log file are in its `spool_dir`,
 so nothing is lost or sent twice across a restart.
+
+### From `vigil` to the separate binaries
+
+Until now one `vigil` binary was agent, server and relay. They are now
+`vigil-agent`, `vigil-server` and `vigil-relay`; the agent is about 21 MB
+instead of 51 and uses less memory, because it no longer carries the
+server. Config files, tokens, `data_dir` and `spool_dir` stay as they are.
+
+1. Copy the new binary next to the old one, e.g.
+   `/usr/local/bin/vigil-agent`.
+2. Point the unit at it: `ExecStart=/usr/local/bin/vigil-agent -config
+   /etc/vigil/agent.yaml` (the files in `deploy/` already do), then
+   `systemctl daemon-reload && systemctl restart vigil-agent`. The same for
+   the server (`vigil-server -config …`) and a relay (`vigil-relay -config
+   …`). In Kubernetes, use the `vigil-agent` and `vigil-relay` images and
+   drop the first argument (`agent`, `relay`) from `args`.
+3. Claude Code hooks: change `vigil claude-hook` to `vigil-agent
+   claude-hook` in the settings file.
+
+The old `vigil agent`, `vigil server`, `vigil relay`, `vigil enroll` and
+`vigil events` keep working for one release and log a warning; `vigil
+claude-hook` keeps working silently. Upgrade agents and server in either
+order: what they send each other has not changed.

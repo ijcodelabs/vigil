@@ -435,7 +435,7 @@ function TokenResult({ id, token, onClose }) {
   return html`
     <p>Put this in <code>/etc/vigil/agent.yaml</code> on the host and set the labels. The token is shown only this once.</p>
     <div class="secret">${snippet(id, token, info)}</div>
-    <p class="muted">Then start the agent: <code>vigil agent -config /etc/vigil/agent.yaml</code>. It appears here on its first report and
+    <p class="muted">Then start the agent: <code>vigil-agent -config /etc/vigil/agent.yaml</code>. It appears here on its first report and
       collects what the profiles matching it say.</p>
     <div class="actions">
       <button onClick=${() => navigator.clipboard?.writeText(snippet(id, token, info))}>Copy</button>
@@ -549,7 +549,7 @@ function NewEnrolToken({ info, onClose }) {
   };
   const pin = info?.ca_pin;
   const text = !issued ? '' : {
-    command: `vigil enroll -server ${location.origin} \\\n  -token ${issued.token}${pin ? ` \\\n  -ca-pin ${pin}` : ''} \\\n  -label env=prod -label role=web`,
+    command: `vigil-agent enroll -server ${location.origin} \\\n  -token ${issued.token}${pin ? ` \\\n  -ca-pin ${pin}` : ''} \\\n  -label env=prod -label role=web`,
     file: `server:\n  url: ${location.origin}\n  enroll_token: ${issued.token}${caLine(info)}\n# agent_id defaults to the host name\nlabels:\n  env: prod\n  role: web\n`,
     kubernetes: `kubectl -n vigil create secret generic vigil-agent \\\n  --from-literal=enroll-token=${issued.token}${pin ? ` \\\n  --from-literal=ca-pin=${pin}` : ''}`,
   }[how];

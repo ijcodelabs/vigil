@@ -275,3 +275,15 @@ func fetchCA(serverURL string) ([]byte, error) {
 }
 
 func readFile(path string) ([]byte, error) { return os.ReadFile(path) }
+
+// HTTPClient is an HTTP client for the command-line tools (enrol, apply)
+// that trusts the server the way ClientTLS describes.
+func HTTPClient(o ClientOptions) (*http.Client, error) {
+	tc, err := ClientTLS(o)
+	if err != nil {
+		return nil, err
+	}
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.TLSClientConfig = tc
+	return &http.Client{Timeout: 30 * time.Second, Transport: tr}, nil
+}

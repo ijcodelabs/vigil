@@ -154,7 +154,7 @@ started them.
 Claude Code's telemetry counts and prices; it says which command ran in
 which folder, and as which account on the machine, only with every content
 setting on. Claude Code's hooks see exactly that, one call at a time.
-`vigil claude-hook` is a hook that sends one log line per call to the
+`vigil-agent claude-hook` is a hook that sends one log line per call to the
 agent on the same machine:
 
 | Hook | Line says |
@@ -176,20 +176,20 @@ it cannot be removed:
 ```json
 {
   "hooks": {
-    "PostToolUse":        [{"hooks": [{"type": "command", "command": "vigil claude-hook", "async": true}]}],
-    "PostToolUseFailure": [{"hooks": [{"type": "command", "command": "vigil claude-hook", "async": true}]}],
-    "PermissionRequest":  [{"hooks": [{"type": "command", "command": "vigil claude-hook", "async": true}]}],
-    "PermissionDenied":   [{"hooks": [{"type": "command", "command": "vigil claude-hook", "async": true}]}],
-    "SubagentStart":      [{"hooks": [{"type": "command", "command": "vigil claude-hook", "async": true}]}],
-    "SubagentStop":       [{"hooks": [{"type": "command", "command": "vigil claude-hook", "async": true}]}],
-    "UserPromptSubmit":   [{"hooks": [{"type": "command", "command": "vigil claude-hook", "async": true}]}],
-    "SessionStart":       [{"hooks": [{"type": "command", "command": "vigil claude-hook", "async": true}]}],
-    "SessionEnd":         [{"hooks": [{"type": "command", "command": "vigil claude-hook"}]}]
+    "PostToolUse":        [{"hooks": [{"type": "command", "command": "vigil-agent claude-hook", "async": true}]}],
+    "PostToolUseFailure": [{"hooks": [{"type": "command", "command": "vigil-agent claude-hook", "async": true}]}],
+    "PermissionRequest":  [{"hooks": [{"type": "command", "command": "vigil-agent claude-hook", "async": true}]}],
+    "PermissionDenied":   [{"hooks": [{"type": "command", "command": "vigil-agent claude-hook", "async": true}]}],
+    "SubagentStart":      [{"hooks": [{"type": "command", "command": "vigil-agent claude-hook", "async": true}]}],
+    "SubagentStop":       [{"hooks": [{"type": "command", "command": "vigil-agent claude-hook", "async": true}]}],
+    "UserPromptSubmit":   [{"hooks": [{"type": "command", "command": "vigil-agent claude-hook", "async": true}]}],
+    "SessionStart":       [{"hooks": [{"type": "command", "command": "vigil-agent claude-hook", "async": true}]}],
+    "SessionEnd":         [{"hooks": [{"type": "command", "command": "vigil-agent claude-hook"}]}]
   }
 }
 ```
 
-`vigil` is the same binary as the agent; give its full path if it is not on
+`vigil-agent` is the agent's own binary; give its full path if it is not on
 the `PATH` Claude Code sees. `async` lets Claude Code carry on without
 waiting (a call takes about 80 ms, at most half a second when the agent
 does not answer); `SessionEnd` is not async because Claude Code is about to

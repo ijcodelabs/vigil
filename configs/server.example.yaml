@@ -1,4 +1,4 @@
-# vigil server — the central node.
+# vigil-server — the central node.
 listen: ":8080"
 data_dir: /var/lib/vigil
 external_url: http://vigil.example.internal:8080   # used for links in notifications

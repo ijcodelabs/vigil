@@ -1,15 +1,18 @@
 # vigil
 
-A monitoring system in one Go binary: metrics, logs, alerting, runtime
-security events and dashboards. `README.md` describes what it does and how to
-run it.
+A monitoring system in a few static Go binaries (`vigil-agent`,
+`vigil-server`, `vigil-relay`, and `vigil` for the operator tools): metrics,
+logs, alerting, runtime security events and dashboards. `README.md`
+describes what it does and how to run it.
 
 Before changing anything, read `memory/context/`: `state.md` (what is built
 and what is in progress), `decisions.md` (why), `direction.md` (where it is
 going) and `testing.md` (how to run it for real). Update those files when
 something they say stops being true.
 
-- Build: `make build`; `make linux` for static Linux binaries; `make test`.
+- Build: `make build`; `make linux` for static Linux binaries; `make test`;
+  `make size` for the agent's and relay's size budgets. The agent and relay
+  must not import server code (`internal/depcheck`).
 - After changing `internal/events/bpf/events.c`: `make bpf`, and commit the
   regenerated `events_*_bpfel.{go,o}`.
 - Code style: `gofmt`, comments that say why, tests next to the code.

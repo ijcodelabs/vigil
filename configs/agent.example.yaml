@@ -1,4 +1,4 @@
-# vigil agent — runs on every host or Kubernetes node.
+# vigil-agent — runs on every host or Kubernetes node.
 server:
   url: http://vigil.example.internal:8080
   token: ${VIGIL_INGEST_TOKEN}      # expanded from the environment
@@ -163,7 +163,7 @@ logs:
 # Runtime events: what processes do, straight from the kernel, with rules
 # evaluated on this host. Needs Linux 5.8 or newer with BTF, and root.
 # On hosts that cannot run it the agent says so once and carries on.
-# `vigil events` prints the live event stream, which helps when writing rules.
+# `vigil-agent events` prints the live event stream, which helps when writing rules.
 security:
   enabled: false
   # Opens of files under these absolute paths are reported (at most 16).

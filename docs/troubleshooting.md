@@ -192,7 +192,7 @@ The Fleet page shows the reason next to the agent:
   container is not privileged.
 - `this kernel has no BTF` or `Linux 5.8 or newer is needed`: the kernel
   cannot run it. Select only capable hosts with `ebpf="true"`.
-- A rule does not fire: run `sudo vigil events -config …` on the host, do
+- A rule does not fire: run `sudo vigil-agent events -config …` on the host, do
   the thing, and compare the event's fields with the rule. File opens are
   only seen for absolute paths under `watch_paths`.
 
