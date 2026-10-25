@@ -52,7 +52,8 @@ came back, was acknowledged or silenced.
 ## AI explanations
 
 With a language model set up, an admin can press **Explain** on an
-incident. vigil gathers the evidence itself, chosen by the kind of
+incident (and on a log line in Explore, see
+[Explore → A line's context](explore.md#a-lines-context)). vigil gathers the evidence itself, chosen by the kind of
 incident; no model decides what to look at:
 
 - the incident, its history and the other open incidents of the host;

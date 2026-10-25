@@ -66,6 +66,9 @@ API) and `GET` `POST /api/v1/traces/query` (LogsQL over spans); see
 | `POST /api/v1/incidents/{id}/explain` | send it and return the explanation; admin only. 409 when not set up, paused or over budget |
 | `GET /api/v1/incidents/{id}/explanations` | the last ten explanations of an incident, with the evidence as sent |
 | `POST /api/v1/explanations/{id}/verdict` | `{"verdict": "right" \| "partly" \| "wrong" \| "unhelpful", "note": "…"}` |
+| `POST /api/v1/loglines/context` | `{"line": {…}}`, a line as the log query answered it (needs `_time`, `agent`, `_stream_id`): lines like it, the lines around it, what happened on the host, open incidents, notes |
+| `POST /api/v1/loglines/explain/preview` | the same body: the evidence that would be sent, and an earlier explanation of lines like it if there is one; admin only |
+| `POST /api/v1/loglines/explain` | send it and return the explanation (`"again": true` for a new one instead of the earlier); admin only. 409 without `data: [logs]` |
 
 ```bash
 curl -X PUT -H "Authorization: Bearer $T" --data-binary @rules.yaml https://vigil/api/v1/rules/config

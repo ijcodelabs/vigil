@@ -202,6 +202,7 @@ func (s *Server) Handler() http.Handler {
 	s.fleetRoutes(mux)
 	s.briefingRoutes(mux)
 	s.explainRoutes(mux)
+	s.logLineRoutes(mux)
 
 	// Read-only Prometheus query API, served by the metrics store.
 	proxy := httputil.NewSingleHostReverseProxy(s.metrics)

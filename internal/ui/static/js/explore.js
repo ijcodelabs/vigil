@@ -1,4 +1,5 @@
-import { html, useState, useEffect, useRef, api, setParams, Tabs, ErrorBox, Dialog, fmtNum, fmtUnit } from './lib.js';
+import { html, useState, useEffect, useRef, api, useLoad, setParams, Tabs, ErrorBox, Dialog, fmtNum, fmtUnit } from './lib.js';
+import { Preview, Answer } from './home.js';
 import uPlot from '../vendor/uPlot.esm.js';
 import { QueryTools, remember } from './saved.js';
 
@@ -390,6 +391,8 @@ function DropDialog({ row, onClose, onSaved }) {
 
 function Logs({ params, me, admin }) {
   const [dropping, setDropping] = useState(null); // the line a drop rule is being made from
+  const [explaining, setExplaining] = useState(null); // the line being explained
+  const { data: ai } = useLoad(() => api('/api/v1/ai').catch(() => null), []);
   const [note, setNote] = useState(null);
   const [query, setQuery] = useState(params.get('q') || '*');
   const [range, setRange, win] = useRange(params);
@@ -483,10 +486,12 @@ function Logs({ params, me, admin }) {
     </div>`}
     ${note && html`<div class="notice">${note}</div>`}
     ${dropping && html`<${DropDialog} row=${dropping} onClose=${() => setDropping(null)} onSaved=${n => { setNote(n); setDropping(null); }} />`}
+    ${explaining && html`<${ExplainLine} row=${explaining} onClose=${() => setExplaining(null)} />`}
     ${rows && html`<div class="panel flush logs">
       ${live && html`<div class="empty" style="padding: 8px">Live: new lines appear at the top.</div>`}
       ${rows.length === 0 && !live && html`<div class="empty">No log lines match in this time range.</div>`}
-      ${rows.map(r => html`<${LogRow} key=${r._stream_id + r._time + r._msg} row=${r} onFilter=${addFilter} onDrop=${admin && setDropping} />`)}
+      ${rows.map(r => html`<${LogRow} key=${r._stream_id + r._time + r._msg} row=${r} onFilter=${addFilter} onDrop=${admin && setDropping}
+        onExplain=${admin && ai?.enabled && setExplaining} />`)}
       ${!live && rows.length >= limit && html`<div class="empty" style="padding: 10px">Showing the newest ${limit} lines. Narrow the query or raise the limit to see more.</div>`}
     </div>`}`;
 }
@@ -500,8 +505,76 @@ function mergeHits(h) {
   return { times, values, max: Math.max(1, ...values), total: values.reduce((a, b) => a + b, 0) };
 }
 
-function LogRow({ row, onFilter, onDrop }) {
+const clock = iso => new Date(iso).toLocaleTimeString(undefined, { hour12: false });
+const day = iso => new Date(iso).toLocaleString(undefined, { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+
+// LineContext is what a person would look up by hand about one line: how
+// often lines like it come, the lines around it, and what happened on the
+// host at that moment. No AI involved.
+function LineContext({ row }) {
+  const { data: c, error } = useLoad(() => api('/api/v1/loglines/context', { method: 'POST', body: { line: row } }), [row._stream_id, row._time]);
+  if (!c) return html`<div class="linectx">${error ? html`<${ErrorBox} error=${error} />` : html`<span class="muted">Looking around…</span>`}</div>`;
+  const [field, name] = c.source ? c.source.split(' ') : [];
+  const likeQuery = `${field ? `${field}:=${JSON.stringify(name)}` : `_stream_id:${row._stream_id}`} _msg:~${JSON.stringify(c.pattern)}`;
+  const at = new Date(c.time).getTime();
+  const rel = iso => { const d = Math.round((new Date(iso).getTime() - at) / 1000); return d === 0 ? 'same second' : d > 0 ? `${d}s after` : `${-d}s before`; };
+  return html`<div class="linectx">
+    ${c.notes.length > 0 && html`<div class="notice" style="margin-bottom: 8px">${c.notes.map(n => html`<div>${n}</div>`)}</div>`}
+    <h4>Lines like it${c.source ? ` from ${c.source}` : ''}</h4>
+    <p><strong>${fmtNum(c.like.hour)}</strong> in the last hour · <strong>${fmtNum(c.like.day)}</strong> in 24 hours · <strong>${fmtNum(c.like.week)}</strong> in 7 days
+      ${c.like.first ? ` · first ${day(c.like.first)}, last ${day(c.like.last)}` : ''}${' · '}<a href=${`#/explore/logs?q=${encodeURIComponent(likeQuery)}&last=604800`} title=${likeQuery}>show them</a></p>
+    ${(c.like.agents || []).length > 1 && html`<p class="muted">On ${c.like.agents.slice(0, 6).map(a => `${a.agent} (${fmtNum(a.count)})`).join(', ')}${c.like.agents.length > 6 ? ', …' : ''}</p>`}
+    <h4>Around it in the same stream</h4>
+    <div class="mono around">${c.before.map(l => html`<div><span class="muted">${clock(l.time)}</span> ${l.msg}</div>`)}
+      <div class="this"><span class="muted">${clock(row._time)}</span> ${row._msg}</div>
+      ${c.after.map(l => html`<div><span class="muted">${clock(l.time)}</span> ${l.msg}</div>`)}
+      ${!c.before.length && !c.after.length && html`<div class="muted">Nothing else in this stream within an hour of it.</div>`}</div>
+    <h4>On ${c.agent}, 10 minutes either side</h4>
+    ${c.host.length ? html`<ul>${c.host.map(e => html`<li><span class="muted">${clock(e.time)} (${rel(e.time)})</span> ${e.what}</li>`)}</ul>`
+      : html`<p class="muted">Nothing vigil records happened: no agent start, container change, restart, out-of-memory kill or profile change.</p>`}
+    ${c.incidents.length > 0 && html`<h4>Incidents on ${c.agent} then</h4><ul>${c.incidents.map(i => html`<li>
+      <a href="#/home">${i.title}</a> <span class="muted">· ${i.state}, since ${day(i.since)}${i.resolved ? `, resolved ${day(i.resolved)}` : ''}</span></li>`)}</ul>`}
+    ${c.errors?.length > 0 && html`<p class="muted">Could not read: ${c.errors.join('; ')}</p>`}
+  </div>`;
+}
+
+// ExplainLine shows what would be sent about a line before anything is,
+// or the explanation already made for lines like it (at no cost).
+function ExplainLine({ row, onClose }) {
+  const [p, setP] = useState(null);
+  const [ex, setEx] = useState(null);
+  const [fresh, setFresh] = useState(false); // explain again instead of showing the earlier answer
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const load = async () => {
+    try { const r = await api('/api/v1/loglines/explain/preview', { method: 'POST', body: { line: row } }); setP(r); setEx(r.cached); }
+    catch (e) { setError(e.message); }
+  };
+  useEffect(() => { load(); }, []);
+  const send = async () => {
+    setBusy(true); setError(null);
+    try { setEx(await api('/api/v1/loglines/explain', { method: 'POST', body: { line: row, again: fresh } })); setFresh(false); }
+    catch (e) { setError(e.message); }
+    setBusy(false);
+  };
+  return html`<${Dialog} title="Explain this line" wide onClose=${onClose}>
+    <div class="mono" style="font-size: 12px; overflow-wrap: anywhere; margin-bottom: 10px">${row._msg}</div>
+    <${ErrorBox} error=${error} />
+    ${!p && !error && html`<p class="muted">Gathering its context…</p>`}
+    ${p && !p.logs_allowed && html`<div class="error">Explaining a line sends that line, and this server does not send log excerpts.
+      An admin can allow them with <code>data: [logs]</code> under <code>ai</code> in the server config. The Context of the line needs no AI.</div>`}
+    ${p && p.logs_allowed && (ex && !fresh
+      ? html`${ex.cached && html`<p class="muted" style="margin-top: 0">Explained earlier for lines like this on this host today; shown again at no cost.</p>`}
+          <${Answer} ex=${ex} onVerdict=${load} />
+          <div class="actions"><button onClick=${() => setFresh(true)}>Explain again…</button><button class="primary" onClick=${onClose}>Close</button></div>`
+      : html`<${Preview} p=${p} busy=${busy} onSend=${send} onCancel=${onClose} />`)}
+  <//>`;
+}
+
+function LogRow({ row, onFilter, onDrop, onExplain }) {
   const [open, setOpen] = useState(false);
+  const [context, setContext] = useState(false);
+  const known = row.agent && row._stream_id; // the context needs both
   const level = String(row.level || '').toLowerCase();
   const cls = /^(err|crit|alert|emerg|fatal)/.test(level) ? 'lvl-error' : /^warn/.test(level) ? 'lvl-warn' : '';
   const src = row.container || row.unit || row.app || row.pod || (row.path || '').split('/').pop() || row.source || '';
@@ -516,7 +589,13 @@ function LogRow({ row, onFilter, onDrop }) {
         <td style="white-space: nowrap"><button class="link" title="Show only lines with this value" onClick=${() => onFilter(k, v)}>filter</button>
           <button class="link" style="margin-left: 10px" title="Hide lines with this value" onClick=${() => onFilter(k, v, true)}>exclude</button></td></tr>`)}
     </table>
-    ${onDrop && row.agent && sourceOf(row) && html`<div style="margin-top: 6px"><button class="link" title="Make a rule so the agent no longer sends lines like this one"
-      onClick=${() => onDrop(row)}>Stop sending lines like this…</button></div>`}</div>`}
+    <div class="row" style="margin-top: 6px; gap: 16px; justify-content: flex-start">
+      ${known && html`<button class="link" title="How often lines like this come, the lines around it, and what happened on the host then"
+        onClick=${() => setContext(!context)}>${context ? 'Hide context' : 'Context'}</button>`}
+      ${known && onExplain && html`<button class="link" title="Ask the language model what this line means, from its context"
+        onClick=${() => onExplain(row)}>Explain…</button>`}
+      ${onDrop && row.agent && sourceOf(row) && html`<button class="link" title="Make a rule so the agent no longer sends lines like this one"
+        onClick=${() => onDrop(row)}>Stop sending lines like this…</button>`}</div>
+    ${context && html`<${LineContext} row=${row} />`}</div>`}
   </div>`;
 }

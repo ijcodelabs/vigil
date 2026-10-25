@@ -134,6 +134,11 @@ td.lvl-bad { color: var(--bad); background: color-mix(in srgb, var(--bad) 16%, t
 .logfields { grid-column: 1 / -1; padding: 6px 0 8px; cursor: default; }
 .logfields table { width: auto; }
 .logfields td { border: none; padding: 1px 14px 1px 0; }
+.linectx { margin-top: 8px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; }
+.linectx h4 { margin: 8px 0 4px; font-size: 13px; } .linectx h4:first-of-type { margin-top: 0; }
+.linectx p, .linectx ul { margin: 0 0 6px; } .linectx ul { padding-left: 18px; }
+.linectx .around { font-size: 12px; max-height: 260px; overflow: auto; } .linectx .around div { white-space: pre-wrap; overflow-wrap: anywhere; }
+.linectx .around .this { background: color-mix(in srgb, var(--info) 16%, transparent); }
 .logfields td:first-child { color: var(--muted); }
 
 /* Menus that drop down from a button: saved queries, "Add to" */

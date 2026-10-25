@@ -409,6 +409,13 @@ func (t *Tracker) Resolved(ctx context.Context, since time.Time, limit int) ([]I
 	return t.list(ctx, `state = ? AND resolved_at >= ? ORDER BY resolved_at DESC LIMIT ?`, StateResolved, since.Unix(), limit)
 }
 
+// Around lists the incidents of an agent that were open at some point
+// between from and to, newest first.
+func (t *Tracker) Around(ctx context.Context, agent string, from, to time.Time) ([]Incident, error) {
+	return t.list(ctx, `agent = ? AND first_seen <= ? AND (resolved_at = 0 OR resolved_at >= ?) ORDER BY first_seen DESC LIMIT 20`,
+		agent, to.Unix(), from.Unix())
+}
+
 // Get returns one incident and its history.
 func (t *Tracker) Get(ctx context.Context, id int64) (Incident, []Event, error) {
 	list, err := t.list(ctx, `id = ?`, id)

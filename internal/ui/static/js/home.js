@@ -107,12 +107,11 @@ function Explanations({ id, admin, ai, start }) {
   </div>`;
 }
 
-function Preview({ p, busy, onSend, onCancel }) {
+export function Preview({ p, busy, onSend, onCancel }) {
   const { ai, bundle } = p;
   const left = ai.monthly_budget - ai.spent_this_month;
   return html`
-    <p style="margin-top: 0">This is what would be sent to <strong>${ai.provider}</strong> (${ai.model}), masked: ${bundle.items.length} items,
-      ${Math.round(bundle.bytes / 1024)} kB. Sent classes: ${ai.data.join(', ')}.</p>
+    <p style="margin-top: 0">This is what would be sent to <strong>${ai.provider}</strong> (${ai.model}), masked: ${bundle.items.length} items, ${Math.round(bundle.bytes / 1024)} kB. Sent classes: ${ai.data.join(', ')}.</p>
     ${bundle.items.map(e => html`<details style="margin-bottom: 4px"><summary style="cursor: pointer">
       <code>${e.id}</code> ${e.title} <span class="muted">· ${e.class} · ${e.text.length} chars</span></summary>
       <pre class="secret" style="user-select: text; max-height: 220px; overflow: auto">${e.text}</pre></details>`)}
@@ -124,8 +123,10 @@ function Preview({ p, busy, onSend, onCancel }) {
 }
 
 const CONF = { high: 'ok', medium: 'warn', low: 'off' };
+// What an explanation of a log line says about it.
+const ASSESS = { harmless: ['ok', 'harmless'], needs_attention: ['bad', 'needs attention'], unknown: ['off', 'unclear'] };
 
-function Answer({ ex, onVerdict }) {
+export function Answer({ ex, onVerdict }) {
   const a = ex.answer;
   const [shown, setShown] = useState(null);
   const [picked, setPicked] = useState(null);
@@ -137,7 +138,7 @@ function Answer({ ex, onVerdict }) {
   };
   if (!a) return html`<div class="error">The explanation failed: ${ex.error}</div>`;
   return html`
-    <p style="margin-top: 0"><strong>${a.summary}</strong></p>
+    <p style="margin-top: 0">${a.assessment && ASSESS[a.assessment] && html`<${Badge} kind=${ASSESS[a.assessment][0]}>${ASSESS[a.assessment][1]}<//> `}<strong>${a.summary}</strong></p>
     <p>Likely cause: ${a.hypothesis} <${Badge} kind=${CONF[a.confidence] || 'off'}>${a.confidence} confidence<//></p>
     ${a.claims.length > 0 && html`<ul style="margin: 6px 0">${a.claims.map(c => html`<li>
       ${c.text} ${c.evidence.map(id => html` <a href="#" onClick=${act(() => setShown(shown === id ? null : id))}><code>${id}</code></a>`)}
