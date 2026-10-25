@@ -14,13 +14,16 @@ every host or Kubernetes node and as the **server** in the middle.
 └───────────────────────┘              └───────┬──────────┬─────────┘
                                                ▼          ▼
                                        VictoriaMetrics  VictoriaLogs
+                                       (and VictoriaTraces, if you keep traces)
 ```
 
 - Agents collect and **push** to the server; whatever they could not send
   waits in a queue on disk. The server can also **pull** from hosts that run
   no agent.
-- The server keeps metrics in VictoriaMetrics and logs in VictoriaLogs.
-  Nothing else talks to those two.
+- The server keeps metrics in VictoriaMetrics, logs in VictoriaLogs and,
+  optionally, traces in VictoriaTraces. Nothing else talks to them.
+- The **Home** page is the first one after signing in: what needs
+  attention now, what will soon, and what happened since you last looked.
 - What agents collect is managed on the server, in **profiles** selected by
   labels, so a host's own file only says who it is and where the server is.
 
@@ -33,6 +36,7 @@ every host or Kubernetes node and as the **server** in the middle.
 | decide what an agent collects | [Agent configuration](configs.md) |
 | manage many agents | [Fleet: profiles and integrations](fleet.md) |
 | monitor Kubernetes | [Kubernetes](kubernetes.md) |
+| reach the server from a site that cannot connect to it | [Relays](relay.md) |
 | look at data | [Explore](explore.md), [Dashboards](dashboards.md), or your own [Grafana](grafana.md) |
 | see how your applications do: requests, errors, latency, traces | [Services and traces](apm.md) |
 | watch GPUs and what AI use costs | [GPUs and AI machines](gpu.md), [AI costs](finops.md) |
@@ -56,5 +60,7 @@ every host or Kubernetes node and as the **server** in the middle.
   saying which agents it applies to.
 - **Integration**: everything needed to monitor one technology (nginx,
   PostgreSQL, Kubernetes, …): what to collect, alert rules, a dashboard.
+- **Incident**: one thing that is wrong, made from a firing alert, with a
+  history (opened, acknowledged, resolved, reopened).
 - **Detection**: a security rule that matched something a process did.
 - **Capture**: the recorded activity of a host around a detection.
