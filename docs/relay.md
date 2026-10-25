@@ -43,9 +43,12 @@ tls:
 ```
 
 ```bash
-vigil relay -config /etc/vigil/relay.yaml
+vigil-relay -config /etc/vigil/relay.yaml
 ```
 
+The binary is `bin/vigil-relay-linux-amd64` (or `-arm64`) from `make
+linux`, copied to `/usr/local/bin/vigil-relay`; in Kubernetes,
+`deploy/k8s-relay.yaml` with the image from `docker build --target relay`.
 `deploy/vigil-relay.service` is a systemd unit for it; it needs no root.
 
 Then point the agents at the relay instead of the server. Everything else
@@ -59,7 +62,7 @@ server:
   ca_pin: sha256:…               # the RELAY's fingerprint, from its log
 ```
 
-`vigil enroll -server https://relay.site.internal:8080 …` works the same
+`vigil-agent enroll -server https://relay.site.internal:8080 …` works the same
 way.
 
 | Setting | Meaning | Default |

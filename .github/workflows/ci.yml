@@ -32,9 +32,10 @@ jobs:
         run: go vet ./...
       - name: Test
         run: make test
-      # The static binaries people install, for both architectures.
+      # The static binaries people install, for both architectures, and the
+      # size budgets of the ones that run on every host.
       - name: Build
-        run: make linux
+        run: make size
 
   # Keys, tokens and passwords must never be committed. The whole history is
   # scanned, so one that was added and removed again is found too.

@@ -4,7 +4,7 @@
 //
 // Claude Code's own telemetry counts and prices; it does not say who ran
 // which command in which folder unless every content setting is on. A
-// hook sees exactly that, one call at a time, so `vigil claude-hook` is
+// hook sees exactly that, one call at a time, so `vigil-agent claude-hook` is
 // registered as a command hook and sends one OTLP log record per call to
 // the agent on the same machine.
 //

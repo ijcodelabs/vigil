@@ -1,13 +1,14 @@
 # vigil
 
 vigil is one monitoring system for metrics, logs, alerts, runtime security
-events and dashboards. It is a single Go binary that runs as an **agent** on
-every host or Kubernetes node and as the **server** in the middle.
+events and dashboards. It is a few static Go binaries: the **agent**
+(`vigil-agent`) on every host or Kubernetes node and the **server**
+(`vigil-server`) in the middle.
 
 ```
  hosts / Kubernetes nodes                      server
 ┌───────────────────────┐              ┌────────────────────────────┐
-│ vigil agent           │   push  ──▶  │ vigil server               │
+│ vigil-agent           │   push  ──▶  │ vigil-server               │
 │  metrics, logs,       │              │  checks tokens, stores,    │
 │  runtime events       │  ◀── config  │  evaluates rules, alerts,  │
 │  queue on disk        │              │  serves the web interface  │
@@ -50,7 +51,7 @@ every host or Kubernetes node and as the **server** in the middle.
 
 ## Words used here
 
-- **Agent**: `vigil agent`, running on a host. It has an id (its host name
+- **Agent**: `vigil-agent`, running on a host. It has an id (its host name
   by default).
 - **Labels**: what you say a host is, in its own file: `env: prod`,
   `role: db`. Added to everything it sends.

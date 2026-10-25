@@ -35,7 +35,14 @@ A cluster gets two things:
    (For a quick test, `--from-literal=token=<ingest token>` alone serves
    both, if the server has a shared `ingest_token`.)
 
-3. Apply:
+3. Build the agent's image, push it to your registry and put its name in
+   both manifests (they say `vigil-agent:dev`):
+
+   ```bash
+   docker build --target agent -t registry.example.com/vigil-agent:v1 .
+   ```
+
+   Then apply:
 
    ```bash
    kubectl apply -f deploy/k8s-agent.yaml -f deploy/k8s-cluster-agent.yaml

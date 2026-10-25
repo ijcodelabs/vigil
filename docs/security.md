@@ -95,8 +95,8 @@ be true or false.
 ### Trying rules out
 
 ```bash
-sudo vigil events                              # every event, as JSON lines
-sudo vigil events -config /etc/vigil/agent.yaml   # plus which rules fire
+sudo vigil-agent events                              # every event, as JSON lines
+sudo vigil-agent events -config /etc/vigil/agent.yaml   # plus which rules fire
 ```
 
 Run something, look at the event it produced, write the condition from its

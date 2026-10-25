@@ -1,4 +1,4 @@
-package main
+package opscli
 
 import (
 	"encoding/json"
@@ -14,9 +14,10 @@ import (
 	"strings"
 
 	"github.com/ijcodelabs/vigil/internal/fleet"
+	"github.com/ijcodelabs/vigil/internal/pki"
 )
 
-// runApply makes the server's profiles match a directory of profile files,
+// Apply makes the server's profiles match a directory of profile files,
 // so they can be kept in git and applied from CI:
 //
 //	vigil apply -f fleet/ -server https://vigil.example.com
@@ -29,7 +30,7 @@ import (
 //
 // Files in a `queries` directory directly under DIR hold saved queries for
 // Explore, shared with everyone; see applyQueries.
-func runApply(args []string) error {
+func Apply(args []string) error {
 	fs := flag.NewFlagSet("apply", flag.ExitOnError)
 	dir := fs.String("f", "", "directory of profile files (*.yaml, *.yml)")
 	server := fs.String("server", os.Getenv("VIGIL_SERVER"), "server address (or $VIGIL_SERVER)")
@@ -45,7 +46,7 @@ func runApply(args []string) error {
 	}
 	api := strings.TrimRight(*server, "/") + "/api/v1/fleet"
 	base := api + "/profiles"
-	hc, err := trustedClient(*server, *caFile, *caPin)
+	hc, err := pki.HTTPClient(pki.ClientOptions{ServerURL: *server, CAFile: *caFile, CAPin: *caPin})
 	if err != nil {
 		return err
 	}

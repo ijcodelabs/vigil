@@ -70,8 +70,8 @@ spec:
       serviceAccountName: vigil-cluster-agent
       containers:
         - name: agent
-          image: vigil:dev       # replace with your registry/image
-          args: ["agent", "-config", "/etc/vigil/agent.yaml"]
+          image: vigil-agent:dev # docker build --target agent; replace with your registry/image
+          args: ["-config", "/etc/vigil/agent.yaml"]
           env:
             - name: VIGIL_INGEST_TOKEN
               valueFrom: {secretKeyRef: {name: vigil-agent, key: token, optional: true}}

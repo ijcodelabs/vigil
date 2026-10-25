@@ -14,13 +14,13 @@ machine so that other work is not disturbed:
     podman run -d --name vigil-vm -p 127.0.0.1:18428:8428 docker.io/victoriametrics/victoria-metrics:v1.153.0
     podman run -d --name vigil-vl -p 127.0.0.1:19428:9428 docker.io/victoriametrics/victoria-logs:v1.53.0
 
-Then run `bin/vigil server` and `bin/vigil agent` natively against them.
+Then run `bin/vigil-server` and `bin/vigil-agent` natively against them.
 Only one Podman machine runs at a time. The machine's Docker-compatible
 socket (`podman machine inspect --format '{{.ConnectionInfo.PodmanSocket.Path}}'`)
 works as the agent's `docker.socket`.
 
-`deploy/docker-compose.yml` and the Dockerfile were verified with
-`podman-compose` on that machine.
+`deploy/docker-compose.yml` and the Dockerfile (targets `agent`, `server`,
+`relay`, `all`) were verified with `podman-compose` on that machine.
 
 VictoriaMetrics hides the most recent 30 seconds from queries. After
 starting something, wait about 35 seconds before deciding data is missing.
@@ -31,9 +31,9 @@ The probes are compiled with `make bpf` (a container with clang and libbpf)
 and tested by running the Linux binary in a rootful, privileged container:
 
     podman -c vigil-test-root run --rm --privileged --pid host \
-      -v $PWD/bin:/vigil:ro docker.io/library/alpine /vigil/vigil-linux-arm64 events
+      -v $PWD/bin:/vigil:ro docker.io/library/alpine /vigil/vigil-agent-linux-arm64 events
 
-`vigil events` prints every event as JSON; with `-config` it also prints the
+`vigil-agent events` prints every event as JSON; with `-config` it also prints the
 rules that would fire.
 
 Pitfall: when a probe seems to miss events, compare with the kernel's own

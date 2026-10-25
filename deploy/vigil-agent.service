@@ -4,7 +4,7 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-ExecStart=/usr/local/bin/vigil agent -config /etc/vigil/agent.yaml
+ExecStart=/usr/local/bin/vigil-agent -config /etc/vigil/agent.yaml
 # VIGIL_INGEST_TOKEN=... goes here, mode 0600
 EnvironmentFile=/etc/vigil/agent.env
 StateDirectory=vigil

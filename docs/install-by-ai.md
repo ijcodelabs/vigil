@@ -68,16 +68,18 @@ stage. The other pages in `docs/` have the detail; this one is the route.
 
   | | Path |
   |---|---|
-  | binary | `/usr/local/bin/vigil` |
+  | binary | `/usr/local/bin/vigil-agent` (server: `vigil-server`) |
   | agent config | `/etc/vigil/agent.yaml` |
   | agent state (unsent data, positions, its token if self-enrolled) | `/var/lib/vigil/spool` |
   | server config | `/etc/vigil/server.yaml` (or next to the compose file) |
   | server state | `data_dir`, default `/var/lib/vigil` |
 
 - **There are no published packages or images yet.** Build from the
-  repository: `make linux` gives `bin/vigil-linux-amd64` and
-  `bin/vigil-linux-arm64` (needs Go 1.26+; nothing else), and
-  `docker build -t vigil:dev .` gives a container image.
+  repository: `make linux` gives `bin/vigil-agent-linux-amd64`,
+  `bin/vigil-server-linux-amd64`, `bin/vigil-relay-linux-amd64` and the
+  same for arm64 (needs Go 1.26+; nothing else), and
+  `docker build --target agent -t vigil-agent:dev .` gives the agent's
+  container image (`--target server`, `--target relay` for the others).
 
 ## What to find out first
 
@@ -130,7 +132,7 @@ Ask the person; do not proceed on guesses.
 On a machine with Go 1.26+ and the repository:
 
 ```bash
-make linux                      # bin/vigil-linux-amd64, bin/vigil-linux-arm64
+make linux                      # bin/vigil-server-linux-amd64, bin/vigil-agent-linux-amd64, ... and -arm64
 ```
 
 Pick the binary for the server host's architecture (`uname -m`: `x86_64` is
@@ -138,15 +140,16 @@ amd64, `aarch64` is arm64).
 
 ### A2. Lay it out on the server host
 
-Use one directory, for example `/opt/vigil`. Copy the binary there as
-`vigil`, and create these three files.
+Use one directory, for example `/opt/vigil`. Copy the server binary
+(`vigil-server-linux-amd64` or `-arm64`) there as `vigil-server`, and
+create these three files.
 
 `Dockerfile`:
 
 ```dockerfile
 FROM alpine:3.22
-COPY vigil /vigil
-ENTRYPOINT ["/vigil"]
+COPY vigil-server /vigil-server
+ENTRYPOINT ["/vigil-server"]
 ```
 
 `docker-compose.yml` (adjust retention; publish the port only on the
@@ -158,7 +161,7 @@ services:
   vigil:
     build: .
     image: vigil:local
-    command: ["server", "-config", "/etc/vigil/server.yaml"]
+    command: ["-config", "/etc/vigil/server.yaml"]
     env_file: .env
     volumes:
       - ./server.yaml:/etc/vigil/server.yaml:ro
@@ -215,7 +218,7 @@ cd /opt/vigil && umask 077 && echo "VIGIL_ADMIN_TOKEN=$(openssl rand -hex 32)" >
 Other ways to encrypt (`tls.cert_file` + `tls.key_file` for a certificate
 you have, or a reverse proxy with `trusted_proxies`) are in
 [Install → Encryption](install.md#encryption). Without containers, run the
-stores as their own services and `vigil server -config …` under systemd;
+stores as their own services and `vigil-server -config …` under systemd;
 see [Install → Without containers](install.md#without-containers).
 
 ### A3. Start and verify
@@ -304,11 +307,11 @@ For each host. Run as root.
 
 ```bash
 # 1. the binary for this host's architecture
-install -m 755 vigil-linux-amd64 /usr/local/bin/vigil     # or -arm64; copy it there first (scp)
-vigil version
+install -m 755 vigil-agent-linux-amd64 /usr/local/bin/vigil-agent     # or -arm64; copy it there first (scp)
+vigil-agent version
 
 # 2. enrol: exchanges the enrolment token for this host's own token and writes /etc/vigil/agent.yaml
-vigil enroll -server https://SERVER:8080 -token "$ENROLL_TOKEN" -ca-pin sha256:… \
+vigil-agent enroll -server https://SERVER:8080 -token "$ENROLL_TOKEN" -ca-pin sha256:… \
   -label env=prod -label role=web
 #    -id NAME     if the agent should not be called by the host name
 #    leave -ca-pin out if the server has a certificate from a public authority
@@ -321,7 +324,7 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-ExecStart=/usr/local/bin/vigil agent -config /etc/vigil/agent.yaml
+ExecStart=/usr/local/bin/vigil-agent -config /etc/vigil/agent.yaml
 EnvironmentFile=-/etc/vigil/agent.env
 StateDirectory=vigil
 Restart=always
@@ -333,7 +336,7 @@ EOF
 systemctl daemon-reload && systemctl enable --now vigil-agent
 ```
 
-`vigil enroll` refuses to run if `/etc/vigil/agent.yaml` exists: that host
+`vigil-agent enroll` refuses to run if `/etc/vigil/agent.yaml` exists: that host
 is already set up. Ask before replacing it. It also refuses a name that is
 already enrolled; the person revokes that agent's token on the Fleet page
 (Manage), or you choose another `-id`.
@@ -362,7 +365,7 @@ NixOS manages `/etc/systemd` itself, so step 3 of B3 does not apply: a unit
 file copied there is gone at the next rebuild, and `/usr/local/bin` does not
 exist. The static binary runs on NixOS as it is. Do this instead:
 
-1. Copy the binary to `/opt/vigil/vigil` (mode 755) and run `vigil enroll`
+1. Copy the binary to `/opt/vigil/vigil-agent` (mode 755) and run `vigil-agent enroll`
    from there, as in B3 step 2. `/etc/vigil/agent.yaml` is an ordinary file
    and stays.
 2. Add `deploy/vigil-agent.nix` from the repository to the host's
@@ -402,9 +405,10 @@ The agent enrols under its host name and keeps its own token in
 ### B5. A host that only runs containers
 
 Run the agent as a container that sees the host. It needs an image
-(`docker build -t vigil:dev .` in the repository, or the three-line
-Dockerfile above with the binary) and an `/etc/vigil/agent.yaml` on the
-host, written as in B4:
+(`docker build --target agent -t vigil-agent:dev .` in the repository, or
+the three-line Dockerfile above with `vigil-agent` in place of
+`vigil-server`) and an `/etc/vigil/agent.yaml` on the host, written as in
+B4:
 
 ```bash
 docker run -d --name vigil-agent --restart unless-stopped --pid host --network host \
@@ -412,7 +416,7 @@ docker run -d --name vigil-agent --restart unless-stopped --pid host --network h
   -v /proc:/host/proc:ro -v /sys:/host/sys:ro -v /etc:/host/etc:ro -v /:/host/root:ro \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v /etc/vigil:/etc/vigil:ro -v /var/lib/vigil:/var/lib/vigil \
-  vigil:dev agent -config /etc/vigil/agent.yaml
+  vigil-agent:dev -config /etc/vigil/agent.yaml
 ```
 
 Prefer the host install (B3) where you can: in a container there is no
@@ -448,7 +452,7 @@ Details and what is collected: [Kubernetes](kubernetes.md).
 
 ## Route C: decide what agents collect
 
-Without any profile, an agent uses its own file, which after `vigil enroll`
+Without any profile, an agent uses its own file, which after `vigil-agent enroll`
 says nothing about collection, so it sends host metrics and little else.
 Give the fleet profiles. Keep them as files in the person's repository and
 apply them; that way the configuration is reviewable and repeatable.
@@ -550,8 +554,8 @@ Then tell the person:
 | Agent log: `x509: certificate signed by unknown authority` | the server has its own authority and the agent has no `ca_pin` | add `ca_pin` to `/etc/vigil/agent.yaml` under `server:` and restart the agent |
 | Agent log: `certificate is valid for …, not <address>` | the server runs in a container and cannot see the address agents use | add that address to `tls.names` in the server's config, restart the server |
 | Agent log: `certificate authority has fingerprint … not the expected …` | the fingerprint is for another server, or the server's `data_dir` was replaced | read the fingerprint again from the server; do not disable checking |
-| `vigil enroll`: `not known` / `expired` / `used as often as it allows` | the enrolment token is wrong, old, or used up | create a new one |
-| `vigil enroll`: `already enrolled` | that agent id has a token | ask the person: revoke it (Fleet → Manage) or use another `-id` |
+| `vigil-agent enroll`: `not known` / `expired` / `used as often as it allows` | the enrolment token is wrong, old, or used up | create a new one |
+| `vigil-agent enroll`: `already enrolled` | that agent id has a token | ask the person: revoke it (Fleet → Manage) or use another `-id` |
 | Agent log: `HTTP 401` | wrong or revoked token | for a self-enrolled agent that was re-installed, delete `/var/lib/vigil/spool/agent-token` so it enrols again |
 | Agent log: `HTTP 403 … different agent` | the token belongs to another agent id | `agent_id` must be the one the token was made for |
 | Agent log: `the server now expects https` | `server.url` still says `http://` | change it; nothing was lost meanwhile |
@@ -570,11 +574,17 @@ across a restart. When versions differ, update **agents before the server**
 if the new version adds settings you intend to use, and never leave the
 server older than what you are about to configure.
 
+A host still running the old all-in-one `vigil agent` (or `vigil server`,
+`vigil relay`) moves to `vigil-agent` (`vigil-server`, `vigil-relay`):
+copy the new binary, point the unit's `ExecStart` at it without the
+subcommand, restart. Configs and state stay. See [Install → From `vigil`
+to the separate binaries](install.md#from-vigil-to-the-separate-binaries).
+
 **Remove an agent** (ask first):
 
 ```bash
 systemctl disable --now vigil-agent
-rm -f /etc/systemd/system/vigil-agent.service /usr/local/bin/vigil
+rm -f /etc/systemd/system/vigil-agent.service /usr/local/bin/vigil-agent
 rm -rf /etc/vigil /var/lib/vigil
 ```
 

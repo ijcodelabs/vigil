@@ -143,7 +143,7 @@ function SessionView({ id, params }) {
     const prompts = groups.map(g => {
       const ev = g.events, c = ev.filter(e => kind(e) === 'api_request');
       const prompt = ev.find(e => kind(e) === 'user_prompt');
-      const hooked = ev.find(e => e.hook_event === 'UserPromptSubmit' && e.prompt); // vigil claude-hook -content
+      const hooked = ev.find(e => e.hook_event === 'UserPromptSubmit' && e.prompt); // vigil-agent claude-hook -content
       const text = (prompt && (shown(prompt.prompt_text) || shown(prompt.prompt))) || (hooked && hooked.prompt);
       return {
         key: g.key, events: ev, start: ev[0]._time, end: ev[ev.length - 1]._time,
@@ -221,7 +221,7 @@ function SessionView({ id, params }) {
     <p class="muted">Click a prompt for what happened in it, in order. A trace, where one is kept, shows subagents nested under the tool call that started them.</p>`;
 }
 
-// hookLine describes a line from vigil claude-hook: the audit trail, with
+// hookLine describes a line from vigil-agent claude-hook: the audit trail, with
 // who ran what where, next to Claude Code's own telemetry.
 function hookLine(e) {
   const what = e.tool_command || e.tool_file_path || e.tool_pattern || e.tool_url || e.tool_query || e.tool_description || '';
