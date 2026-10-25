@@ -71,9 +71,17 @@ filter on. [Metric reference](metrics.md) says what each one means.
 ### The controls
 
 - **Enter** runs the query; Shift+Enter adds a line.
-- **Time range**: the last 5 minutes up to 7 days.
-- **Drag across the chart** to zoom into that window. "Back to last 1h"
-  returns.
+- **Time range**: the button opens the picker. On the right, a quick
+  range from the last 5 minutes to 7 days (type to search them); on the
+  left, an absolute range: **From** and **To**, typed or picked in the
+  calendar, then **Apply time range**, for example 2026-10-01 08:00 to
+  09:00. Times are in the browser's time zone, shown at the bottom. The
+  last five absolute ranges you applied are offered again (kept in this
+  browser). **«** and **»** move the range back and forward by its own
+  length; **−** zooms out to twice the length. The same picker is on Logs,
+  dashboards, Services and Sessions.
+- **Drag across the chart** to zoom into that window; a quick range in the
+  picker returns to "the last …".
 - **Refresh** re-runs the query on a timer.
 - Up to 60 series are drawn. If the query returns more, narrow it.
 

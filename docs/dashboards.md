@@ -13,7 +13,9 @@ PostgreSQL, …). All of them are ordinary dashboards: change or delete them.
 
 ## Using one
 
-- **Time range** and **Refresh** at the top apply to every panel.
+- **Time range** and **Refresh** at the top apply to every panel. The range
+  is a quick "last …" or an absolute From-To, with « and » to step through
+  time; see [Explore → The controls](explore.md#the-controls).
 - **Drag across any chart** to zoom the whole dashboard into that window.
 - **Variables** are the drop-downs next to the title, for example `agent`.
   "All" shows everything.

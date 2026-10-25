@@ -1,5 +1,6 @@
 import { html, useState, useEffect, useRef, useErrorBoundary, api, useLoad, setParams, ErrorBox, Badge, Dialog, ago, fmtUnit } from './lib.js';
-import { Chart, seriesName, useRange, rangeParams, RANGES, REFRESH, parseLines } from './explore.js';
+import { Chart, seriesName, useRange, rangeParams, REFRESH, parseLines } from './explore.js';
+import { TimeRange } from './timerange.js';
 
 const UNITS = [['', 'plain number'], ['percent', 'percent (0–100)'], ['ratio', 'ratio (0–1 shown as %)'], ['bytes', 'bytes'],
   ['bytes/s', 'bytes per second'], ['seconds', 'seconds'], ['ms', 'milliseconds'], ['cores', 'CPU cores'], ['ops/s', 'per second'], ['yesno', 'yes / no (1 / 0)']];
@@ -174,10 +175,7 @@ function DashboardView({ id, params, admin }) {
       ${variables.map(v => html`<${VariablePicker} key=${v.name} variable=${v} from=${from} to=${to}
         value=${values[v.name] || ''} onChange=${val => setValues({ ...values, [v.name]: val })} />`)}
       <span class="spacer"></span>
-      ${range.last ? html`<select aria-label="Time range" value=${range.last} onChange=${e => setRange({ last: +e.target.value })}>
-          ${RANGES.map(([l, s]) => html`<option value=${s}>Last ${l}</option>`)}</select>`
-        : html`<span class="badge info">${new Date(range.from * 1000).toLocaleString()} – ${new Date(range.to * 1000).toLocaleTimeString()}</span>
-          <button class="small" onClick=${() => setRange({ last: 3600 })}>Back to last 1h</button>`}
+      <${TimeRange} range=${range} setRange=${setRange} />
       <select aria-label="Refresh" value=${refresh} onChange=${e => setRefresh(+e.target.value)} disabled=${!range.last || !!draft}>
         ${REFRESH.map(([l, s]) => html`<option value=${s}>Refresh: ${l}</option>`)}</select>
       ${admin && !draft && html`<button onClick=${() => setDraft(structuredClone(dash))}>Edit</button>`}

@@ -2,8 +2,9 @@ import { html, useState, useEffect, useRef, api, useLoad, setParams, Tabs, Error
 import { Preview, Answer } from './home.js';
 import uPlot from '../vendor/uPlot.esm.js';
 import { QueryTools, remember } from './saved.js';
+import { TimeRange, RANGES } from './timerange.js';
 
-export const RANGES = [['5m', 300], ['15m', 900], ['30m', 1800], ['1h', 3600], ['3h', 10800], ['6h', 21600], ['12h', 43200], ['24h', 86400], ['2d', 172800], ['7d', 604800]];
+export { RANGES }; // from timerange.js; dashboards and sessions take it from here
 export const REFRESH = [['Off', 0], ['5s', 5], ['10s', 10], ['30s', 30], ['1m', 60]];
 export const COLORS = ['#5794f2', '#73bf69', '#f2cc0c', '#ff7383', '#b877d9', '#ff9830', '#4ec9c0', '#e06bb0', '#8ab8ff', '#96d98d', '#ffcb7d', '#c4a2e8'];
 const MAX_SERIES = 60;
@@ -137,10 +138,7 @@ export const rangeParams = r => (r.last ? { last: r.last } : { from: Math.round(
 
 function RangeBar({ range, setRange, refresh, setRefresh, onRun, busy, children }) {
   return html`<div class="row" style="margin-top: 10px">
-    ${range.last ? html`<select aria-label="Time range" value=${range.last} onChange=${e => setRange({ last: +e.target.value })}>
-        ${RANGES.map(([l, s]) => html`<option value=${s}>Last ${l}</option>`)}</select>`
-      : html`<span class="badge info">${new Date(range.from * 1000).toLocaleString()} – ${new Date(range.to * 1000).toLocaleTimeString()}</span>
-        <button class="small" onClick=${() => setRange({ last: 3600 })}>Back to last 1h</button>`}
+    <${TimeRange} range=${range} setRange=${setRange} />
     ${setRefresh && html`<select aria-label="Refresh" value=${refresh} onChange=${e => setRefresh(+e.target.value)} disabled=${!range.last}>
       ${REFRESH.map(([l, s]) => html`<option value=${s}>Refresh: ${l}</option>`)}</select>`}
     ${children}
