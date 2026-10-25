@@ -179,7 +179,8 @@ hosts and clusters, one organisation) and SaaS (many tenants).
   rules → alerting. Fixed the same day by moving `Inventory` to
   `internal/model`: `vigil-agent` is 21.0 MB, `vigil-relay` 7.7 MB, and the
   agent's idle memory with host metrics only is 27 MB against 41 MB for
-  `vigil agent` (macOS). gRPC stays, through the OTLP collector packages.
+  `vigil agent` (macOS). Then without gRPC (the OTLP collector packages
+  replaced by `internal/otlpwire`): 15.6 MB, idle 25 MB with OTLP on.
 - Integrations stay YAML data (detection, config, rules, dashboards); only
   bundles from an outside catalog are signed.
 - Compiled into the agent only if mature, used by most agents, light on
