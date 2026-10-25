@@ -13,6 +13,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/ijcodelabs/vigil/internal/config"
+	"github.com/ijcodelabs/vigil/internal/otlpwire"
 	"github.com/ijcodelabs/vigil/internal/redact"
 )
 
@@ -39,7 +40,7 @@ func TestClaudeCodeEvents(t *testing.T) {
 			records += len(sl.GetLogRecords())
 		}
 	}
-	entries := convertLogs(in)
+	entries := convertLogs(&otlpwire.LogsRequest{ResourceLogs: in.ResourceLogs})
 	// Claude Code puts the event name in the body, so none is skipped.
 	if len(entries) != records {
 		t.Fatalf("%d of %d events kept", len(entries), records)
@@ -85,7 +86,7 @@ func TestClaudeCodeMetricsDropLabels(t *testing.T) {
 	drop := map[string]bool{"session_id": true, "user_id": true, "user_account_uuid": true, "user_account_id": true, "organization_id": true, "terminal_type": false}
 	r := &Receiver{DropLabels: drop}
 	latest := map[uint64]float64{}
-	for _, s := range r.convertMetrics(in) {
+	for _, s := range r.convertMetrics(&otlpwire.MetricsRequest{ResourceMetrics: in.ResourceMetrics}) {
 		for k := range drop {
 			if _, has := s.Labels[k]; has && drop[k] {
 				t.Fatalf("%s still has %s", s.Name, k)
@@ -115,7 +116,7 @@ func TestClaudeCodeSpans(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := &Receiver{Traces: TraceOptions{Sample: 1}, Redact: red.String}
-	kept := r.convertTraces(in, time.Now())
+	kept := r.convertTraces(&otlpwire.TraceRequest{ResourceSpans: in.ResourceSpans}, time.Now())
 	if kept == nil {
 		t.Fatal("no spans kept")
 	}
@@ -167,7 +168,7 @@ func TestDeltaTotalsRepeated(t *testing.T) {
 	r := &Receiver{DropLabels: map[string]bool{"session_id": true}}
 	latest := map[uint64]float64{}
 	first := map[uint64]int64{}
-	for _, s := range r.convertMetrics(in) {
+	for _, s := range r.convertMetrics(&otlpwire.MetricsRequest{ResourceMetrics: in.ResourceMetrics}) {
 		k := seriesKey(s.Name, s.Labels)
 		if _, seen := latest[k]; !seen {
 			// A new counter starts with a zero, before its first total.

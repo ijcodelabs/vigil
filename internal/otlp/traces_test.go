@@ -57,7 +57,7 @@ func TestTraces(t *testing.T) {
 		t.Helper()
 		for i := 0; i < n; i++ {
 			for _, req := range DemoTrace(time.Now().Add(-5 * time.Second)) {
-				body, _ := proto.Marshal(req)
+				body, _ := req.Marshal()
 				resp, err := http.Post(srv.URL+"/v1/traces", "application/x-protobuf", bytes.NewReader(body))
 				if err != nil || resp.StatusCode != 200 {
 					t.Fatalf("post: %v %v", resp, err)

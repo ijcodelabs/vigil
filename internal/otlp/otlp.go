@@ -25,15 +25,12 @@ import (
 	"sync"
 	"time"
 
-	collogs "go.opentelemetry.io/proto/otlp/collector/logs/v1"
-	colmetrics "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
-	coltrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
 	metricspb "go.opentelemetry.io/proto/otlp/metrics/v1"
 	resourcepb "go.opentelemetry.io/proto/otlp/resource/v1"
-	"google.golang.org/protobuf/proto"
 
 	"github.com/ijcodelabs/vigil/internal/model"
+	"github.com/ijcodelabs/vigil/internal/otlpwire"
 )
 
 const maxBody = 16 << 20
@@ -131,17 +128,17 @@ func (r *Receiver) Run(ctx context.Context) error {
 func (r *Receiver) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/metrics", func(w http.ResponseWriter, req *http.Request) {
-		in := &colmetrics.ExportMetricsServiceRequest{}
+		in := &otlpwire.MetricsRequest{}
 		if !read(w, req, in) {
 			return
 		}
 		if samples := r.convertMetrics(in); len(samples) > 0 {
 			r.Metrics(samples)
 		}
-		reply(w, &colmetrics.ExportMetricsServiceResponse{})
+		reply(w)
 	})
 	mux.HandleFunc("POST /v1/logs", func(w http.ResponseWriter, req *http.Request) {
-		in := &collogs.ExportLogsServiceRequest{}
+		in := &otlpwire.LogsRequest{}
 		if !read(w, req, in) {
 			return
 		}
@@ -151,7 +148,7 @@ func (r *Receiver) Handler() http.Handler {
 				return
 			}
 		}
-		reply(w, &collogs.ExportLogsServiceResponse{})
+		reply(w)
 	})
 	mux.HandleFunc("POST /v1/traces", func(w http.ResponseWriter, req *http.Request) {
 		if r.Spans == nil {
@@ -162,12 +159,12 @@ func (r *Receiver) Handler() http.Handler {
 			w.Header().Set("Content-Type", "application/x-protobuf")
 			return
 		}
-		in := &coltrace.ExportTraceServiceRequest{}
+		in := &otlpwire.TraceRequest{}
 		if !read(w, req, in) {
 			return
 		}
 		if kept := r.convertTraces(in, time.Now()); kept != nil {
-			payload, err := proto.Marshal(kept)
+			payload, err := kept.Marshal()
 			if err == nil {
 				err = r.Spans(payload)
 			}
@@ -176,12 +173,12 @@ func (r *Receiver) Handler() http.Handler {
 				return
 			}
 		}
-		reply(w, &coltrace.ExportTraceServiceResponse{})
+		reply(w)
 	})
 	return mux
 }
 
-func read(w http.ResponseWriter, req *http.Request, into proto.Message) bool {
+func read(w http.ResponseWriter, req *http.Request, into interface{ Unmarshal([]byte) error }) bool {
 	if ct := req.Header.Get("Content-Type"); !strings.HasPrefix(ct, "application/x-protobuf") {
 		http.Error(w, "this endpoint takes OTLP as protobuf; set OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf", http.StatusUnsupportedMediaType)
 		return false
@@ -198,7 +195,7 @@ func read(w http.ResponseWriter, req *http.Request, into proto.Message) bool {
 	}
 	b, err := io.ReadAll(body)
 	if err == nil {
-		err = proto.Unmarshal(b, into)
+		err = into.Unmarshal(b)
 	}
 	if err != nil {
 		http.Error(w, "unreadable OTLP request: "+err.Error(), http.StatusBadRequest)
@@ -207,10 +204,10 @@ func read(w http.ResponseWriter, req *http.Request, into proto.Message) bool {
 	return true
 }
 
-func reply(w http.ResponseWriter, m proto.Message) {
-	b, _ := proto.Marshal(m)
+// reply answers an export: an empty response message, which is no bytes at
+// all (no partial_success to report).
+func reply(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/x-protobuf")
-	w.Write(b)
 }
 
 // sanitize makes a name the metric store accepts: http.server.duration → http_server_duration.
@@ -379,7 +376,7 @@ func number(p *metricspb.NumberDataPoint) float64 {
 // convertMetrics maps OTLP metrics onto Prometheus-style samples:
 // gauges as they are, monotonic sums as counters (name_total), histograms
 // as name_bucket{le}, name_sum and name_count.
-func (r *Receiver) convertMetrics(in *colmetrics.ExportMetricsServiceRequest) []model.Sample {
+func (r *Receiver) convertMetrics(in *otlpwire.MetricsRequest) []model.Sample {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	now := time.Now()
@@ -507,7 +504,7 @@ var severities = []string{"", "trace", "debug", "info", "warn", "error", "fatal"
 
 // convertLogs maps OTLP log records onto log entries. The trace and span
 // ids are kept as fields, which is what later links a line to its trace.
-func convertLogs(in *collogs.ExportLogsServiceRequest) []model.LogEntry {
+func convertLogs(in *otlpwire.LogsRequest) []model.LogEntry {
 	now := time.Now()
 	var out []model.LogEntry
 	for _, rl := range in.GetResourceLogs() {
