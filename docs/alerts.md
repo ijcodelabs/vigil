@@ -104,6 +104,36 @@ The group **builtin** always runs:
 | `SecretStoreDown` | the secret store set up under [Secrets](secrets.md) has not answered for five minutes (sealed, down, or vigil's login refused); vigil goes on with the values it read last |
 | `SecretStoreLoginExpiring` | vigil's token for the secret store cannot be renewed and expires within three days |
 
+#### Laptops and other hosts that sleep
+
+`HostDown` fires whenever an agent stops reporting, so a laptop pages every
+time its lid closes. Give such hosts a label in their agent file (for
+example `role: workstation`) and put an alert named `HostDown` in the rule
+file; it then runs instead of the built-in one:
+
+```yaml
+groups:
+  - name: hosts
+    rules:
+      - alert: HostDown
+        expr: vigil_agent_up == 0 unless on(agent) last_over_time(vigil_agent_info{role="workstation"}[7d])
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: 'Agent {{ $labels.agent }} stopped reporting'
+      # A workstation silent for three days is not asleep.
+      - alert: WorkstationSilent
+        expr: vigil_agent_up == 0 and on(agent) last_over_time(vigil_agent_info{role="workstation"}[7d])
+        for: 72h
+        labels: {severity: warning}
+        annotations:
+          summary: 'Workstation {{ $labels.agent }} has not reported for three days'
+```
+
+`vigil_agent_up` is written by the server and carries only `agent`; the
+agent's own `vigil_agent_info` carries its labels. `last_over_time` over a
+week keeps the exception while the laptop sleeps and sends nothing.
+
 Integrations bring their own rules, shown as `<integration>/<group>`, and
 run while a profile uses the integration:
 
