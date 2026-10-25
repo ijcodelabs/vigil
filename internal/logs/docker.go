@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ijcodelabs/vigil/internal/dockerapi"
@@ -22,7 +23,13 @@ const (
 	dockerKeyPrefix = "docker:"
 	dockerRescan    = 10 * time.Second
 	maxDockerFrame  = 16 << 20
+	// streamIdle: a container's stream that delivered nothing for this long
+	// is closed, and the next scan opens it again from its position.
+	streamIdle = 10 * time.Minute
 )
+
+// errStreamIdle ends a stream the watchdog closed; it is reopened, not reported.
+var errStreamIdle = errors.New("no line for a while; reopening")
 
 // Docker follows the output of every running container through the Docker
 // API, which works whatever log driver the daemon uses to keep it readable.
@@ -37,9 +44,16 @@ type Docker struct {
 	// container's logs are wanted; see config.Docker.ContainerLogs.
 	Collect map[string]string
 	Labels  map[string]string
-	Pos     *Positions
-	Out     chan<- Record
-	Log     *slog.Logger
+	// Idle and Rescan default to streamIdle and dockerRescan; tests make
+	// them short. Docker has been seen to stop sending on every open
+	// stream at once, while it rebuilt and recreated containers (on the
+	// trial host, 2026-10-25): without the idle watchdog such a stall lasts
+	// until the agent restarts, with it at most Idle.
+	Idle   time.Duration
+	Rescan time.Duration
+	Pos    *Positions
+	Out    chan<- Record
+	Log    *slog.Logger
 
 	mu     sync.Mutex
 	active map[string]bool
@@ -60,10 +74,14 @@ func (d *Docker) Run(ctx context.Context) {
 			d.sync(ctx, containers, initial)
 			initial = false
 		}
+		rescan := d.Rescan
+		if rescan == 0 {
+			rescan = dockerRescan
+		}
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(dockerRescan):
+		case <-time.After(rescan):
 		}
 	}
 }
@@ -93,7 +111,10 @@ func (d *Docker) sync(ctx context.Context, containers []dockerapi.Container, ini
 		}
 		d.active[c.ID] = true
 		go func() {
-			if err := d.stream(ctx, c, tmpl, initial); err != nil && ctx.Err() == nil && !errors.Is(err, dockerapi.ErrGone) {
+			err := d.stream(ctx, c, tmpl, initial)
+			if errors.Is(err, errStreamIdle) {
+				d.Log.Debug("container log stream was silent, reopening it", "container", c.Name())
+			} else if err != nil && ctx.Err() == nil && !errors.Is(err, dockerapi.ErrGone) {
 				d.Log.Warn("container log stream ended", "container", c.Name(), "err", err)
 			}
 			d.mu.Lock()
@@ -128,7 +149,14 @@ func (d *Docker) stream(ctx context.Context, c dockerapi.Container, tmpl *Templa
 		ns++
 		since = fmt.Sprintf("%d.%09d", ns/1e9, ns%1e9)
 	} else if initial {
-		since = strconv.FormatInt(time.Now().Unix(), 10)
+		now := time.Now().Unix()
+		since = strconv.FormatInt(now, 10)
+		// Remembered as if a line had come just before, so that reopening a
+		// stream that stays quiet starts here too, not at the container's
+		// first line.
+		d.mu.Lock()
+		d.last[c.ID] = strconv.FormatInt(now*1e9-1, 10)
+		d.mu.Unlock()
 	}
 	tty, err := d.Client.HasTTY(ctx, c.ID)
 	if err != nil {
@@ -145,11 +173,42 @@ func (d *Docker) stream(ctx context.Context, c dockerapi.Container, tmpl *Templa
 		stream[k] = v
 	}
 	s := &sink{ctx: ctx, out: d.Out, key: key, tmpl: tmpl, stream: stream}
+
+	// The watchdog: a stream that delivers nothing for Idle is closed, and
+	// the next scan opens it again from its position, so a stall costs at
+	// most Idle and loses nothing. A quiet container is simply reopened.
+	idle := d.Idle
+	if idle == 0 {
+		idle = streamIdle
+	}
+	var seen atomic.Int64
+	var stalled atomic.Bool
+	seen.Store(time.Now().UnixNano())
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		t := time.NewTicker(idle / 10)
+		defer t.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-t.C:
+				if time.Since(time.Unix(0, seen.Load())) >= idle {
+					stalled.Store(true)
+					body.Close()
+					return
+				}
+			}
+		}
+	}()
+
 	lines := make(chan block, 256)
 	var readErr error
 	go func() {
 		defer close(lines)
 		readErr = readDockerStream(body, tty, func(name, line string) bool {
+			seen.Store(time.Now().UnixNano())
 			b := block{text: line, fields: map[string]string{"stream": name}}
 			if i := strings.IndexByte(line, ' '); i > 0 {
 				if ts, err := time.Parse(time.RFC3339Nano, line[:i]); err == nil {
@@ -169,8 +228,11 @@ func (d *Docker) stream(ctx context.Context, c dockerapi.Container, tmpl *Templa
 		d.last[c.ID] = last
 		d.mu.Unlock()
 	}
-	if ctx.Err() != nil || readErr == io.EOF {
+	switch {
+	case ctx.Err() != nil || readErr == io.EOF:
 		return nil // shutdown, or the container stopped
+	case stalled.Load():
+		return errStreamIdle
 	}
 	return readErr
 }
