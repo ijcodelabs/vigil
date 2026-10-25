@@ -67,7 +67,7 @@ func TestRecords(t *testing.T) {
 		}
 		// What a tool printed is never sent, only how much: here it holds
 		// the .env file.
-		j, _ := protojson.Marshal(req)
+		j, _ := protojson.Marshal(&collogs.ExportLogsServiceRequest{ResourceLogs: req.ResourceLogs})
 		if strings.Contains(string(j), "example-not-a-secret") {
 			t.Errorf("%s carries tool output: %s", event, j)
 		}

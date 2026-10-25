@@ -19,9 +19,10 @@ test:
 	go test ./...
 
 # Size budgets in bytes for the static linux/amd64 binaries that run on
-# every host. On 2026-10-25 the agent was 21.0 MB and the relay 7.7 MB;
-# raise a budget only knowingly, never just to make the check pass.
-AGENT_MAX ?= 23000000
+# every host. On 2026-10-25 the agent was 15.6 MB (21.0 before gRPC went)
+# and the relay 7.7 MB; raise a budget only knowingly, never just to make
+# the check pass.
+AGENT_MAX ?= 17000000
 RELAY_MAX ?= 9000000
 size: linux
 	@check() { s=$$(wc -c < bin/$$1-linux-amd64 | tr -d ' '); echo "$$1: $$s bytes (budget $$2)"; [ $$s -le $$2 ] || { echo "$$1 is over its size budget"; exit 1; }; }; \

@@ -7,11 +7,11 @@ import (
 	"strconv"
 	"time"
 
-	coltrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
 	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
 
 	"github.com/ijcodelabs/vigil/internal/model"
+	"github.com/ijcodelabs/vigil/internal/otlpwire"
 )
 
 // Traces are handled in two ways at once.
@@ -176,9 +176,9 @@ func truncate(s string, n int) string {
 
 // convertTraces counts every span and returns the request cut down to the
 // spans that are kept, ready to be passed on; nil if none are.
-func (r *Receiver) convertTraces(in *coltrace.ExportTraceServiceRequest, now time.Time) *coltrace.ExportTraceServiceRequest {
+func (r *Receiver) convertTraces(in *otlpwire.TraceRequest, now time.Time) *otlpwire.TraceRequest {
 	opts := r.Traces
-	out := &coltrace.ExportTraceServiceRequest{}
+	out := &otlpwire.TraceRequest{}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.trace == nil {

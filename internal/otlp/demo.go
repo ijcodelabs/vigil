@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	coltrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
 	resourcepb "go.opentelemetry.io/proto/otlp/resource/v1"
 	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
-	"google.golang.org/protobuf/proto"
+
+	"github.com/ijcodelabs/vigil/internal/otlpwire"
 )
 
 // Demo traces: a small shop made of four services, for trying the trace
@@ -42,7 +42,7 @@ func id(n int) []byte {
 // DemoTrace builds one request through the shop, starting at start. About
 // one in twelve fails in the payment service and one in fifteen is slow in
 // the database.
-func DemoTrace(start time.Time) []*coltrace.ExportTraceServiceRequest {
+func DemoTrace(start time.Time) []*otlpwire.TraceRequest {
 	trace := id(16)
 	var spans []demoSpan
 	ms := func(lo, hi int) time.Duration { return time.Duration(lo+mrand.IntN(hi-lo+1)) * time.Millisecond }
@@ -133,9 +133,9 @@ func DemoTrace(start time.Time) []*coltrace.ExportTraceServiceRequest {
 		}
 		by[s.service] = append(by[s.service], s.span)
 	}
-	var out []*coltrace.ExportTraceServiceRequest
+	var out []*otlpwire.TraceRequest
 	for _, service := range order {
-		out = append(out, &coltrace.ExportTraceServiceRequest{ResourceSpans: []*tracepb.ResourceSpans{{
+		out = append(out, &otlpwire.TraceRequest{ResourceSpans: []*tracepb.ResourceSpans{{
 			Resource: &resourcepb.Resource{Attributes: []*commonpb.KeyValue{kvs("service.name", service), kvs("service.namespace", "shop"),
 				kvs("deployment.environment", "demo"), kvs("telemetry.sdk.language", "demo")}},
 			ScopeSpans: []*tracepb.ScopeSpans{{Scope: &commonpb.InstrumentationScope{Name: "vigil.tracegen"}, Spans: by[service]}},
@@ -157,7 +157,7 @@ func SendDemo(ctx context.Context, endpoint string, rate float64) (int, error) {
 	for {
 		// Dated a little back, so that every span has ended when it is sent.
 		for _, req := range DemoTrace(time.Now().Add(-4 * time.Second)) {
-			body, _ := proto.Marshal(req)
+			body, _ := req.Marshal()
 			r, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(endpoint, "/")+"/v1/traces", bytes.NewReader(body))
 			if err != nil {
 				return sent, err

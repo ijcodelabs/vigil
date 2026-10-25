@@ -24,11 +24,11 @@ import (
 	"time"
 	"unicode/utf8"
 
-	collogs "go.opentelemetry.io/proto/otlp/collector/logs/v1"
 	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
 	logspb "go.opentelemetry.io/proto/otlp/logs/v1"
 	resourcepb "go.opentelemetry.io/proto/otlp/resource/v1"
-	"google.golang.org/protobuf/proto"
+
+	"github.com/ijcodelabs/vigil/internal/otlpwire"
 )
 
 // Service is the service name of the records; the dashboards and the
@@ -75,7 +75,7 @@ type input struct {
 var toolFields = []string{"command", "description", "file_path", "path", "pattern", "glob", "url", "query", "subagent_type", "notebook_path", "skill"}
 
 // Record turns one hook input into an OTLP log request.
-func Record(raw []byte, now time.Time, o Options) (*collogs.ExportLogsServiceRequest, error) {
+func Record(raw []byte, now time.Time, o Options) (*otlpwire.LogsRequest, error) {
 	var in input
 	if err := json.Unmarshal(raw, &in); err != nil {
 		return nil, fmt.Errorf("hook input: %w", err)
@@ -143,7 +143,7 @@ func Record(raw []byte, now time.Time, o Options) (*collogs.ExportLogsServiceReq
 		severity = logspb.SeverityNumber_SEVERITY_NUMBER_WARN
 	}
 	ts := uint64(now.UnixNano())
-	return &collogs.ExportLogsServiceRequest{ResourceLogs: []*logspb.ResourceLogs{{
+	return &otlpwire.LogsRequest{ResourceLogs: []*logspb.ResourceLogs{{
 		Resource: &resourcepb.Resource{Attributes: []*commonpb.KeyValue{str("service.name", Service)}},
 		ScopeLogs: []*logspb.ScopeLogs{{LogRecords: []*logspb.LogRecord{{
 			TimeUnixNano: ts, ObservedTimeUnixNano: ts, SeverityNumber: severity,
@@ -154,8 +154,8 @@ func Record(raw []byte, now time.Time, o Options) (*collogs.ExportLogsServiceReq
 }
 
 // Send posts the request to an agent's OTLP endpoint.
-func Send(ctx context.Context, endpoint string, req *collogs.ExportLogsServiceRequest) error {
-	body, err := proto.Marshal(req)
+func Send(ctx context.Context, endpoint string, req *otlpwire.LogsRequest) error {
+	body, err := req.Marshal()
 	if err != nil {
 		return err
 	}
