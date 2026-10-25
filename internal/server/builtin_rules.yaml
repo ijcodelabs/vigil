@@ -40,3 +40,19 @@ groups:
         labels: {severity: critical}
         annotations:
           summary: 'The certificate of {{ $labels.probe }} ({{ $labels.target }}) has expired'
+
+      # The secret store set up under Settings > Secrets. While it does not
+      # answer, vigil goes on with the values it read last.
+      - alert: SecretStoreDown
+        expr: vigil_secret_store_up == 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: 'vigil cannot reach its secret store (sealed, down or its login refused); it uses the values it read last'
+
+      - alert: SecretStoreLoginExpiring
+        expr: vigil_secret_store_token_expiry_seconds{renewable="false"} < 3 * 86400
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: 'vigil''s token for the secret store cannot be renewed and expires in {{ $value | humanizeDuration }}; give it a new one under Settings > Secrets'

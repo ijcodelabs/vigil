@@ -43,6 +43,7 @@ events and dashboards. It is a few static Go binaries: the **agent**
 | watch GPUs and what AI use costs | [GPUs and AI machines](gpu.md), [AI costs](finops.md) |
 | see what Claude Code costs and does | [Claude Code](claude-code.md) |
 | see at a glance what needs attention | [Home](home.md) |
+| keep the AI key in your OpenBao or Vault | [Secrets](secrets.md) |
 | be told when something is wrong | [Alerts](alerts.md) |
 | see what processes do, and catch intrusions | [Runtime events](security.md) |
 | know what a metric means | [Metric reference](metrics.md) |

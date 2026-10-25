@@ -29,6 +29,7 @@ var pages = []struct{ name, title string }{
 	{"gpu", "GPUs and AI machines"},
 	{"finops", "AI costs"},
 	{"claude-code", "Claude Code"},
+	{"secrets", "Secrets"},
 	{"dashboards", "Dashboards"},
 	{"alerts", "Alerts"},
 	{"grafana", "Grafana"},

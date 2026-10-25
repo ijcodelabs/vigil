@@ -7,6 +7,7 @@ import { Dashboards } from './dashboards.js';
 import { Services } from './services.js';
 import { Sessions } from './sessions.js';
 import { Home } from './home.js';
+import { Secrets } from './secrets.js';
 
 const pages = [
   ['home', 'Home', Home],
@@ -18,6 +19,7 @@ const pages = [
   ['captures', 'Captures', Captures],
   ['fleet', 'Fleet', Fleet],
   ['users', 'Users', Users, 'admin'],
+  ['secrets', 'Secrets', Secrets, 'admin'],
 ];
 
 function App() {

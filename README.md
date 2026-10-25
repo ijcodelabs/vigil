@@ -109,8 +109,11 @@ large fleets. Expect rough edges, and please say what you find.
 ### Looking at it
 
 - **Web interface**: Home, Dashboards, Explore (with saved queries),
-  Services, Sessions, Alerts, Captures, Fleet, Users; admin and viewer
-  accounts.
+  Services, Sessions, Alerts, Captures, Fleet, Users, Secrets; admin and
+  viewer accounts.
+- **Secrets from your OpenBao or Vault**: vigil logs in with an AppRole of
+  its own and reads the AI key from a KV mount, set up in the interface.
+  [Secrets](docs/secrets.md)
 - **Context and Explain on a log line** in Explore: how often lines like
   it come, the lines around it, what happened on the host then, and, with
   a language model set up, what it means. [Explore](docs/explore.md#a-lines-context)
@@ -132,6 +135,7 @@ pages under `/docs/` (the **Docs** link in the interface).
 | [Kubernetes](docs/kubernetes.md) | node agents and the cluster agent |
 | [Relays](docs/relay.md) | for agents that cannot reach the server |
 | [Home](docs/home.md) | incidents, forecasts, AI explanations |
+| [Secrets](docs/secrets.md) | the AI key from your OpenBao or Vault |
 | [Explore](docs/explore.md) | PromQL and LogsQL with examples, saved queries |
 | [Dashboards](docs/dashboards.md) | panels, variables, editing |
 | [Services and traces](docs/apm.md) | OpenTelemetry as the APM |

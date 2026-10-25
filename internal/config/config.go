@@ -761,7 +761,8 @@ type AI struct {
 	Model    string `yaml:"model"`    // default claude-opus-5-5
 	Effort   string `yaml:"effort"`   // low, medium, high, xhigh or max; default low
 	// APIKeyFile holds the provider's key; read on every call, so a new key
-	// needs no restart.
+	// needs no restart. Without it the key comes from the secret store set
+	// up in the interface (Secrets).
 	APIKeyFile string `yaml:"api_key_file"`
 	BaseURL    string `yaml:"base_url"` // a proxy or gateway in front of the provider
 	// Data lists what may be sent besides metadata (names, states, numbers):
@@ -977,9 +978,6 @@ func (a *AI) check(costs Costs) error {
 	case "low", "medium", "high", "xhigh", "max":
 	default:
 		return fmt.Errorf("effort %q is not one of low, medium, high, xhigh, max", a.Effort)
-	}
-	if a.APIKeyFile == "" {
-		return fmt.Errorf("api_key_file is required")
 	}
 	for _, d := range a.Data {
 		if d != "logs" {

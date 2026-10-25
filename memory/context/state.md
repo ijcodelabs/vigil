@@ -755,6 +755,47 @@ Steps 2 and 3 of the Foundations build order in direction.md.
   fake model API: the panel, the preview, the answer, the cache (one call
   for two asks), a verdict, Explain again. Not against the real API.
 
+## Secrets from OpenBao or Vault (built 2026-10-25, uncommitted)
+
+- `internal/secrets`: an OpenBao/Vault client (AppRole or token login,
+  renewal at a third of the token's life, a new AppRole login at its
+  maximum, `lookup-self`; KV v1 or v2 told by `sys/internal/ui/mounts`;
+  read, `LIST`, `sys/capabilities-self`; values cached 5 min in memory, the
+  last good value given while the store fails) and `Sealer` (AES-256-GCM
+  with `data_dir/secrets.key`, made 0600 on first save, bound to a label).
+- `internal/server/secrets.go`: settings `secret_store` (address, CA,
+  namespace, auth, role_id, auth mount, KV mount), `secret_store_cred`
+  (the secret_id or token, sealed), `secret_refs` (use → path and field).
+  Admin API under `/api/v1/secrets`; saving or removing the store asks for
+  the password again (the admin token for a token sign-in), and the saved
+  credential is reused only for the same address, login and CA. No API
+  answers with a value: found, version, last four characters. `vaultLoop`
+  every minute: `vigil_secret_store_up`,
+  `vigil_secret_store_token_expiry_seconds{renewable}`; built-in alerts
+  SecretStoreDown and SecretStoreLoginExpiring.
+- The first use is the AI key: `ai.api_key_file` is optional now; without
+  it the key comes from the use `ai_api_key`. `ai.Provider` gained
+  `Verify` (lists models, no cost) and takes a `KeyFunc`.
+- UI: Secrets (admins): the store card with Test (KV version, policies,
+  token life, may list / write / read each chosen path), Test and save,
+  Remove; the table of uses with Choose… (picks from the mount's list when
+  allowed) and Test (found, version, …last4, provider accepted). Docs:
+  docs/secrets.md (what to create in OpenBao), API, metrics.
+- Verified: unit tests against a fake OpenBao (renew, re-login, last good,
+  KV1, capabilities, list, sealer), a server test (nothing in clear in any
+  data file, credential not reused for another address, Explain with the
+  store's key, survives a restart, remove), and in the browser against a
+  real OpenBao 2.4.1 dev server in the test VM: set up, test, choose,
+  provider accepted; sealed: reported down with OpenBao's reason, the key
+  still served from memory; after a restart while sealed the key is
+  missing (documented); unsealed: recovered by itself.
+- Not built: writing values from vigil, the receivers' tokens from the
+  store, a server audit log entry for the changes (only the server log).
+- On the trial since 2026-10-25: the key is read from an OpenBao that was
+  already there, over a network shared with vigil's server only; Explain on
+  a log line ran there against the real API (about 3,200 tokens, 2.5 cents,
+  8 s; asked again, answered from the cache).
+
 ## Next
 
 - The config-at-scale list is done. Open: step 7 (AI investigator, MCP

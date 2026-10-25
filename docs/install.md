@@ -80,7 +80,7 @@ All server settings:
 | `captures_max_bytes` | disk budget for captures; oldest go first | 2 GiB |
 | `interval`, `scrape` | targets the server scrapes itself, for hosts without an agent | none |
 | `costs` | prices for language-model tokens and GPU hours; see [AI costs](finops.md#prices) | none |
-| `ai` | a language model that explains incidents on the Home page, with its key file and a monthly budget; see [Home](home.md#ai-explanations) | off |
+| `ai` | a language model that explains incidents on the Home page and log lines in Explore, with a monthly budget; its key comes from `api_key_file` or, without it, from your OpenBao or Vault ([Secrets](secrets.md)); see [Home](home.md#ai-explanations) | off |
 | `limits` | what one agent may send, and how much at once; see [Limits](#limits) | see there |
 | `trusted_proxies` | reverse proxies whose `X-Forwarded-For` is believed; see [Encryption](#encryption) | none |
 | `tls.self_signed` | serve HTTPS with the server's own certificate authority | off |

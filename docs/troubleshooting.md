@@ -209,6 +209,26 @@ The Fleet page shows the reason next to the agent:
   again for its cluster role.
 - Everything appears twice: more than one cluster agent is running.
 
+## Explain does not work
+
+The message under **Explain** (Home) or **Explain…** (Explore) says why:
+
+- **No AI provider is set up**: the server config has no `ai` section; see
+  [Home → AI explanations](home.md#ai-explanations).
+- **Reading the API key: …**: with `api_key_file`, the file cannot be read
+  by the server. Without it, the key comes from the secret store: under
+  **Secrets**, the store must answer and *AI provider key* must have a
+  secret chosen; **Test** there says which part fails.
+- **The store answered 503: Vault is sealed** (or the store cannot be
+  reached): unseal it. vigil goes on with a key it read before, but a
+  server restarted while the store was sealed has none until it answers.
+- **This server does not allow log excerpts**: explaining a log line sends
+  the line; add `data: [logs]` to `ai`.
+- **This month's AI budget is used up**: `monthly_budget` in `ai`, or wait
+  for the next month.
+- **The provider did not accept the key**: the key is wrong, revoked, or
+  its workspace is out of credit.
+
 ## The interface
 
 - **Signed out unexpectedly**: sessions last seven days; creating the first
