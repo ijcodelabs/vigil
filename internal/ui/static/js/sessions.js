@@ -1,5 +1,6 @@
 import { html, useState, useEffect, useMemo, api, useLoad, setParams, Badge, ErrorBox, fmtNum, fmtUnit } from './lib.js';
-import { useRange, rangeParams, RANGES, parseLines } from './explore.js';
+import { useRange, rangeParams, parseLines } from './explore.js';
+import { TimeRange } from './timerange.js';
 
 // Sessions: what AI coding tools did, one session at a time. Everything
 // comes from the events the tool sends (Claude Code: one log line per API
@@ -32,11 +33,7 @@ function who(e) {
 }
 
 function RangePicker({ range, setRange }) {
-  return range.last
-    ? html`<select aria-label="Time range" value=${range.last} onChange=${e => setRange({ last: +e.target.value })}>
-        ${RANGES.map(([l, s]) => html`<option value=${s}>Last ${l}</option>`)}</select>`
-    : html`<span class="badge info">${new Date(range.from * 1000).toLocaleString()} – ${new Date(range.to * 1000).toLocaleString()}</span>
-        <button class="small" onClick=${() => setRange({ last: 86400 })}>Back to last 24h</button>`;
+  return html`<${TimeRange} range=${range} setRange=${setRange} />`;
 }
 
 export function Sessions({ route }) {
