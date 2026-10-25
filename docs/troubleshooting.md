@@ -141,6 +141,11 @@ The message says why. Common ones:
 - `journald logs disabled: journalctl not found`: journald needs a host
   install, not a container.
 - `cannot list docker containers`: the socket path is wrong or not mounted.
+- **Container logs arrive late, then all at once**: Docker can stop
+  sending on a container's log stream without closing it (seen while it
+  rebuilt and recreated containers). The agent closes a stream that has
+  delivered nothing for ten minutes and opens it again from where it left
+  off, so such a stall delays lines by up to ten minutes and loses none.
 - Containers started with `vigil.logs=false`, or pods annotated
   `vigil.io/logs: "false"`, are skipped on purpose.
 - `vigil_agent_dropped_total{reason="log_rate_limit"}` above zero: the host

@@ -378,3 +378,61 @@ func TestDocker(t *testing.T) {
 		t.Errorf("metrics: %v", vals)
 	}
 }
+
+// A stream that stops delivering is closed and reopened from where it left
+// off, losing and repeating nothing; a container that never writes is
+// reopened from when it was first seen, not from its first line.
+func TestDockerStalledStreamIsReopened(t *testing.T) {
+	var mu sync.Mutex
+	calls := map[string][]string{} // container → since of each logs call
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/containers/json":
+			io.WriteString(w, `[{"Id":"stall1","Names":["/web"],"Image":"x","State":"running","Labels":{}},
+			 {"Id":"quiet1","Names":["/quiet"],"Image":"x","State":"running","Labels":{}}]`)
+		case strings.HasSuffix(r.URL.Path, "/logs"):
+			id := strings.Split(r.URL.Path, "/")[2]
+			mu.Lock()
+			calls[id] = append(calls[id], r.URL.Query().Get("since"))
+			n := len(calls[id])
+			mu.Unlock()
+			if id == "stall1" {
+				if n == 1 { // one line, then silence: Docker stopped sending
+					w.Write(frame(1, "2024-05-01T10:00:00.000000001Z first\n"))
+				} else { // reopened: what came meanwhile
+					w.Write(frame(1, "2024-05-01T10:00:05.000000000Z second\n"))
+				}
+			}
+			w.(http.Flusher).Flush()
+			<-r.Context().Done()
+		case strings.HasSuffix(r.URL.Path, "/json"):
+			io.WriteString(w, `{"Config":{"Tty":false},"State":{"Running":true,"ExitCode":0}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer api.Close()
+
+	c := newCollector(t)
+	c.pos.Set(dockerKeyPrefix+"stall1", "1714557599000000000")
+	d := &Docker{Client: dockerapi.NewHTTP(api.URL), Default: &Template{}, Pos: c.pos, Out: c.recs, Log: quiet,
+		Idle: 300 * time.Millisecond, Rescan: 50 * time.Millisecond}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go d.Run(ctx)
+
+	got := c.next(2)
+	if m := msgs(got); m != "first|second" {
+		t.Fatalf("lines: %q", m)
+	}
+	c.none(200 * time.Millisecond) // nothing repeated
+	mu.Lock()
+	defer mu.Unlock()
+	if s := calls["stall1"]; len(s) < 2 || s[0] != "1714557599.000000001" || s[1] != "1714557600.000000002" {
+		t.Errorf("stalled stream: reopened from %q (want after the last line read)", s)
+	}
+	q := calls["quiet1"]
+	if len(q) < 2 || q[0] == "0" || q[1] != q[0]+".000000000" {
+		t.Errorf("quiet container: opened with since %q (want the first look's time again, never 0)", q)
+	}
+}
