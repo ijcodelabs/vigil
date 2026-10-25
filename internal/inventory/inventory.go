@@ -11,7 +11,7 @@ import (
 	"github.com/shirou/gopsutil/v4/net"
 	"github.com/shirou/gopsutil/v4/process"
 
-	"github.com/ijcodelabs/vigil/internal/fleet"
+	"github.com/ijcodelabs/vigil/internal/model"
 )
 
 const maxEach = 1000
@@ -30,7 +30,7 @@ func sorted[T int | string](set map[T]bool) []T {
 
 // Collect returns what can be seen; a part that cannot be read is left
 // empty. images, if not nil, lists the images of running containers.
-func Collect(ctx context.Context, images func() []string) fleet.Inventory {
+func Collect(ctx context.Context, images func() []string) model.Inventory {
 	procs := map[string]bool{}
 	if list, err := process.ProcessesWithContext(ctx); err == nil {
 		for _, p := range list {
@@ -53,5 +53,5 @@ func Collect(ctx context.Context, images func() []string) fleet.Inventory {
 			imgs[img] = true
 		}
 	}
-	return fleet.Inventory{Processes: sorted(procs), Ports: sorted(ports), Images: sorted(imgs)}
+	return model.Inventory{Processes: sorted(procs), Ports: sorted(ports), Images: sorted(imgs)}
 }

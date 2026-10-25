@@ -7,6 +7,7 @@ import (
 
 	"github.com/ijcodelabs/vigil/internal/config"
 	"github.com/ijcodelabs/vigil/internal/logs"
+	vmodel "github.com/ijcodelabs/vigil/internal/model"
 	"github.com/ijcodelabs/vigil/internal/rules"
 	"github.com/prometheus/common/model"
 )
@@ -88,12 +89,12 @@ config:
 
 func TestDetection(t *testing.T) {
 	cat, _ := Builtin()
-	inv := &Inventory{Processes: []string{"systemd", "sshd", "postgres", "nginx"},
+	inv := &vmodel.Inventory{Processes: []string{"systemd", "sshd", "postgres", "nginx"},
 		Images: []string{"docker.io/library/redis:7.2", "ghcr.io/acme/shop@sha256:abc"}, Ports: []int{22, 5432}}
 	if got := strings.Join(cat.Detect(inv), ","); got != "nginx,postgres,redis" {
 		t.Errorf("detected: %s", got)
 	}
-	if got := cat.Detect(&Inventory{Processes: []string{"postgres-exporter"}, Images: []string{"my/nginx-proxy"}}); len(got) != 0 {
+	if got := cat.Detect(&vmodel.Inventory{Processes: []string{"postgres-exporter"}, Images: []string{"my/nginx-proxy"}}); len(got) != 0 {
 		t.Errorf("similar names must not match: %v", got)
 	}
 	if cat.Detect(nil) != nil {
@@ -101,7 +102,7 @@ func TestDetection(t *testing.T) {
 	}
 	// A port alone counts only when the integration lists nothing better.
 	portOnly, err := ParseIntegration("memcached", "detect: {port: [11211]}")
-	if err != nil || !portOnly.Detected(&Inventory{Ports: []int{11211}}) || cat["postgres"].Detected(&Inventory{Ports: []int{5432}}) {
+	if err != nil || !portOnly.Detected(&vmodel.Inventory{Ports: []int{11211}}) || cat["postgres"].Detected(&vmodel.Inventory{Ports: []int{5432}}) {
 		t.Errorf("port detection: %v", err)
 	}
 }

@@ -15,6 +15,7 @@ import (
 
 	"github.com/ijcodelabs/vigil/internal/facts"
 	"github.com/ijcodelabs/vigil/internal/fleet"
+	"github.com/ijcodelabs/vigil/internal/model"
 )
 
 const (
@@ -38,7 +39,7 @@ type fleetState struct {
 
 	catalog   fleet.Catalog               // built-in integrations overlaid with this server's own
 	custom    map[string]string           // documents of this server's own integrations
-	inventory map[string]*fleet.Inventory // what runs on each agent's host
+	inventory map[string]*model.Inventory // what runs on each agent's host
 	detected  map[string][]string         // agent id -> integrations its inventory shows
 
 	rollouts map[string]*rollout     // profile -> the rollout of its latest change
@@ -118,7 +119,7 @@ func (s *Server) loadFleet() error {
 	f := &s.fleet
 	f.reports, f.attrs = map[string]string{}, map[string]map[string]string{}
 	f.labels, f.facts = map[string]map[string]string{}, map[string]map[string]string{}
-	f.inventory, f.detected = map[string]*fleet.Inventory{}, map[string][]string{}
+	f.inventory, f.detected = map[string]*model.Inventory{}, map[string][]string{}
 	f.rollouts, f.isStable = map[string]*rollout{}, map[*fleet.Profile]bool{}
 	f.polls, f.seen = map[string]uint64{}, map[string]time.Time{}
 	if err := s.reloadCatalog(); err != nil {
@@ -138,7 +139,7 @@ func (s *Server) loadFleet() error {
 		json.Unmarshal([]byte(lf[1]), &fs)
 		f.labels[id], f.facts[id] = labels, fs
 		if doc, ok := inventories[id]; ok {
-			inv := &fleet.Inventory{}
+			inv := &model.Inventory{}
 			if json.Unmarshal([]byte(doc), inv) == nil {
 				f.inventory[id] = inv
 			}
@@ -680,7 +681,7 @@ func (s *Server) handleAgentConfig(w http.ResponseWriter, r *http.Request) {
 		ConfigHash  string            `json:"config_hash"`
 		ConfigError string            `json:"config_error"`
 		// Inventory is sent only when it changed since the agent last sent it.
-		Inventory *fleet.Inventory `json:"inventory"`
+		Inventory *model.Inventory `json:"inventory"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 512<<10)).Decode(&in); err != nil {
 		http.Error(w, "invalid report: "+err.Error(), http.StatusBadRequest)

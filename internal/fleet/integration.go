@@ -13,6 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/ijcodelabs/vigil/internal/config"
+	"github.com/ijcodelabs/vigil/internal/model"
 	"github.com/ijcodelabs/vigil/internal/rules"
 )
 
@@ -53,13 +54,6 @@ type Detect struct {
 	Process []string `yaml:"process" json:"process,omitempty"` // process names
 	Image   []string `yaml:"image" json:"image,omitempty"`     // container image names (without registry and tag)
 	Port    []int    `yaml:"port" json:"port,omitempty"`       // listening TCP ports; a weak sign, used only if nothing else is listed
-}
-
-// Inventory is what an agent reports about what runs on its host.
-type Inventory struct {
-	Processes []string `json:"processes"`
-	Ports     []int    `json:"ports"`
-	Images    []string `json:"images"`
 }
 
 var (
@@ -207,7 +201,7 @@ func imageName(image string) string {
 }
 
 // Detected reports whether the inventory shows this technology.
-func (in *Integration) Detected(inv *Inventory) bool {
+func (in *Integration) Detected(inv *model.Inventory) bool {
 	if inv == nil {
 		return false
 	}
@@ -251,7 +245,7 @@ func (c Catalog) Names() []string {
 }
 
 // Detect returns the names of the integrations an inventory shows.
-func (c Catalog) Detect(inv *Inventory) []string {
+func (c Catalog) Detect(inv *model.Inventory) []string {
 	var out []string
 	for _, n := range c.Names() {
 		if c[n].Detected(inv) {
