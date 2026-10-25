@@ -94,7 +94,7 @@ ai:
   provider: anthropic           # the only one so far
   model: claude-opus-5-5        # the default
   effort: low                   # low, medium, high, xhigh, max
-  api_key_file: /etc/vigil/anthropic-key
+  api_key_file: /etc/vigil/anthropic-key   # or leave it out and keep the key in OpenBao: see Secrets
   monthly_budget: 20            # required; in the currency of costs
   data: [logs]                  # optional: also send masked log excerpts
 ```
@@ -103,7 +103,8 @@ ai:
 current prices.) The model needs a price in `costs.tokens`, because
 `monthly_budget` is kept by pricing every call; once it is spent, Explain
 refuses until the next month. The key is read from its file on every
-call, so a new key needs no restart, and nothing in the server's
+call, so a new key needs no restart (or, without `api_key_file`, from
+your OpenBao or Vault: see [Secrets](secrets.md)), and nothing in the server's
 environment (`ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, credential
 profiles) is used. An admin can **Pause** explanations on the Home page;
 nothing is sent while paused. What explanations cost also appears in

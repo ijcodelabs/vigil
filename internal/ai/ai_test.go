@@ -37,7 +37,7 @@ func TestAnthropicRequestAndAnswer(t *testing.T) {
 	var h http.Header
 	api := fakeAPI(t, "end_turn", `{"summary":"ok"}`, &got, &h)
 	defer api.Close()
-	p := NewAnthropic("claude-opus-5-5", "low", keyFile(t), api.URL)
+	p := NewAnthropic("claude-opus-5-5", "low", FileKey(keyFile(t)), api.URL)
 	res, err := p.Complete(context.Background(), Request{System: "rules", User: "question",
 		Schema: map[string]any{"type": "object"}, MaxTokens: 4000})
 	if err != nil {
@@ -61,7 +61,7 @@ func TestAnthropicStops(t *testing.T) {
 		var got map[string]any
 		var h http.Header
 		api := fakeAPI(t, stop, "", &got, &h)
-		_, err := NewAnthropic("claude-haiku-5-5", "low", keyFile(t), api.URL).Complete(context.Background(), Request{MaxTokens: 100, Schema: map[string]any{}})
+		_, err := NewAnthropic("claude-haiku-5-5", "low", FileKey(keyFile(t)), api.URL).Complete(context.Background(), Request{MaxTokens: 100, Schema: map[string]any{}})
 		api.Close()
 		if err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%s: %v", stop, err)
@@ -76,7 +76,7 @@ func TestAnthropicStops(t *testing.T) {
 }
 
 func TestAnthropicMissingKey(t *testing.T) {
-	_, err := NewAnthropic("claude-opus-5-5", "low", "/nonexistent/key", "http://127.0.0.1:1").Complete(context.Background(), Request{MaxTokens: 1})
+	_, err := NewAnthropic("claude-opus-5-5", "low", FileKey("/nonexistent/key"), "http://127.0.0.1:1").Complete(context.Background(), Request{MaxTokens: 1})
 	if err == nil || !strings.Contains(err.Error(), "API key") {
 		t.Errorf("missing key: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestAnthropicIgnoresEnvironment(t *testing.T) {
 	defer api.Close()
 	t.Setenv("ANTHROPIC_API_KEY", "env-key-must-not-be-used")
 	t.Setenv("ANTHROPIC_BASE_URL", "http://127.0.0.1:1")
-	if _, err := NewAnthropic("claude-haiku-5-5", "low", keyFile(t), api.URL).Complete(context.Background(), Request{MaxTokens: 10, Schema: map[string]any{}}); err != nil {
+	if _, err := NewAnthropic("claude-haiku-5-5", "low", FileKey(keyFile(t)), api.URL).Complete(context.Background(), Request{MaxTokens: 10, Schema: map[string]any{}}); err != nil {
 		t.Fatal(err)
 	}
 	if h.Get("X-Api-Key") != "test-key-not-real" {

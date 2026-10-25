@@ -101,6 +101,8 @@ The group **builtin** always runs:
 | `CertificateExpiresSoon` | a checked certificate has less than 14 days left |
 | `CertificateExpired` | a checked certificate has expired |
 | `AgentDroppingData` | an agent had to drop data it could not send or was not allowed to |
+| `SecretStoreDown` | the secret store set up under [Secrets](secrets.md) has not answered for five minutes (sealed, down, or vigil's login refused); vigil goes on with the values it read last |
+| `SecretStoreLoginExpiring` | vigil's token for the secret store cannot be renewed and expires within three days |
 
 Integrations bring their own rules, shown as `<integration>/<group>`, and
 run while a profile uses the integration:

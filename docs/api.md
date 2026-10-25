@@ -115,6 +115,13 @@ curl -X PUT -H "Authorization: Bearer $T" --data-binary @rules.yaml https://vigi
 | `PUT` `DELETE /api/v1/users/{name}` | create or change (`{"password": "...", "role": "admin"}`), delete |
 | `POST /api/v1/login`, `/logout`; `GET /api/v1/me`; `POST /api/v1/me/password` | sessions. Signing in needs the header `X-Vigil-CSRF: 1`, like every changing request made with a session |
 | `GET /healthz` | `ok`, without signing in |
+| `GET /api/v1/secrets` | the secret store (never its secret_id or token), its health, and where each secret vigil uses comes from, with whether it is there (never the value); admin only |
+| `POST /api/v1/secrets/store/test` | `{"store": {…}, "credential": "…"}`: log in and report what the login may do, without saving |
+| `PUT /api/v1/secrets/store` | the same plus `"password"` (yours, or the admin token): test and save. An empty credential keeps the saved one only for the same address and login |
+| `POST /api/v1/secrets/store/remove` | `{"password": "…"}` |
+| `GET /api/v1/secrets/store/list?prefix=` | secret names under the mount |
+| `PUT /api/v1/secrets/uses/{name}` | `{"path": "anthropic", "field": "api_key"}`; `name` is `ai_api_key` |
+| `POST /api/v1/secrets/uses/{name}/test` | read it again, and for the AI key ask the provider whether it accepts it |
 
 ## What agents send
 

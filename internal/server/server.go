@@ -72,6 +72,7 @@ type Server struct {
 	metrics *url.URL
 	logs    *url.URL
 	traces  *url.URL // nil: no trace store
+	vault   vault    // the secret store set up in the interface (secrets.go)
 	am      *alerting.Alertmanager
 	rules   *rules.Manager
 	runCtx  context.Context // lifetime of the rule loops
@@ -141,8 +142,13 @@ func New(cfg *config.Server, log *slog.Logger) (*Server, error) {
 		limiter: ingestLimiter{buckets: map[string]*bucket{}},
 		tokens:  map[string]string{}, touched: map[string]touchState{},
 		http: &http.Client{Timeout: 30 * time.Second}}
+	s.openVault()
 	if a := cfg.AI; a.Provider == "anthropic" {
-		s.ai = ai.NewAnthropic(a.Model, a.Effort, a.APIKeyFile, a.BaseURL)
+		key := ai.FileKey(a.APIKeyFile)
+		if a.APIKeyFile == "" {
+			key = func(ctx context.Context) (string, error) { return s.secret(ctx, "ai_api_key") }
+		}
+		s.ai = ai.NewAnthropic(a.Model, a.Effort, key, a.BaseURL)
 	}
 	for _, t := range cfg.TrustedProxies {
 		if !strings.Contains(t, "/") {
@@ -203,6 +209,7 @@ func (s *Server) Handler() http.Handler {
 	s.briefingRoutes(mux)
 	s.explainRoutes(mux)
 	s.logLineRoutes(mux)
+	s.secretRoutes(mux)
 
 	// Read-only Prometheus query API, served by the metrics store.
 	proxy := httputil.NewSingleHostReverseProxy(s.metrics)
@@ -370,6 +377,7 @@ func (s *Server) Run(ctx context.Context) error {
 	go s.incidentLoop(ctx)
 	go s.forecastLoop(ctx)
 	go s.spendLoop(ctx)
+	go s.vaultLoop(ctx)
 	go func() { // rollouts move on by themselves
 		t := time.NewTicker(10 * time.Second)
 		defer t.Stop()
