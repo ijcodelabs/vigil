@@ -289,7 +289,11 @@ func (s *Server) authRoutes(mux *http.ServeMux) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		writeJSON(w, p)
+		// The version goes along so the interface can show which build runs.
+		writeJSON(w, struct {
+			*principal
+			Version string `json:"version"`
+		}{p, Version})
 	})
 	mux.HandleFunc("POST /api/v1/me/password", s.viewer(s.handleOwnPassword))
 	mux.HandleFunc("GET /api/v1/users", s.admin(func(w http.ResponseWriter, _ *http.Request) {
