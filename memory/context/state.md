@@ -687,7 +687,7 @@ Step 3 of the Home page plan.
   no restart. One of `bearer_token`, `bearer_token_file`, `basic_auth`.
   First used on the trial for an application whose metrics need a token.
 
-## Separate binaries (built 2026-10-25, uncommitted)
+## Separate binaries (built 2026-10-25, merged)
 
 Steps 2 and 3 of the Foundations build order in direction.md.
 
@@ -730,7 +730,7 @@ Steps 2 and 3 of the Foundations build order in direction.md.
   the collector packages; the agent's size budget is 17 MB. What remains of
   genproto is two message packages cel-go needs.
 
-## Context and Explain for a log line (built 2026-10-25, uncommitted)
+## Context and Explain for a log line (built 2026-10-25, merged)
 
 - Explore → Logs, an opened line: **Context** (everyone) and **Explain…**
   (admins, with `ai` set up). `internal/server/logcontext.go`: `POST
@@ -762,7 +762,7 @@ Steps 2 and 3 of the Foundations build order in direction.md.
   fake model API: the panel, the preview, the answer, the cache (one call
   for two asks), a verdict, Explain again. Not against the real API.
 
-## Secrets from OpenBao or Vault (built 2026-10-25, uncommitted)
+## Secrets from OpenBao or Vault (built 2026-10-25, merged)
 
 - `internal/secrets`: an OpenBao/Vault client (AppRole or token login,
   renewal at a third of the token's life, a new AppRole login at its
@@ -803,7 +803,7 @@ Steps 2 and 3 of the Foundations build order in direction.md.
   a log line ran there against the real API (about 3,200 tokens, 2.5 cents,
   8 s; asked again, answered from the cache).
 
-## Time range picker (2026-10-25, uncommitted)
+## Time range picker (2026-10-25, merged)
 
 - `internal/ui/static/js/timerange.js` (`TimeRange`, `RANGES` moved there):
   one picker for Explore (Metrics, Logs, Log volume), dashboards, Services
@@ -817,7 +817,7 @@ Steps 2 and 3 of the Foundations build order in direction.md.
   project's Podman machine was running, so vigil-test could not start), and
   by the user on the trial.
 
-## Docker log streams that stall (2026-10-25, uncommitted)
+## Docker log streams that stall (2026-10-25, merged)
 
 - Seen on the trial: after the host agent started during a deploy (Docker
   was rebuilding and recreating the server and gateway containers), all 53
@@ -841,12 +841,26 @@ Steps 2 and 3 of the Foundations build order in direction.md.
   in its rule file since 2026-10-25 (the Mac had come and gone 19 times in
   a week).
 
+## Toolchain and version in the interface (2026-10-26)
+
+- `go.mod` pins `toolchain go1.26.10`, and `x/net` and the OpenTelemetry
+  trace exporters moved to their current releases. `govulncheck ./...`
+  reports nothing our code calls; run it before each release. CI takes the
+  toolchain from `go.mod`. A local Go newer than the pin is used as it is
+  (`GOTOOLCHAIN=auto`), so builds meant to match CI set
+  `GOTOOLCHAIN=go1.26.10`.
+- `/api/v1/me` carries the server's `version` (signed-in callers only), and
+  the sidebar shows it under the user and role.
+
 ## Next
 
-- The config-at-scale list is done. Open: step 7 (AI investigator, MCP
-  server), and the watched eBPF window on the trial host.
-- Step 7 of the original plan: AI investigator and MCP server. Open question:
-  Claude API, or must it run with local models?
+- Foundations, build order in `direction.md`: step 1 on paper (data
+  classes, tenant model, envelope, retention, integrity claims), reviewed
+  by a second model; step 3 (CI budgets) can run beside it; step 4 (mTLS,
+  envelope, spools) waits for step 1.
+- At phone width the page is wider than the screen (637 px at 375 px).
+- Open from the original plan: AI investigator and MCP server (Claude API
+  or local models?), and the watched eBPF window on the trial host.
 
 ## Never run for real
 
