@@ -239,5 +239,7 @@ The message under **Explain** (Home) or **Explain…** (Explore) says why:
 - **Signed out unexpectedly**: sessions last seven days; creating the first
   user account ends the admin-token sign-in on purpose.
 - **Too many failed sign-ins**: wait five minutes.
+- **Which version runs**: the server's version is under your name at the
+  bottom of the sidebar; each agent's is on the Fleet page.
 - A dashboard panel says `This panel could not be drawn`: its definition is
   wrong; edit the panel or the dashboard's JSON.

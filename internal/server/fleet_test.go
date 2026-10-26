@@ -92,7 +92,7 @@ func TestUsersAndSessions(t *testing.T) {
 	if code := c.login("admin", "admin-token-secret"); code != 204 {
 		t.Fatalf("bootstrap login: %d", code)
 	}
-	if code, body, _ := c.do("GET", "/api/v1/me", ""); code != 200 || !strings.Contains(body, `"bootstrap":true`) {
+	if code, body, _ := c.do("GET", "/api/v1/me", ""); code != 200 || !strings.Contains(body, `"bootstrap":true`) || !strings.Contains(body, `"version":`) {
 		t.Errorf("/me: %d %s", code, body)
 	}
 

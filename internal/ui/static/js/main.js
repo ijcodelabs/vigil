@@ -62,6 +62,7 @@ function App() {
       <nav class="nav"><a href="/docs/" target="_blank" rel="noopener">Docs</a></nav>
       <div class="who">
         <div><strong>${me.user}</strong> <span class="muted">${me.role}</span></div>
+        ${me.version && html`<div class="version muted" title="Version of the vigil server">vigil ${me.version}</div>`}
         ${!me.bootstrap && html`<button class="small" onClick=${() => setDialog('password')}>Password</button>`}
         <button class="small" onClick=${toggleTheme}>Theme</button>
         <button class="small" onClick=${logout}>Sign out</button>

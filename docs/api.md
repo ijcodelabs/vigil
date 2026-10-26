@@ -113,7 +113,7 @@ curl -X PUT -H "Authorization: Bearer $T" --data-binary @rules.yaml https://vigi
 | `GET` `DELETE /api/v1/captures/{id}` | one capture (JSON) |
 | `GET /api/v1/users` | accounts (admin) |
 | `PUT` `DELETE /api/v1/users/{name}` | create or change (`{"password": "...", "role": "admin"}`), delete |
-| `POST /api/v1/login`, `/logout`; `GET /api/v1/me`; `POST /api/v1/me/password` | sessions. Signing in needs the header `X-Vigil-CSRF: 1`, like every changing request made with a session |
+| `POST /api/v1/login`, `/logout`; `GET /api/v1/me`; `POST /api/v1/me/password` | sessions. `/me` answers with who you are, your role and the server's `version`. Signing in needs the header `X-Vigil-CSRF: 1`, like every changing request made with a session |
 | `GET /healthz` | `ok`, without signing in |
 | `GET /api/v1/secrets` | the secret store (never its secret_id or token), its health, and where each secret vigil uses comes from, with whether it is there (never the value); admin only |
 | `POST /api/v1/secrets/store/test` | `{"store": {…}, "credential": "…"}`: log in and report what the login may do, without saving |
