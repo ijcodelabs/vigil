@@ -107,7 +107,7 @@ integrations:
   boop:
     event_agents: "boop-host"            # vigil agent ids, a regular expression
     emitters: "boop|gw-euw1"             # names from the tokens file
-    tenant_ref: 5c0a9e1f7b3d4c2a8e6f1d0b9a7c3e51
+    tenant_ref: <the tenant_ref, 32 hex characters>
 ```
 
 Point Boop at it with `APS_OTLP_LOGS_URL=http://127.0.0.1:4318/v1/logs` and
@@ -131,7 +131,7 @@ Jump login leaves an sshd line that says so, and any other login does not.
      sshd: {}
      boop:
        guarded_agents: "web-prod-.*|db-prod-01"
-       tenant_ca: "SHA256:38lMZN9s593n4PAe0oPt/XESnoQduAWmRgcoOOzgK00"
+       tenant_ca: "SHA256:<the tenant CA's fingerprint>"
    ```
 
 `SshLoginNotThroughBoopJump` fires for an accepted login on a guarded host
