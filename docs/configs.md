@@ -320,6 +320,8 @@ OTEL_SERVICE_NAME=checkout
 Its metrics and logs arrive labelled `service="checkout"`, and its traces
 feed the Services pages; see [Services and traces](apm.md) for sampling
 (`otlp.traces`) and what is shown. gRPC (port 4317) is not supported yet.
+Senders on other hosts get a token each (`otlp.tokens_file`) and the
+endpoint TLS (`otlp.tls`); see [Tokens and TLS](apm.md#tokens-and-tls).
 
 Attributes of log records become fields of the line. One with the name of
 a stream label (`service`, `source`) is kept as `attr_<name>`, because the

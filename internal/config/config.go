@@ -308,6 +308,16 @@ type GPU struct {
 type OTLP struct {
 	Enabled bool   `yaml:"enabled"`
 	Listen  string `yaml:"listen"` // default 127.0.0.1:4318
+	// TokensFile is a file on this host of "name token" lines. When set,
+	// only senders with one of those bearer tokens are taken, and what
+	// they send is labelled emitter=<name>. Read again when it changes.
+	TokensFile string `yaml:"tokens_file"`
+	// TLS serves the endpoint over HTTPS with a certificate from files,
+	// read again when they change.
+	TLS struct {
+		CertFile string `yaml:"cert_file"`
+		KeyFile  string `yaml:"key_file"`
+	} `yaml:"tls"`
 	// Traces: every span is counted into request, error and duration
 	// metrics; the spans themselves are stored for the traces that are kept.
 	Traces struct {
@@ -414,6 +424,9 @@ func Off(enabled *bool) bool { return enabled != nil && !*enabled }
 // Check validates the parts of a collection that need no other package:
 // job names, intervals and the keep/drop expressions.
 func (c *Collection) Check() error {
+	if (c.OTLP.TLS.CertFile == "") != (c.OTLP.TLS.KeyFile == "") {
+		return fmt.Errorf("otlp.tls needs both cert_file and key_file")
+	}
 	if v := c.OTLP.Traces.Sample; v != nil && (*v < 0 || *v > 1) {
 		return fmt.Errorf("otlp.traces.sample is a share between 0 and 1, not %v", *v)
 	}
