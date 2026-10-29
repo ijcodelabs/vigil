@@ -245,6 +245,7 @@ func (a *Agent) collect(ctx context.Context, col *config.Collection) {
 	// Everything collected, from whatever source, passes the limits on its
 	// way to the disk queue.
 	emitSamples := func(batch []model.Sample) {
+		exportAgentLabel(batch)
 		if batch = a.limits.samples(batch); len(batch) == 0 {
 			return
 		}
@@ -414,6 +415,7 @@ func (a *Agent) collect(ctx context.Context, col *config.Collection) {
 	}
 	if col.OTLP.Enabled {
 		rcv := &otlp.Receiver{Listen: col.OTLP.Listen, Log: a.log, DropLabels: col.OTLP.Metrics.DropLabels,
+			TokensFile: col.OTLP.TokensFile, CertFile: col.OTLP.TLS.CertFile, KeyFile: col.OTLP.TLS.KeyFile,
 			Metrics: func(batch []model.Sample) {
 				for i := range batch {
 					for k, v := range col.Labels {
@@ -715,5 +717,24 @@ func (a *Agent) shipClusterEvents(ctx context.Context, cluster *kube.Client, eve
 			return
 		case <-t.C:
 		}
+	}
+}
+
+// exportAgentLabel keeps a label named agent, from a scrape or an OTLP
+// sender, as exported_agent, the way Prometheus does: the server stamps
+// agent=<this agent's id> on everything, which would otherwise overwrite
+// it and fold, say, every Boop Jump agent of a gateway into one series.
+func exportAgentLabel(batch []model.Sample) {
+	for i := range batch {
+		v, ok := batch[i].Labels["agent"]
+		if !ok {
+			continue
+		}
+		l := maps.Clone(batch[i].Labels) // maps may be shared between samples
+		delete(l, "agent")
+		if _, taken := l["exported_agent"]; !taken {
+			l["exported_agent"] = v
+		}
+		batch[i].Labels = l
 	}
 }
