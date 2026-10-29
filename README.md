@@ -69,6 +69,9 @@ large fleets. Expect rough edges, and please say what you find.
   per service, a page per service, and a view of each trace.
 - **Runtime events**: eBPF probes, security rules evaluated on the host, and
   captures of what happened around a detection.
+- **Access**: SSH logins from the journal, and with Boop (access requests
+  and recorded server access) its health, its audit events and an alert for
+  every SSH login that did not come through it. [Boop](docs/boop.md)
 - **Secrets stay home**: the agent masks keys, tokens and passwords in logs
   and spans before anything leaves the host.
 
@@ -142,6 +145,7 @@ pages under `/docs/` (the **Docs** link in the interface).
 | [GPUs and AI machines](docs/gpu.md) | NVIDIA and AMD GPUs: use, memory, health |
 | [AI costs](docs/finops.md) | tokens, GPU hours, one cost metric |
 | [Claude Code](docs/claude-code.md) | cost, sessions, audit trail |
+| [Boop and Boop Jump](docs/boop.md) | access requests and recorded access; SSH logins that bypass them |
 | [Alerts](docs/alerts.md) | rules, incidents, contacts, silences |
 | [Runtime events](docs/security.md) | events, rules, captures |
 | [Grafana](docs/grafana.md) | read-only tokens, data sources, what stays in vigil |

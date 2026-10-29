@@ -164,7 +164,9 @@ Things to know:
 
 An integration bundles what one technology needs: how to recognise it, what
 to collect, alert rules and a dashboard. Built in: Docker, Kubernetes node,
-Kubernetes cluster, GPUs, HAProxy, nginx, PostgreSQL, Redis, VictoriaMetrics.
+Kubernetes cluster, GPUs, HAProxy, nginx, PostgreSQL, Redis, VictoriaMetrics,
+SSH logins, and Boop, Boop Jump gateway and Boop Jump agent (see
+[Boop and Boop Jump](boop.md)).
 
 A profile switches one on, with parameters where the defaults do not fit:
 
@@ -180,6 +182,8 @@ config:
 
 While some profile uses an integration, its alert rules run (named
 `<integration>/<group>` on the Alerts page) and its dashboard is installed.
+An alert of the same name in the rule file runs instead of the
+integration's (see [Alerts](alerts.md)).
 The dashboard is yours to change or delete; what happens to it when a
 newer vigil brings a newer version is described under
 [Dashboards](dashboards.md#dashboards-that-come-with-vigil).
@@ -197,6 +201,13 @@ Where container logs are collected, the HAProxy integration also reads
 HAProxy's access log (`option httplog`) from containers named or built
 from `haproxy*` (parameter `log_container`): backend, server, status,
 timings and path become fields, and the lines carry `app="haproxy"`.
+
+The SSH logins integration (`sshd`) reads sshd's lines from the journal
+by sshd's own unit and takes `Accepted` and `Failed` lines apart: user,
+method, source address, key type, and for a certificate its Key ID, serial
+and CA (`ssh_user`, `ssh_method`, `ssh_from`, `ssh_key_type`, `ssh_key_id`,
+`ssh_cert_serial`, `ssh_ca_fp`, …). It is not detected by itself, since
+sshd runs nearly everywhere; switch it on where you want it.
 
 HAProxy needs no exporter: it has one built in (2.0 and newer). Give it a
 frontend for it, reachable by the agent only, and point `metrics_target`

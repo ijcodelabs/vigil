@@ -1,0 +1,33 @@
+# HELP boop_contract_info Observability contract version.
+# TYPE boop_contract_info gauge
+boop_contract_info{version="1"} 1
+# HELP aps_requests_open Requests waiting for a decision.
+# TYPE aps_requests_open gauge
+aps_requests_open 2
+# HELP aps_request_pending_oldest_seconds Age of the oldest request waiting for a decision.
+# TYPE aps_request_pending_oldest_seconds gauge
+aps_request_pending_oldest_seconds 340
+# HELP aps_outbox_oldest_seconds Age of the oldest message waiting in the outbox.
+# TYPE aps_outbox_oldest_seconds gauge
+aps_outbox_oldest_seconds 0
+# HELP aps_openbao_sealed 1 when the secrets store is sealed or unreachable.
+# TYPE aps_openbao_sealed gauge
+aps_openbao_sealed 0
+# HELP aps_request_decision_wait_seconds Time from request to decision.
+# TYPE aps_request_decision_wait_seconds histogram
+aps_request_decision_wait_seconds_bucket{decision="approved",le="30"} 1
+aps_request_decision_wait_seconds_bucket{decision="approved",le="60"} 3
+aps_request_decision_wait_seconds_bucket{decision="approved",le="300"} 8
+aps_request_decision_wait_seconds_bucket{decision="approved",le="900"} 9
+aps_request_decision_wait_seconds_bucket{decision="approved",le="1800"} 9
+aps_request_decision_wait_seconds_bucket{decision="approved",le="3600"} 10
+aps_request_decision_wait_seconds_bucket{decision="approved",le="14400"} 10
+aps_request_decision_wait_seconds_bucket{decision="approved",le="86400"} 10
+aps_request_decision_wait_seconds_bucket{decision="approved",le="+Inf"} 10
+aps_request_decision_wait_seconds_sum{decision="approved"} 4210
+aps_request_decision_wait_seconds_count{decision="approved"} 10
+# HELP aps_events_dropped_total Audit events dropped before delivery.
+# TYPE aps_events_dropped_total counter
+aps_events_dropped_total{reason="queue_full"} 0
+aps_events_dropped_total{reason="rejected"} 0
+aps_events_dropped_total{reason="timeout"} 3

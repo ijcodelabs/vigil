@@ -2,13 +2,20 @@ package server_test
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
 
 func TestIntegrationsAndDetection(t *testing.T) {
-	_, central := startServer(t, "http://127.0.0.1:1")
+	// Answers the check of a saved rule file.
+	store := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		io.WriteString(w, `{"status":"success","data":{"resultType":"vector","result":[]}}`)
+	}))
+	defer store.Close()
+	_, central := startServer(t, store.URL)
 	admin := func(method, path, body string) (int, string) {
 		c := &client{t: t, base: central.URL, hc: http.DefaultClient}
 		code, out, _ := c.do(method, path, body, "Authorization", "Bearer admin-token-secret")
@@ -41,7 +48,7 @@ func TestIntegrationsAndDetection(t *testing.T) {
 		return out
 	}
 	cat := catalog()
-	if len(cat) != 10 || cat["nginx"]["detected"] != 2.0 || cat["nginx"]["unmonitored"] != 2.0 || cat["postgres"]["detected"] != 1.0 ||
+	if len(cat) != 14 || cat["nginx"]["detected"] != 2.0 || cat["nginx"]["unmonitored"] != 2.0 || cat["postgres"]["detected"] != 1.0 ||
 		cat["redis"]["detected"] != 1.0 || cat["docker"]["detected"] != 0.0 || cat["nginx"]["builtin"] != true {
 		t.Fatalf("catalog: nginx=%v postgres=%v redis=%v", cat["nginx"], cat["postgres"], cat["redis"])
 	}
@@ -93,6 +100,14 @@ func TestIntegrationsAndDetection(t *testing.T) {
 	if _, body := admin("GET", "/api/v1/rules", ""); !strings.Contains(body, `"name":"nginx/alerts"`) || !strings.Contains(body, `"name":"nginx/logs"`) || strings.Contains(body, "postgres/") {
 		t.Errorf("rules in effect: %s", body)
 	}
+	// An alert of the same name in the rule file replaces the integration's.
+	if code, msg := admin("PUT", "/api/v1/rules/config", "groups: [{name: mine, rules: [{alert: NginxDown, expr: up == 0}]}]\n"); code != http.StatusNoContent {
+		t.Fatalf("rule file: %d %s", code, msg)
+	}
+	if _, body := admin("GET", "/api/v1/rules", ""); strings.Count(body, `"NginxDown"`) != 1 || !strings.Contains(body, `"NginxServerErrors"`) {
+		t.Errorf("NginxDown should run once, from the rule file: %s", body)
+	}
+	admin("PUT", "/api/v1/rules/config", "groups: []\n")
 	admin("DELETE", "/api/v1/dashboards/nginx", "")
 
 	// A server's own integration, and a customised built-in one.

@@ -1,0 +1,50 @@
+# TYPE boop_contract_info gauge
+boop_contract_info{version="1"} 1
+# TYPE boop_jump_gateway_info gauge
+boop_jump_gateway_info{gateway="gw-euw1",version="0.9.0"} 1
+# TYPE boop_jump_agents_connected gauge
+boop_jump_agents_connected 2
+# TYPE boop_jump_agent_connected_since_timestamp_seconds gauge
+boop_jump_agent_connected_since_timestamp_seconds{agent="ag-7f3k2m"} 1793200000
+boop_jump_agent_connected_since_timestamp_seconds{agent="ag-k8s01"} 1793210000
+# TYPE boop_jump_agent_cert_expiry_timestamp_seconds gauge
+boop_jump_agent_cert_expiry_timestamp_seconds{agent="ag-7f3k2m"} 1793865600
+boop_jump_agent_cert_expiry_timestamp_seconds{agent="ag-k8s01"} 1793520000
+# TYPE boop_jump_agent_streams_open gauge
+boop_jump_agent_streams_open{agent="ag-7f3k2m",resource="web-prod-01",protocol="ssh"} 1
+boop_jump_agent_streams_open{agent="ag-k8s01",resource="prod-euw1",protocol="kube"} 3
+# TYPE boop_jump_denied_total counter
+boop_jump_denied_total{reason="capability"} 4
+boop_jump_denied_total{reason="session_check"} 1
+boop_jump_denied_total{reason="revoked"} 2
+# TYPE boop_jump_stream_duration_seconds histogram
+boop_jump_stream_duration_seconds_bucket{protocol="ssh",le="10"} 0
+boop_jump_stream_duration_seconds_bucket{protocol="ssh",le="60"} 2
+boop_jump_stream_duration_seconds_bucket{protocol="ssh",le="300"} 5
+boop_jump_stream_duration_seconds_bucket{protocol="ssh",le="900"} 7
+boop_jump_stream_duration_seconds_bucket{protocol="ssh",le="1800"} 8
+boop_jump_stream_duration_seconds_bucket{protocol="ssh",le="3600"} 8
+boop_jump_stream_duration_seconds_bucket{protocol="ssh",le="7200"} 8
+boop_jump_stream_duration_seconds_bucket{protocol="ssh",le="14400"} 8
+boop_jump_stream_duration_seconds_bucket{protocol="ssh",le="+Inf"} 8
+boop_jump_stream_duration_seconds_sum{protocol="ssh"} 3120
+boop_jump_stream_duration_seconds_count{protocol="ssh"} 8
+# TYPE boop_jump_control_request_seconds histogram
+boop_jump_control_request_seconds_bucket{call="session_check",le="0.01"} 0
+boop_jump_control_request_seconds_bucket{call="session_check",le="0.025"} 3
+boop_jump_control_request_seconds_bucket{call="session_check",le="0.05"} 40
+boop_jump_control_request_seconds_bucket{call="session_check",le="0.1"} 52
+boop_jump_control_request_seconds_bucket{call="session_check",le="0.25"} 55
+boop_jump_control_request_seconds_bucket{call="session_check",le="0.5"} 55
+boop_jump_control_request_seconds_bucket{call="session_check",le="1"} 55
+boop_jump_control_request_seconds_bucket{call="session_check",le="2.5"} 55
+boop_jump_control_request_seconds_bucket{call="session_check",le="5"} 55
+boop_jump_control_request_seconds_bucket{call="session_check",le="+Inf"} 55
+boop_jump_control_request_seconds_sum{call="session_check"} 2.61
+boop_jump_control_request_seconds_count{call="session_check"} 55
+# TYPE boop_jump_spool_bytes gauge
+boop_jump_spool_bytes 1048576
+# TYPE boop_jump_spool_limit_bytes gauge
+boop_jump_spool_limit_bytes 10737418240
+# TYPE boop_jump_events_dropped_total counter
+boop_jump_events_dropped_total{reason="queue_full"} 0

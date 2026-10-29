@@ -1,0 +1,27 @@
+# Tenant export: GET /api/export/v1/metrics with a tenant-bound token. No tenant label.
+# TYPE boop_contract_info gauge
+boop_contract_info{version="1"} 1
+# TYPE boop_jump_inventory_gateway_info gauge
+boop_jump_inventory_gateway_info{gateway="gw-euw1",version=""} 1
+# TYPE boop_jump_inventory_agent_info gauge
+boop_jump_inventory_agent_info{gateway="gw-euw1",agent="ag-7f3k2m",hostgroup="web-prod",hostname="web-prod-01",os="linux",version="0.9.0",tag_env="prod",tag_region="euw1",tag_team="web"} 1
+boop_jump_inventory_agent_info{gateway="gw-euw1",agent="ag-9q2x8p",hostgroup="db-prod",hostname="db-prod-01",os="linux",version="0.8.2",tag_env="prod",tag_region="euw1",tag_team=""} 1
+boop_jump_inventory_agent_info{gateway="gw-euw1",agent="ag-k8s01",hostgroup="prod-euw1",hostname="invalid",os="linux",version="0.9.0",tag_env="prod",tag_region="euw1",tag_team="platform"} 1
+# TYPE boop_jump_resource_info gauge
+boop_jump_resource_info{agent="ag-7f3k2m",resource="web-prod-01",kind="server",host_id="c1f970bd3fdd48e5a9bf5029d5077ac9",cluster_id=""} 1
+boop_jump_resource_info{agent="ag-7f3k2m",resource="web-prod-02",kind="server",host_id="",cluster_id=""} 1
+boop_jump_resource_info{agent="ag-9q2x8p",resource="db-prod-01",kind="server",host_id="a2ef65137b5b49f6af98a1de113371ca",cluster_id=""} 1
+boop_jump_resource_info{agent="ag-k8s01",resource="prod-euw1",kind="kubernetes",host_id="",cluster_id="3b1d9a52-6c1e-4f7a-9d2b-8e5f0c4a1b77"} 1
+# TYPE boop_jump_agent_connected gauge
+boop_jump_agent_connected{agent="ag-7f3k2m"} 1
+boop_jump_agent_connected{agent="ag-9q2x8p"} 0
+boop_jump_agent_connected{agent="ag-k8s01"} 1
+# TYPE boop_jump_agent_last_seen_timestamp_seconds gauge
+boop_jump_agent_last_seen_timestamp_seconds{agent="ag-7f3k2m"} 1793261400
+boop_jump_agent_last_seen_timestamp_seconds{agent="ag-9q2x8p"} 1793174000
+boop_jump_agent_last_seen_timestamp_seconds{agent="ag-k8s01"} 1793261400
+# TYPE boop_jump_grants_active gauge
+boop_jump_grants_active{hostgroup="web-prod"} 1
+boop_jump_grants_active{hostgroup="prod-euw1"} 2
+# TYPE boop_export_truncated gauge
+boop_export_truncated 0
