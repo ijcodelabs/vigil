@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -43,7 +44,7 @@ type Variable struct {
 
 type Panel struct {
 	Title string `json:"title"`
-	Type  string `json:"type"` // timeseries, stat, table or logs
+	Type  string `json:"type"` // timeseries, stat, table, logs or map
 	// Source says what the queries are: "metrics" (PromQL, the default) or
 	// "logs" (LogsQL ending in | stats ...). A logs panel is always LogsQL.
 	Source  string  `json:"source,omitempty"`
@@ -57,7 +58,8 @@ type Panel struct {
 	Warn  *float64 `json:"warn,omitempty"`  // stat: yellow from this value
 	Crit  *float64 `json:"crit,omitempty"`  // stat: red from this value
 	Limit int      `json:"limit,omitempty"` // logs: number of lines
-	// table: the labels shown as columns, in this order; all of them if empty.
+	// table: the labels shown as columns, in this order; all of them if
+	// empty. map: the labels a node's card shows.
 	Columns []string `json:"columns,omitempty"`
 }
 
@@ -71,10 +73,29 @@ type Query struct {
 	Unit string   `json:"unit,omitempty"`
 	Warn *float64 `json:"warn,omitempty"`
 	Crit *float64 `json:"crit,omitempty"`
+
+	// map: each query is nodes, links or details. Nodes: every series is a
+	// node whose id is the value of label Node, drawn in the column Tier,
+	// named by label Name (default the id), under the value of label Group;
+	// the value is its health, coloured by Warn and Crit. Links: every
+	// series joins the node named by label From to the one named by label
+	// To; at zero the link is drawn faint, and with Live a value above
+	// zero moves (sessions open now). Details: lines on the card of the
+	// node named by label Of, coloured like a table cell; the worst colour
+	// of a node and its details is the node's. A node is the label's name
+	// and value together, so the same id under two labels is two nodes.
+	Node  string `json:"node,omitempty"`
+	Tier  string `json:"tier,omitempty"`
+	Name  string `json:"name,omitempty"`
+	Group string `json:"group,omitempty"`
+	From  string `json:"from,omitempty"`
+	To    string `json:"to,omitempty"`
+	Live  bool   `json:"live,omitempty"`
+	Of    string `json:"of,omitempty"`
 }
 
 var (
-	panelTypes = map[string]bool{"timeseries": true, "stat": true, "table": true, "logs": true}
+	panelTypes = map[string]bool{"timeseries": true, "stat": true, "table": true, "logs": true, "map": true}
 	units      = map[string]bool{"": true, "percent": true, "ratio": true, "bytes": true, "bytes/s": true,
 		"seconds": true, "ms": true, "cores": true, "ops/s": true, "yesno": true}
 )
@@ -108,7 +129,10 @@ func parseDashboard(body []byte) (*Dashboard, error) {
 		p := &d.Panels[i]
 		where := fmt.Sprintf("panel %d (%q)", i+1, p.Title)
 		if !panelTypes[p.Type] {
-			return nil, fmt.Errorf("%s: type must be timeseries, stat, table or logs", where)
+			return nil, fmt.Errorf("%s: type must be timeseries, stat, table, logs or map", where)
+		}
+		if p.Type == "map" && p.Source == "logs" {
+			return nil, fmt.Errorf("%s: a map's queries are PromQL", where)
 		}
 		if p.Source != "" && p.Source != "metrics" && p.Source != "logs" {
 			return nil, fmt.Errorf("%s: source must be metrics or logs", where)
@@ -119,8 +143,13 @@ func parseDashboard(body []byte) (*Dashboard, error) {
 		if p.W < 1 || p.W > 12 || p.H < 1 || p.H > 12 {
 			return nil, fmt.Errorf("%s: w must be 1 to 12 and h 1 to 12", where)
 		}
-		if len(p.Queries) == 0 || len(p.Queries) > 10 {
-			return nil, fmt.Errorf("%s: needs between 1 and 10 queries", where)
+		// A map's nodes, links and details are each a query.
+		most := 10
+		if p.Type == "map" {
+			most = 20
+		}
+		if len(p.Queries) == 0 || len(p.Queries) > most {
+			return nil, fmt.Errorf("%s: needs between 1 and %d queries", where, most)
 		}
 		for _, q := range p.Queries {
 			if strings.TrimSpace(q.Expr) == "" {
@@ -129,12 +158,15 @@ func parseDashboard(body []byte) (*Dashboard, error) {
 			if !units[q.Unit] {
 				return nil, fmt.Errorf("%s: unknown unit %q", where, q.Unit)
 			}
-			if p.Type != "table" && (q.Unit != "" || q.Warn != nil || q.Crit != nil) {
-				return nil, fmt.Errorf("%s: a unit and colours per query are for tables", where)
+			if p.Type != "table" && p.Type != "map" && (q.Unit != "" || q.Warn != nil || q.Crit != nil) {
+				return nil, fmt.Errorf("%s: a unit and colours per query are for tables and maps", where)
+			}
+			if err := checkMapQuery(p.Type, q); err != nil {
+				return nil, fmt.Errorf("%s: %w", where, err)
 			}
 		}
-		if len(p.Columns) > 0 && p.Type != "table" {
-			return nil, fmt.Errorf("%s: columns are for tables", where)
+		if len(p.Columns) > 0 && p.Type != "table" && p.Type != "map" {
+			return nil, fmt.Errorf("%s: columns are for tables and maps", where)
 		}
 		for _, c := range p.Columns {
 			if !labelNameRe.MatchString(c) {
@@ -146,6 +178,41 @@ func parseDashboard(body []byte) (*Dashboard, error) {
 		}
 	}
 	return d, nil
+}
+
+// checkMapQuery checks the fields that only a map's queries have.
+func checkMapQuery(typ string, q Query) error {
+	roles := 0
+	for _, set := range []bool{q.Node != "", q.From != "" || q.To != "", q.Of != ""} {
+		if set {
+			roles++
+		}
+	}
+	if typ != "map" {
+		if roles > 0 || q.Tier != "" || q.Name != "" || q.Group != "" || q.Live {
+			return errors.New("node, tier, name, group, from, to, live and of are for maps")
+		}
+		return nil
+	}
+	if roles != 1 {
+		return fmt.Errorf("query %q: a map query is nodes (node and tier), links (from and to) or details (of)", q.Expr)
+	}
+	switch {
+	case q.Node != "" && strings.TrimSpace(q.Tier) == "":
+		return fmt.Errorf("query %q: nodes need a tier, the column they are drawn in", q.Expr)
+	case (q.From == "") != (q.To == ""):
+		return fmt.Errorf("query %q: a link needs both from and to", q.Expr)
+	case q.Node == "" && (q.Tier != "" || q.Name != "" || q.Group != ""):
+		return fmt.Errorf("query %q: tier, name and group are for nodes", q.Expr)
+	case q.Live && q.From == "":
+		return fmt.Errorf("query %q: live is for links", q.Expr)
+	}
+	for _, l := range []string{q.Node, q.Name, q.Group, q.From, q.To, q.Of} {
+		if l != "" && !labelNameRe.MatchString(l) {
+			return fmt.Errorf("query %q: %q is not a label name", q.Expr, l)
+		}
+	}
+	return nil
 }
 
 func (s *Server) dashboardRoutes(mux *http.ServeMux) {

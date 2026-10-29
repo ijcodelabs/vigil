@@ -1,6 +1,7 @@
 import { html, useState, useEffect, useRef, useErrorBoundary, api, useLoad, setParams, ErrorBox, Badge, Dialog, ago, fmtUnit } from './lib.js';
 import { Chart, seriesName, useRange, rangeParams, REFRESH, parseLines } from './explore.js';
 import { TimeRange } from './timerange.js';
+import { MapView } from './map.js';
 
 const UNITS = [['', 'plain number'], ['percent', 'percent (0–100)'], ['ratio', 'ratio (0–1 shown as %)'], ['bytes', 'bytes'],
   ['bytes/s', 'bytes per second'], ['seconds', 'seconds'], ['ms', 'milliseconds'], ['cores', 'CPU cores'], ['ops/s', 'per second'], ['yesno', 'yes / no (1 / 0)']];
@@ -214,7 +215,7 @@ function DashboardView({ id, params, admin }) {
             <button class="small" onClick=${() => setDialog({ kind: 'panel', index: i })}>Edit</button>
             <button class="small danger" title="Remove panel" onClick=${() => change(d => d.panels.splice(i, 1))}>✕</button>`}
         </header>
-        <${PanelBody} key=${JSON.stringify(p)} panel=${p} from=${from} to=${to} tick=${tick} variables=${variables} values=${values}
+        <${PanelBody} key=${JSON.stringify(p)} admin=${admin} panel=${p} from=${from} to=${to} tick=${tick} variables=${variables} values=${values}
           height=${p.h * ROW - 58} onZoom=${(a, b) => setRange({ from: a, to: b })} />
         ${draft && html`<div class="resize" title="Drag to resize" onPointerDown=${e => startResize(e, i)}></div>`}
         ${size !== p && html`<div class="size">${size.w} of 12 wide · ${size.h} high</div>`}
@@ -280,11 +281,16 @@ async function run(panel, from, to, variables, values, width) {
   return { values: rows };
 }
 
-function PanelBody({ panel, from, to, tick, variables, values, height, onZoom }) {
+function PanelBody({ panel, admin, from, to, tick, variables, values, height, onZoom }) {
   const box = useRef(null);
   const [state, setState] = useState({ data: null, error: null });
+  // Maps are for admins in this version: they show the whole layout of
+  // what a system reaches. The data stays queryable for anyone who may
+  // query, so this hides a picture, not the facts behind it.
+  const hidden = panel.type === 'map' && !admin;
   // A fixed window changes only when the user picks another; "last N" moves with every refresh.
   useEffect(() => {
+    if (hidden) return;
     let live = true;
     run(panel, from, to, variables, values, box.current ? box.current.clientWidth : 600)
       .then(data => live && setState({ data: { ...data, type: panel.type }, error: null }), e => live && setState(s => ({ ...s, error: e.message })));
@@ -293,7 +299,8 @@ function PanelBody({ panel, from, to, tick, variables, values, height, onZoom })
 
   const { data, error } = state;
   let body = html`<div class="empty">Loading…</div>`;
-  if (error) body = html`<div class="error" style="margin: 0">${error}</div>`;
+  if (hidden) body = html`<div class="empty">Only admins see maps.</div>`;
+  else if (error) body = html`<div class="error" style="margin: 0">${error}</div>`;
   else if (data && data.type === panel.type) body = html`<${Guard}><${Content} panel=${panel} data=${data} height=${height} onZoom=${onZoom} /><//>`;
   return html`<div class="tile-body" ref=${box}>${body}</div>`;
 }
@@ -314,6 +321,7 @@ function show(panel, data, height, onZoom) {
       height=${Math.max(90, height - (legend ? 42 : 0))} legend=${legend} sync="dashboard" onZoom=${onZoom} />
       ${data.total > data.series.length && html`<div class="muted" style="font-size: 12px">Showing ${data.series.length} of ${data.total} series.</div>`}`;
   }
+  if (panel.type === 'map') return html`<${MapView} panel=${panel} data=${data} height=${height} />`;
   if (panel.type === 'stat') {
     if (!data.values.length) return none;
     const v = data.values[0].value;
@@ -396,6 +404,12 @@ export function PanelEditor({ panel, onSave, onClose, heading, action, head, err
     if (p.type === 'timeseries') { if (p.min != null) out.min = p.min; if (p.fill) out.fill = true; }
     if (p.type === 'stat') { if (p.warn != null) out.warn = p.warn; if (p.crit != null) out.crit = p.crit; }
     if (logsOnly && p.limit) out.limit = +p.limit;
+    // A map's queries carry roles (node, from/to, of) this form does not
+    // edit: they are kept as they are, and changed in the dashboard's JSON.
+    if (p.type === 'map') {
+      out.queries = p.queries.filter(q => q.expr.trim());
+      if (Array.isArray(p.columns) && p.columns.length) out.columns = p.columns;
+    }
     if (!out.queries.length) return;
     onSave(out);
   };
@@ -404,7 +418,7 @@ export function PanelEditor({ panel, onSave, onClose, heading, action, head, err
     <div class="row" style="align-items: flex-end">
       <div class="field" style="flex: 2; min-width: 200px"><label>Title</label><input required value=${p.title} onInput=${e => set('title', e.target.value)} autofocus /></div>
       <div class="field" style="flex: 1"><label>Shows</label><select value=${p.type} onChange=${e => set('type', e.target.value)}>
-        ${TYPES.map(([v, l]) => html`<option value=${v}>${l}</option>`)}</select></div>
+        ${(panel.type === 'map' ? [...TYPES, ['map', 'Map (nodes and links)']] : TYPES).map(([v, l]) => html`<option value=${v}>${l}</option>`)}</select></div>
       ${!logsOnly && html`<div class="field" style="flex: 1"><label>Queries are</label><select value=${p.source || 'metrics'} onChange=${e => set('source', e.target.value)}>
         <option value="metrics">PromQL (metrics)</option><option value="logs">LogsQL (logs)</option></select></div>`}
     </div>
@@ -420,6 +434,9 @@ export function PanelEditor({ panel, onSave, onClose, heading, action, head, err
       ${p.queries.length > 1 && html`<button type="button" class="small" onClick=${() => set('queries', p.queries.filter((_, j) => j !== i))}>Remove</button>`}
     </div>`)}
     ${!logsOnly && p.queries.length < 10 && html`<button type="button" class="small" onClick=${() => set('queries', [...p.queries, { expr: '' }])}>Add query</button>`}
+    ${p.type === 'map' && html`<p class="muted" style="font-size: 12.5px">Each query of a map is nodes, links or details, set with
+      <code>node</code> and <code>tier</code>, <code>from</code> and <code>to</code>, or <code>of</code>: edit those in the dashboard's JSON
+      (“Title, variables, JSON”). Only admins see maps.</p>`}
     ${p.type === 'table' && html`<p class="muted" style="font-size: 12.5px">Each query is a column; rows are matched by their labels. A cell turns yellow and red from the values given; with red below yellow, low values are the bad ones.</p>
       <div class="field"><label>Label columns, in order (empty: all)</label><input placeholder="probe, target, agent" value=${Array.isArray(p.columns) ? p.columns.join(', ') : p.columns || ''} onInput=${e => set('columns', e.target.value)} /></div>`}
     <p class="muted" style="font-size: 12.5px">Use the dashboard's variables as <code>$name</code>, for example <code>${isLogs ? 'agent:~"$agent"' : 'agent=~"$agent"'}</code>.</p>
