@@ -396,3 +396,41 @@ Defaults: `user_email` stays a metric label; `session_id` does not. Whether
 prompt text is stored is open: it is recorded locally first, to see what it
 holds, and decided after. Viewers would see it, because log queries pass
 through to the store.
+
+## Boop integration (outline agreed 2026-10-29; first part built, see state.md)
+
+Boop (access requests and approvals) and Boop Jump (recorded server and
+Kubernetes access) are a sister product. Each works alone; they meet only
+through Boop's published observability contract (Boop Jump repository,
+`docs/observability.md`, test data in `testdata/o11y/v1/`): Prometheus
+metrics, audit events as OTLP logs, links into Boop. No shared code. Vigil
+builds against the contract's test data and only after the owner's go.
+
+- **A `boop` integration:** scrape profile (Boop's tenant export, gateways,
+  agents), dashboard, Boop's alert rules under the same alert names.
+- **A Map panel**, generic (nodes from `*_info` series, edges from series
+  with two ends, colour by joined queries), first for Boop's control plane →
+  gateways → agents → resources, later also the APM service map. **Admin
+  only in v1** (owner's decision). Hiding the panel does not hide the
+  series: viewers can still query them, which the docs must say.
+- **Later, real roles (RBAC):** which role may see, use or change what (the
+  map, Boop's logs, dashboards, Explore by metric or stream), enforced in
+  the server's query path, not only in the interface. Not now.
+- **Rules from the joint review:** Vigil's copy of Boop's events is for
+  display and correlation; nothing that grants access, approves or clears an
+  alert relies on it. No approval that depends on an incident's state.
+  Boop data is accepted only from pinned Vigil agents; the agent's OTLP
+  endpoint gets a per-emitter token and TLS before events come from another
+  host. No people's ids, local users or command text in Vigil or in AI
+  Explain bundles.
+- **Shadow access:** a log rule on sshd's Accepted lines (journald, by
+  systemd unit), anchored at both ends, that tells a Boop Jump login (a
+  certificate from the tenant's CA with the contract's Key ID) from any
+  other. Best effort; what it does not cover is listed in the contract.
+- **`host_id` fact:** systemd's app-specific machine id with the app id in
+  the contract; a hint for joining hosts, never an identity. Duplicates are
+  flagged, not merged.
+- Order: integration → request-access link on incidents → chart
+  annotations with session markers and an Explain evidence item → Map →
+  `host_id` → shadow access → OIDC sign-in (Boop then grants roles for a
+  time) → compliance evidence, which waits for the audit data class.
