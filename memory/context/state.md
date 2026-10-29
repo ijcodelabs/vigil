@@ -852,6 +852,71 @@ Steps 2 and 3 of the Foundations build order in direction.md.
 - `/api/v1/me` carries the server's `version` (signed-in callers only), and
   the sidebar shows it under the user and role.
 
+## Boop integration, first part (built 2026-10-29, uncommitted)
+
+Against Boop's observability contract v1 (Boop Jump repository,
+`docs/observability.md`); see direction.md "Boop integration".
+
+- **`exported_agent`:** a scraped or OTLP series' own `agent` label is
+  renamed by the agent before sending (`exportAgentLabel` in
+  `internal/agent/agent.go`); the server's `extra_label` had overwritten
+  it, folding every Boop Jump agent of a scrape into one series. A log
+  line's `agent` field or stream label is kept as `exported_agent` by the
+  server (`forwardLogs`) instead of being dropped.
+- **OTLP tokens and TLS** (`internal/otlp/auth.go`): `otlp.tokens_file`
+  ("name token" lines, re-read on change every 5 s at most, a broken file
+  keeps the old tokens, none means nobody in), 401 without a token;
+  `emitter=<name>` as a stream label on logs and a label on metrics, a
+  sender's own `emitter` kept as `attr_emitter` / `exported_emitter`;
+  `otlp.tls.cert_file`/`key_file`, re-read on change. Spans get no emitter.
+- **Integrations** `boop` (Boop /metrics and tenant export, audit-event
+  rules pinned by `event_agents` + `emitters` + `service_instance`,
+  tenant_ref check, break-glass, the shadow-access rule),
+  `boop_jump_gateway`, `boop_jump_agent` (Boop's alert names; counters as
+  differences with `offset`, not `increase()`), and `sshd` (journald unit
+  templates for ssh/sshd units, an anchored pattern giving `ssh_*` fields;
+  not detected, since sshd is everywhere). Test data copied from Boop Jump
+  into `internal/fleet/testdata/boop/`; `boop_test.go` checks every metric
+  name against the contract and classifies the contract's real sshd lines
+  with the rule's own conditions.
+- **Shadow access:** `SshLoginNotThroughBoopJump` on `_msg:~"^Accepted "`
+  under an sshd unit on `guarded_agents`, unless key type `-CERT`, the
+  Key ID grammar and `ssh_ca_fp` (the line's last field) equal to
+  `tenant_ca` all hold. Unparsed Accepted lines count as not Jump. No
+  serial check (a log rule cannot compute it).
+- Verified live in the Lima host (Ubuntu 24.04, OpenSSH 9.6): a test CA
+  and a rogue CA trusted by sshd, a certificate with the contract's Key ID,
+  a plain key, `logger -t sshd` spoofs; Boop's endpoints played by the
+  contract's fixtures; the contract's OTLP requests and attack cases sent
+  with and without tokens. Jump logins never alerted; plain-key, rogue-CA
+  and Lima's own logins did; spoofs stayed under `session-N.scope`;
+  forged instance id, other token and wrong tenant raised their alerts;
+  three Boop agents stayed three series. All four dashboards checked in
+  the browser. Not tried against a real Boop or Jump.
+- Found on the way: `increase()` on a counter seen for the first time
+  fired `BoopEventsDropped` from a static fixture; the Lima Ansible role
+  still installed the old `vigil` binary for a unit that runs
+  `vigil-agent` (fixed in the git-ignored tools).
+- **Map panel** (`type: map`, `internal/ui/static/js/map.js`): queries
+  are nodes (`node` + `tier`, optional `name`, `group`, warn/crit), links
+  (`from` + `to`, `live` animates a value above zero) or details (`of`);
+  a node is label name + value; colour = worst of node and details; up to
+  20 queries, 300 nodes; SVG columns by tier, groups, hover card with
+  `columns` labels. Shown to admins only (the interface hides it; the
+  series stay queryable). The panel form keeps a map's queries untouched.
+  `TestBuiltinIntegrationDashboards` now checks every integration's
+  dashboard against `parseDashboard` (the map's 14 queries passed the
+  integration tests while the server would have refused them). Checked in
+  the browser: layout, colours, live links, hover card, a viewer's note,
+  editing a map in the form.
+- An alert in the rule file now replaces an integration's alert of the
+  same name (it did only for built-in rules; integrations were replaced
+  only by group name, so the trial's copy of Boop's rules would have
+  doubled every Boop alert). `internal/server/integrations.go`, tested in
+  `TestIntegrationsAndDetection`.
+- Not built: session markers, the request-access link, `host_id`,
+  seq-gap and duplicate detection, the 4 KiB record limit, roles (RBAC).
+
 ## Next
 
 - Foundations, build order in `direction.md`: step 1 on paper (data
