@@ -100,7 +100,7 @@ func TestAgentToStore(t *testing.T) {
 	defer vm.Close()
 
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		io.WriteString(w, "demo_requests_total{job=\"theirs\",code=\"200\"} 7\n")
+		io.WriteString(w, "demo_requests_total{job=\"theirs\",code=\"200\",agent=\"agt-7\"} 7\n")
 	}))
 	defer target.Close()
 
@@ -153,7 +153,8 @@ func TestAgentToStore(t *testing.T) {
 	waitFor(t, "scraped sample", func() bool { _, ok := store.find("demo_requests_total", "web-01"); return ok })
 	s, _ := store.find("demo_requests_total", "web-01")
 	if s.Value != 7 || s.Labels["job"] != "demo" || s.Labels["exported_job"] != "theirs" ||
-		s.Labels["env"] != "test" || s.Labels["code"] != "200" || s.Labels["instance"] == "" {
+		s.Labels["env"] != "test" || s.Labels["code"] != "200" || s.Labels["instance"] == "" ||
+		s.Labels["exported_agent"] != "agt-7" {
 		t.Errorf("unexpected sample: %+v", s)
 	}
 	if _, ok := store.find("host_memory_total_bytes", "web-01"); !ok {
@@ -181,7 +182,7 @@ func TestAgentToStore(t *testing.T) {
 	nlogs := len(store.logs)
 	store.mu.Unlock()
 	if row["_msg"] != "payment failed" || row["level"] != "error" || row["order"] != "42" || row["app"] != "demo" ||
-		row["env"] != "test" || row["agent"] != "web-01" || row["path"] != logFile || strings.HasPrefix(row["_time"], "1999") {
+		row["env"] != "test" || row["agent"] != "web-01" || row["exported_agent"] != "someone-else" || row["path"] != logFile || strings.HasPrefix(row["_time"], "1999") {
 		t.Errorf("log row: %v", row)
 	}
 	if sf != "agent,app,env,level,path,source" {

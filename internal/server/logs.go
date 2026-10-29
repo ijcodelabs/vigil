@@ -71,11 +71,17 @@ func (s *Server) forwardLogs(ctx context.Context, agentID string, entries []mode
 	for _, e := range entries {
 		row := make(map[string]string, len(e.Fields)+len(e.Stream)+3)
 		for k, v := range e.Fields {
+			if k == "agent" {
+				k = "exported_agent" // the sender's own, e.g. a Boop Jump agent's id
+			}
 			if !reserved[k] {
 				row[k] = v
 			}
 		}
 		for k, v := range e.Stream { // a stream label wins over a field of the same name
+			if k == "agent" {
+				k = "exported_agent"
+			}
 			if !reserved[k] {
 				row[k] = v
 				streamFields[k] = true
