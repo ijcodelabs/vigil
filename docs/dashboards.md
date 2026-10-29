@@ -50,6 +50,7 @@ its end, and saves it at once.
 | Single number | one figure to glance at | unit, "yellow from" and "red from" thresholds |
 | Table | the current value of many series, with one column per query | unit, which labels are columns; per query a column title, a unit, and "yellow from" and "red from" |
 | Log lines | the latest matching lines | number of lines |
+| Map | what is connected to what, and its health (admins only) | set in the dashboard's JSON; below |
 
 A panel has a **width** out of 12 (6 is half the row) and a **height** in
 rows.
@@ -82,6 +83,40 @@ A column can have its own unit and thresholds: a cell is yellow from one
 value and red from another. If the red value is below the yellow one, low
 values are the bad ones (a certificate with 7 days left, an availability
 of 99%).
+
+### Maps
+
+A map draws nodes in columns, the links between them, and on hover a card
+with a node's labels and details. Each query of a map is one of three
+kinds, set in the dashboard's JSON ("Title, variables, JSON"); the panel
+form edits the title and size and leaves the queries as they are.
+
+| Query | Fields | Each series is |
+|---|---|---|
+| nodes | `node`, `tier`, optional `name`, `group`, `warn`, `crit` | a node: its id is the value of label `node`, drawn in the column `tier`, under the value of label `group`, named by label `name`. Its value is its health, coloured like a table cell |
+| links | `from`, `to`, optional `live` | a link from the node named by label `from` to the one named by label `to`. At zero it is drawn faint; with `live`, a value above zero moves (sessions open now) |
+| details | `of`, `legend`, optional `unit`, `warn`, `crit` | a line on the card of the node named by label `of`; its colour counts toward the node's |
+
+A node is a label's name and value together: `gateway="gw-1"` and
+`exported_agent="gw-1"` are two nodes. A node's colour is the worst of its
+own and its details'. `columns` lists the labels its card shows. To join
+nodes that have no label in common, give them one with
+`label_replace(…, "control", "Boop", "", "")`. A map takes up to 20
+queries and draws up to 300 nodes.
+
+```json
+{"title": "Map", "type": "map", "w": 12, "h": 6, "columns": ["hostname"], "queries": [
+  {"expr": "gateway_info", "node": "gateway", "tier": "Gateways"},
+  {"expr": "agent_connected * on (agent_id) group_left (gateway, hostname) agent_info",
+   "node": "agent_id", "name": "hostname", "tier": "Agents", "warn": 0.5, "crit": 0},
+  {"expr": "agent_info", "from": "gateway", "to": "agent_id"},
+  {"expr": "cert_expiry_timestamp_seconds - time()", "of": "agent_id",
+   "legend": "Certificate left", "unit": "seconds", "warn": 604800, "crit": 172800}]}
+```
+
+In this version only admins see maps; others see a note in their place.
+The series behind a map are still there for anyone who may query them in
+Explore.
 
 ### Variables
 

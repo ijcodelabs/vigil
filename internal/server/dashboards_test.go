@@ -67,21 +67,37 @@ func TestDashboards(t *testing.T) {
 		t.Errorf("read back: %d %s", code, body)
 	}
 	for want, bad := range map[string]string{
-		"title is required": `{"panels":[]}`,
-		"type must be":      `{"title":"x","panels":[{"title":"p","type":"pie","w":6,"h":3,"queries":[{"expr":"up"}]}]}`,
-		"w must be":         `{"title":"x","panels":[{"title":"p","type":"stat","w":13,"h":3,"queries":[{"expr":"up"}]}]}`,
-		"needs between 1":   `{"title":"x","panels":[{"title":"p","type":"stat","w":3,"h":2,"queries":[]}]}`,
-		"a query is empty":  `{"title":"x","panels":[{"title":"p","type":"stat","w":3,"h":2,"queries":[{"expr":" "}]}]}`,
-		"unknown unit":      `{"title":"x","panels":[{"title":"p","type":"stat","w":3,"h":2,"unit":"furlongs","queries":[{"expr":"up"}]}]}`,
-		"unknown field":     `{"title":"x","panels":[{"title":"p","type":"stat","w":3,"h":2,"colour":"red","queries":[{"expr":"up"}]}]}`,
-		"source must be":    `{"title":"x","panels":[{"title":"p","type":"stat","source":"traces","w":3,"h":2,"queries":[{"expr":"up"}]}]}`,
-		"must be unique":    `{"title":"x","variables":[{"name":"a","label":"a"},{"name":"a","label":"b"}],"panels":[]}`,
-		"unexpected EOF":    `{"title":`,
+		"title is required":  `{"panels":[]}`,
+		"type must be":       `{"title":"x","panels":[{"title":"p","type":"pie","w":6,"h":3,"queries":[{"expr":"up"}]}]}`,
+		"w must be":          `{"title":"x","panels":[{"title":"p","type":"stat","w":13,"h":3,"queries":[{"expr":"up"}]}]}`,
+		"needs between 1":    `{"title":"x","panels":[{"title":"p","type":"stat","w":3,"h":2,"queries":[]}]}`,
+		"a query is empty":   `{"title":"x","panels":[{"title":"p","type":"stat","w":3,"h":2,"queries":[{"expr":" "}]}]}`,
+		"unknown unit":       `{"title":"x","panels":[{"title":"p","type":"stat","w":3,"h":2,"unit":"furlongs","queries":[{"expr":"up"}]}]}`,
+		"unknown field":      `{"title":"x","panels":[{"title":"p","type":"stat","w":3,"h":2,"colour":"red","queries":[{"expr":"up"}]}]}`,
+		"source must be":     `{"title":"x","panels":[{"title":"p","type":"stat","source":"traces","w":3,"h":2,"queries":[{"expr":"up"}]}]}`,
+		"must be unique":     `{"title":"x","variables":[{"name":"a","label":"a"},{"name":"a","label":"b"}],"panels":[]}`,
+		"unexpected EOF":     `{"title":`,
+		"a map query is":     `{"title":"x","panels":[{"title":"m","type":"map","w":12,"h":4,"queries":[{"expr":"up"}]}]}`,
+		"nodes need a tier":  `{"title":"x","panels":[{"title":"m","type":"map","w":12,"h":4,"queries":[{"expr":"up","node":"instance"}]}]}`,
+		"needs both from":    `{"title":"x","panels":[{"title":"m","type":"map","w":12,"h":4,"queries":[{"expr":"up","from":"job"}]}]}`,
+		"are for maps":       `{"title":"x","panels":[{"title":"p","type":"table","w":6,"h":3,"queries":[{"expr":"up","node":"job"}]}]}`,
+		"live is for links":  `{"title":"x","panels":[{"title":"m","type":"map","w":12,"h":4,"queries":[{"expr":"up","of":"job","live":true}]}]}`,
+		"queries are PromQL": `{"title":"x","panels":[{"title":"m","type":"map","source":"logs","w":12,"h":4,"queries":[{"expr":"x","node":"a","tier":"t"}]}]}`,
 	} {
 		if code, msg := admin("PUT", "/api/v1/dashboards/bad", bad); code != 400 || !strings.Contains(msg, want) {
 			t.Errorf("%s: %d %s (want %q)", bad, code, msg, want)
 		}
 	}
+	mapPanel := `{"title":"Map","panels":[{"title":"m","type":"map","w":12,"h":5,"columns":["hostname"],"queries":[
+	  {"expr":"gw_info","node":"gateway","tier":"Gateways"},
+	  {"expr":"agent_connected","node":"exported_agent","tier":"Agents","name":"hostname","group":"hostgroup","warn":0.5,"crit":0},
+	  {"expr":"agent_info","from":"gateway","to":"exported_agent"},
+	  {"expr":"streams_open","from":"exported_agent","to":"resource","live":true},
+	  {"expr":"cert_left","of":"exported_agent","legend":"Certificate left","unit":"seconds","warn":604800,"crit":172800}]}]}`
+	if code, body := admin("PUT", "/api/v1/dashboards/map", mapPanel); code != http.StatusNoContent {
+		t.Errorf("map: %d %s", code, body)
+	}
+	admin("DELETE", "/api/v1/dashboards/map", "")
 	if code, _ := admin("PUT", "/api/v1/dashboards/Bad_ID", good); code != 400 {
 		t.Errorf("bad id accepted: %d", code)
 	}

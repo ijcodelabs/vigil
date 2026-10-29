@@ -204,6 +204,32 @@ td.lvl-bad { color: var(--bad); background: color-mix(in srgb, var(--bad) 16%, t
 .tile.drop-before { box-shadow: -5px 0 0 var(--accent); }
 .tile.drop-after { box-shadow: 5px 0 0 var(--accent); }
 .tile .scroll { height: 100%; overflow: auto; margin: 0 -12px; }
+.map { position: relative; }
+.map svg { display: block; }
+.map-tier { fill: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.map-group { fill: var(--muted); font-size: 11.5px; font-weight: 600; }
+.map-node { cursor: default; outline: none; transition: opacity .15s; }
+.map-node rect { fill: var(--panel-2); stroke: var(--border); }
+.map-node .map-state { fill: var(--muted); stroke: none; }
+.map-node text { fill: var(--text); font-size: 12px; font-family: var(--mono, ui-monospace, monospace); }
+.map-node.lvl-ok .map-state { fill: var(--ok); }
+.map-node.lvl-warn .map-state { fill: var(--warn); } .map-node.lvl-warn rect:first-child { stroke: var(--warn); }
+.map-node.lvl-bad .map-state { fill: var(--bad); } .map-node.lvl-bad rect:first-child { stroke: var(--bad); }
+.map-node:hover rect:first-child, .map-node:focus rect:first-child { stroke: var(--accent); }
+.map-node.dim, .map-link.dim { opacity: .3; }
+.map-link { fill: none; stroke: var(--muted); stroke-width: 1.2px; transition: opacity .15s; }
+.map-link.down { stroke-dasharray: 3 4; opacity: .5; }
+.map-link.lit { stroke: var(--text); }
+.map-link.live { stroke: var(--accent); stroke-dasharray: 6 5; animation: map-flow 1s linear infinite; }
+@keyframes map-flow { to { stroke-dashoffset: -11; } }
+@media (prefers-reduced-motion: reduce) { .map-link.live { animation: none; } }
+.map-card { position: absolute; z-index: 5; min-width: 200px; max-width: 280px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; box-shadow: 0 6px 20px rgba(0,0,0,.25); font-size: 12.5px; pointer-events: none; }
+.map-card-title { font-weight: 600; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+.map-card .kv { display: flex; justify-content: space-between; gap: 12px; padding: 1px 0; }
+.map-card .kv > span:first-child { color: var(--muted); }
+.map-card .kv.lvl-warn > span:last-child { color: var(--warn); } .map-card .kv.lvl-bad > span:last-child { color: var(--bad); font-weight: 600; }
+.map-card .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; }
+.map-card .dot.lvl-ok { background: var(--ok); } .map-card .dot.lvl-warn { background: var(--warn); } .map-card .dot.lvl-bad { background: var(--bad); }
 .tile th { position: sticky; top: 0; background: var(--panel); padding: 5px 12px; }
 .tile td { padding: 5px 12px; }
 .stat { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 34px; font-weight: 650; font-variant-numeric: tabular-nums; line-height: 1.1; }
