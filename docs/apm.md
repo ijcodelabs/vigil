@@ -47,6 +47,34 @@ on a host you firewall, or the Docker bridge address) and use that instead
 of `localhost`. On Kubernetes, the node's address
 (`http://$(HOST_IP):4318` with `HOST_IP` from `status.hostIP`).
 
+### Tokens and TLS
+
+On loopback the endpoint takes anything sent to it. Once senders on other
+hosts or in containers use it, give each one a token, and serve it over
+TLS so the tokens do not travel in clear:
+
+```yaml
+config:
+  otlp:
+    enabled: true
+    listen: 0.0.0.0:4318
+    tokens_file: /etc/vigil/otlp-tokens   # "name token" per line; # comments
+    tls:
+      cert_file: /etc/vigil/otlp.crt
+      key_file: /etc/vigil/otlp.key
+```
+
+With `tokens_file` set, a request without one of its tokens is refused
+(401), and everything a sender sends is labelled `emitter=<name>` (a stream
+label on logs, a label on metrics), which the sender cannot set itself: an
+attribute of its own called `emitter` is kept as `attr_emitter` on logs and
+`exported_emitter` on metrics. A name may have two tokens while one is
+being replaced. The file and the certificate are read again when they
+change, without a restart; a file that cannot be read keeps the tokens from
+before, and with none from before nobody gets in. Senders set
+`OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer%20<token>"` (the space URL-encoded). Spans are not
+labelled with the emitter.
+
 To see the pages before instrumenting anything:
 
 ```bash
@@ -180,6 +208,7 @@ bearer token.
 ## Limits of this version
 
 - OTLP over HTTP with protobuf only; no gRPC, no JSON.
+- Senders authenticate with a bearer token, not a client certificate.
 - What a service depends on comes from attributes on its client spans
   (`peer.service`, `db.system`, `messaging.system`, `server.address`). A
   client span that names nothing is not shown as a dependency.

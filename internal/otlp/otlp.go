@@ -7,6 +7,7 @@ package otlp
 import (
 	"compress/gzip"
 	"context"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -47,9 +48,15 @@ var resourceLabels = map[string]string{
 
 // Receiver serves /v1/metrics, /v1/logs and /v1/traces.
 type Receiver struct {
-	Listen  string
-	Metrics func([]model.Sample)
-	Logs    func([]model.LogEntry) error
+	Listen string
+	// TokensFile, if set, is a file of "name token" lines: only requests
+	// with one of those bearer tokens are taken, and what they send is
+	// stamped emitter=<name>, which a sender cannot set itself.
+	TokensFile string
+	// CertFile and KeyFile, if set, serve the endpoint over TLS.
+	CertFile, KeyFile string
+	Metrics           func([]model.Sample)
+	Logs              func([]model.LogEntry) error
 	// Spans receives the spans that are kept, as an OTLP trace request
 	// (protobuf); nil switches traces off. The metrics counted from all
 	// spans go to Metrics.
@@ -86,11 +93,30 @@ const repeatFor = time.Hour
 
 // Run serves until ctx is cancelled.
 func (r *Receiver) Run(ctx context.Context) error {
+	var handler http.Handler = r.Handler()
+	if r.TokensFile != "" {
+		tokens, err := newTokenFile(r.TokensFile)
+		if err != nil {
+			// Started anyway: nobody gets in until the file is readable.
+			r.Log.Error("OTLP tokens not readable, every request is refused until they are", "err", err)
+		}
+		handler = requireToken(tokens, handler)
+	}
 	ln, err := net.Listen("tcp", r.Listen)
 	if err != nil {
 		return fmt.Errorf("OTLP endpoint: %w", err)
 	}
-	srv := &http.Server{Handler: r.Handler(), ReadHeaderTimeout: 10 * time.Second}
+	if r.CertFile != "" {
+		kp := &keyPair{cert: r.CertFile, key: r.KeyFile}
+		if _, err := kp.get(nil); err != nil {
+			ln.Close()
+			return err
+		}
+		ln = tls.NewListener(ln, &tls.Config{GetCertificate: kp.get, MinVersion: tls.VersionTLS12})
+	} else if r.TokensFile != "" && !loopback(ln.Addr()) {
+		r.Log.Warn("OTLP tokens travel in clear: set otlp.tls for an endpoint that is not on loopback", "addr", ln.Addr().String())
+	}
+	srv := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second}
 	go func() {
 		<-ctx.Done()
 		shut, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -118,7 +144,8 @@ func (r *Receiver) Run(ctx context.Context) error {
 			}
 		}
 	}()
-	r.Log.Info("OTLP endpoint on", "addr", ln.Addr().String(), "traces", r.Spans != nil)
+	r.Log.Info("OTLP endpoint on", "addr", ln.Addr().String(), "traces", r.Spans != nil,
+		"tls", r.CertFile != "", "tokens", r.TokensFile != "")
 	if err := srv.Serve(ln); !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
@@ -132,7 +159,7 @@ func (r *Receiver) Handler() http.Handler {
 		if !read(w, req, in) {
 			return
 		}
-		if samples := r.convertMetrics(in); len(samples) > 0 {
+		if samples := r.convertMetrics(in, emitterOf(req)); len(samples) > 0 {
 			r.Metrics(samples)
 		}
 		reply(w)
@@ -142,7 +169,7 @@ func (r *Receiver) Handler() http.Handler {
 		if !read(w, req, in) {
 			return
 		}
-		if entries := convertLogs(in); len(entries) > 0 {
+		if entries := convertLogs(in, emitterOf(req)); len(entries) > 0 {
 			if err := r.Logs(entries); err != nil {
 				http.Error(w, "could not queue the logs", http.StatusServiceUnavailable) // the SDK retries
 				return
@@ -281,7 +308,11 @@ func labelsOf(base map[string]string, attrs []*commonpb.KeyValue) map[string]str
 	}
 	for _, kv := range attrs {
 		if v := anyString(kv.Value); v != "" {
-			out[sanitize(kv.Key)] = v
+			k := sanitize(kv.Key)
+			if _, stamped := base["emitter"]; stamped && k == "emitter" {
+				k = "exported_emitter" // the token's name is the one that counts
+			}
+			out[k] = v
 		}
 	}
 	return out
@@ -376,7 +407,7 @@ func number(p *metricspb.NumberDataPoint) float64 {
 // convertMetrics maps OTLP metrics onto Prometheus-style samples:
 // gauges as they are, monotonic sums as counters (name_total), histograms
 // as name_bucket{le}, name_sum and name_count.
-func (r *Receiver) convertMetrics(in *otlpwire.MetricsRequest) []model.Sample {
+func (r *Receiver) convertMetrics(in *otlpwire.MetricsRequest, emitter string) []model.Sample {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	now := time.Now()
@@ -388,6 +419,9 @@ func (r *Receiver) convertMetrics(in *otlpwire.MetricsRequest) []model.Sample {
 	}
 	for _, rm := range in.GetResourceMetrics() {
 		base := resourceOf(rm.GetResource())
+		if emitter != "" {
+			base["emitter"] = emitter
+		}
 		if svc := base["service"]; svc != "" {
 			base["job"] = svc
 		}
@@ -504,12 +538,19 @@ var severities = []string{"", "trace", "debug", "info", "warn", "error", "fatal"
 
 // convertLogs maps OTLP log records onto log entries. The trace and span
 // ids are kept as fields, which is what later links a line to its trace.
-func convertLogs(in *otlpwire.LogsRequest) []model.LogEntry {
+//
+// emitter, when the request came with a token, becomes a stream label; an
+// attribute of the same name is kept as attr_emitter, like any other
+// attribute named after a stream label.
+func convertLogs(in *otlpwire.LogsRequest, emitter string) []model.LogEntry {
 	now := time.Now()
 	var out []model.LogEntry
 	for _, rl := range in.GetResourceLogs() {
 		stream := resourceOf(rl.GetResource())
 		stream["source"] = "otlp"
+		if emitter != "" {
+			stream["emitter"] = emitter
+		}
 		for _, sl := range rl.GetScopeLogs() {
 			for _, rec := range sl.GetLogRecords() {
 				ts := rec.GetTimeUnixNano()
@@ -556,4 +597,9 @@ func convertLogs(in *otlpwire.LogsRequest) []model.LogEntry {
 		}
 	}
 	return out
+}
+
+func loopback(a net.Addr) bool {
+	t, ok := a.(*net.TCPAddr)
+	return ok && t.IP.IsLoopback()
 }
