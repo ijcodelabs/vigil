@@ -1,0 +1,9 @@
+# TYPE boop_contract_info gauge
+boop_contract_info{version="1"} 1
+# TYPE boop_jump_agent_info gauge
+boop_jump_agent_info{agent="ag-7f3k2m",version="0.9.0"} 1
+# TYPE boop_jump_agent_tunnel_up gauge
+boop_jump_agent_tunnel_up 1
+# TYPE boop_jump_agent_streams_total counter
+boop_jump_agent_streams_total{result="accepted",reason=""} 31
+boop_jump_agent_streams_total{result="rejected",reason="capability"} 1

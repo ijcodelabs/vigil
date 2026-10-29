@@ -1,0 +1,148 @@
+title: Boop Jump gateway
+description: The Boop Jump gateway's /metrics - sessions, refusals, the recording spool and uploads, and the per-agent detail (connected since, certificate expiry, open streams). Follows Boop's observability contract v1.
+detect:
+  process: [jump-gateway]
+params:
+  metrics_target:
+    default: "127.0.0.1:9464"
+    description: The gateway's --metrics-listen address. It has no auth, so it should be a private address.
+config:
+  scrape:
+    static:
+      - job: boop-jump-gateway
+        targets: ["${metrics_target}"]
+        path: /metrics
+rules:
+  # Boop Jump's rule file (deploy/monitoring/boop-jump-rules.yaml), the
+  # gateway's part, under the same names. The gateway's per-agent series
+  # carry Boop's agent id, which Vigil keeps as exported_agent.
+  # Counters are compared with their value a while ago, not increase():
+  # the store counts a counter it sees for the first time as having risen
+  # from zero, so a gateway's old totals would alert on the first scrape.
+  - name: alerts
+    interval: 1m
+    rules:
+      - alert: BoopJumpGatewayDown
+        expr: up{job="boop-jump-gateway"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: 'Boop Jump gateway {{ $labels.instance }} is not answering scrapes'
+      - alert: BoopJumpSpoolFilling
+        expr: boop_jump_spool_bytes / boop_jump_spool_limit_bytes > 0.8
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: 'Recording spool on {{ $labels.instance }} is over 80% full; new sessions are refused at 100%'
+      - alert: BoopJumpSpoolFull
+        expr: boop_jump_spool_full_total - boop_jump_spool_full_total offset 10m > 0
+        labels: {severity: critical}
+        annotations:
+          summary: 'Sessions on {{ $labels.instance }} were refused or cut because the recording spool is full'
+      - alert: BoopJumpRecordingUploadsFailing
+        expr: boop_jump_recording_upload_failures_total - boop_jump_recording_upload_failures_total offset 15m > 5
+        labels: {severity: warning}
+        annotations:
+          summary: 'Recording uploads to storage keep failing on {{ $labels.instance }} (they are retried from the spool)'
+      - alert: BoopJumpRecordingSigningFailing
+        expr: boop_jump_recording_finalize_failures_total - boop_jump_recording_finalize_failures_total offset 15m > 3
+        labels: {severity: warning}
+        annotations:
+          summary: 'The control plane is not signing recording manifests from {{ $labels.instance }}'
+      - alert: BoopJumpRecordingUnverified
+        expr: boop_jump_recordings_unverified_total - boop_jump_recordings_unverified_total offset 1h > 0
+        labels: {severity: warning}
+        annotations:
+          summary: 'The control plane could not verify finished recordings in storage'
+      - alert: BoopJumpAgentCertExpiring
+        expr: boop_jump_agent_cert_expiry_seconds < 2 * 86400
+        for: 30m
+        labels: {severity: warning}
+        annotations:
+          summary: 'Agent {{ $labels.exported_agent }} certificate expires in under 2 days (renewal should have happened at 2/3 of its life)'
+      - alert: BoopJumpAgentRenewalsRefused
+        expr: boop_jump_agent_renewals_total{result="refused"} - boop_jump_agent_renewals_total{result="refused"} offset 1h > 3
+        labels: {severity: warning}
+        annotations:
+          summary: 'Agent certificate renewals are being refused on {{ $labels.instance }}'
+      - alert: BoopJumpDenialsSpike
+        expr: sum by (instance, reason) (boop_jump_denied_total - boop_jump_denied_total offset 10m) > 20
+        labels: {severity: info}
+        annotations:
+          summary: 'Many refused access attempts on {{ $labels.instance }} (reason {{ $labels.reason }})'
+      - alert: BoopJumpEventsDropped
+        expr: sum by (instance) (boop_jump_events_dropped_total - boop_jump_events_dropped_total offset 15m) > 0
+        labels: {severity: info}
+        annotations:
+          summary: 'Gateway {{ $labels.instance }} dropped {{ $value }} audit events on the way to monitoring in 15 minutes: Vigil''s copy has a gap'
+dashboard:
+  title: Boop Jump gateway
+  variables:
+    - {name: gateway, label: gateway, match: boop_jump_gateway_info}
+  panels:
+    - {title: Up, type: stat, w: 2, h: 2, unit: yesno, queries: [{expr: 'min(up{job="boop-jump-gateway"})'}]}
+    - {title: Agents connected, type: stat, w: 2, h: 2, queries: [{expr: 'sum(boop_jump_agents_connected)'}]}
+    - {title: Open streams, type: stat, w: 2, h: 2, queries: [{expr: 'sum(boop_jump_streams_open)'}]}
+    - {title: Spool used, type: stat, w: 2, h: 2, unit: percent, warn: 80, crit: 95, queries: [{expr: '100 * max(boop_jump_spool_bytes / boop_jump_spool_limit_bytes)'}]}
+    - {title: Refused (range), type: stat, w: 2, h: 2, queries: [{expr: '(sum(boop_jump_denied_total - boop_jump_denied_total offset $__range) or vector(0))'}]}
+    - {title: Upload failures (range), type: stat, w: 2, h: 2, warn: 1, queries: [{expr: '(sum(boop_jump_recording_upload_failures_total - boop_jump_recording_upload_failures_total offset $__range) or vector(0))'}]}
+    - title: Agents
+      type: table
+      w: 12
+      h: 4
+      columns: [exported_agent]
+      queries:
+        - {expr: 'time() - boop_jump_agent_connected_since_timestamp_seconds', legend: Connected for, unit: seconds}
+        - {expr: 'boop_jump_agent_cert_expiry_timestamp_seconds - time()', legend: Certificate left, unit: seconds, warn: 604800, crit: 172800}
+        - {expr: 'sum without (resource, protocol) (boop_jump_agent_streams_open)', legend: Open streams}
+    - title: Open streams by protocol
+      type: timeseries
+      w: 6
+      h: 3
+      min: 0
+      queries: [{expr: 'sum by (protocol) (boop_jump_agent_streams_open)', legend: '{{protocol}}'}]
+    - title: Refused by reason
+      type: timeseries
+      w: 6
+      h: 3
+      unit: ops/s
+      min: 0
+      queries: [{expr: 'sum by (reason) (rate(boop_jump_denied_total[5m]))', legend: '{{reason}}'}]
+    - title: Stream length (90th percentile)
+      type: timeseries
+      w: 6
+      h: 3
+      unit: seconds
+      min: 0
+      queries: [{expr: 'histogram_quantile(0.9, sum by (protocol, le) (rate(boop_jump_stream_duration_seconds_bucket[1h])))', legend: '{{protocol}}'}]
+    - title: Calls to Boop (90th percentile)
+      type: timeseries
+      w: 6
+      h: 3
+      unit: seconds
+      min: 0
+      queries: [{expr: 'histogram_quantile(0.9, sum by (call, le) (rate(boop_jump_control_request_seconds_bucket[5m])))', legend: '{{call}}'}]
+    - title: Recording spool
+      type: timeseries
+      w: 6
+      h: 3
+      unit: bytes
+      min: 0
+      queries:
+        - {expr: 'max(boop_jump_spool_bytes)', legend: used}
+        - {expr: 'max(boop_jump_spool_limit_bytes)', legend: limit}
+    - title: Recordings
+      type: timeseries
+      w: 6
+      h: 3
+      unit: ops/s
+      min: 0
+      queries:
+        - {expr: 'sum(rate(boop_jump_recordings_finalized_total[5m]))', legend: finalized}
+        - {expr: 'sum(rate(boop_jump_recording_upload_failures_total[5m]))', legend: upload failures}
+        - {expr: 'sum(rate(boop_jump_recording_finalize_failures_total[5m]))', legend: finalize failures}
+queries:
+  - name: Boop Jump agents by certificate time left
+    query: sort(boop_jump_agent_cert_expiry_timestamp_seconds - time())
+  - name: Boop Jump refusals by reason
+    query: sum by (reason) (increase(boop_jump_denied_total[1h]))

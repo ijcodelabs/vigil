@@ -84,9 +84,17 @@ func (s *Server) applyRules(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("saved rules: %w", err)
 	}
-	taken := map[string]bool{}
+	// An alert in the rule file replaces an integration's alert of the same
+	// name, as it does a built-in one: a rule file that carries a product's
+	// own copy of its rules then alerts once, not twice.
+	taken, own := map[string]bool{}, map[string]bool{}
 	for _, g := range file.Groups {
 		taken[g.Name] = true
+		for _, r := range g.Rules {
+			if r.Alert != "" {
+				own[r.Alert] = true
+			}
+		}
 	}
 	if g, ok := builtinRuleGroup(file); ok {
 		file.Groups = append(file.Groups, g)
@@ -117,7 +125,15 @@ func (s *Server) applyRules(ctx context.Context) error {
 				s.log.Warn("integration rule group skipped: the rule file has a group of the same name", "group", g.Name)
 				continue
 			}
-			file.Groups = append(file.Groups, g)
+			kept := g.Rules[:0]
+			for _, r := range g.Rules {
+				if r.Alert == "" || !own[r.Alert] {
+					kept = append(kept, r)
+				}
+			}
+			if g.Rules = kept; len(kept) > 0 {
+				file.Groups = append(file.Groups, g)
+			}
 		}
 	}
 	s.rulesStarted.Store(true)

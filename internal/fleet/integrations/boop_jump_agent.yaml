@@ -1,0 +1,61 @@
+title: Boop Jump agent
+description: A Boop Jump agent's /metrics - its tunnel to the gateway, certificate and the streams it accepted or refused. Follows Boop's observability contract v1.
+detect:
+  process: [jump-agent]
+params:
+  metrics_target:
+    default: "127.0.0.1:9465"
+    description: The agent's --metrics-listen address. It has no auth, so it should be on loopback.
+config:
+  scrape:
+    static:
+      - job: boop-jump-agent
+        targets: ["${metrics_target}"]
+        path: /metrics
+rules:
+  # Boop Jump's rule file, the agent's part, under the same names.
+  # Counters are compared with their value a while ago, not increase():
+  # the store counts a counter it sees for the first time as having risen
+  # from zero, so a gateway's old totals would alert on the first scrape.
+  - name: alerts
+    interval: 1m
+    rules:
+      - alert: BoopJumpAgentTunnelDown
+        expr: boop_jump_agent_tunnel_up == 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: 'Agent {{ $labels.instance }} has no tunnel to its gateway'
+      - alert: BoopJumpAgentTunnelFlapping
+        expr: boop_jump_agent_tunnel_connects_total - boop_jump_agent_tunnel_connects_total offset 30m > 10
+        labels: {severity: info}
+        annotations:
+          summary: 'Agent {{ $labels.instance }} reconnected more than 10 times in 30 minutes'
+      - alert: BoopJumpAgentCertExpiring
+        expr: boop_jump_agent_cert_expiry_seconds < 2 * 86400
+        for: 30m
+        labels: {severity: warning}
+        annotations:
+          summary: 'Agent {{ $labels.instance }} certificate expires in under 2 days (renewal should have happened at 2/3 of its life)'
+dashboard:
+  title: Boop Jump agents
+  panels:
+    - title: Agents
+      type: table
+      w: 12
+      h: 4
+      columns: [agent, instance]
+      queries:
+        - {expr: 'boop_jump_agent_tunnel_up', legend: Tunnel up, unit: yesno, warn: 0.5, crit: 0}
+        - {expr: 'boop_jump_agent_cert_expiry_seconds', legend: Certificate left, unit: seconds, warn: 604800, crit: 172800}
+        - {expr: 'increase(boop_jump_agent_tunnel_connects_total[$__range])', legend: Reconnects in range}
+    - title: Streams accepted and refused
+      type: timeseries
+      w: 12
+      h: 3
+      unit: ops/s
+      min: 0
+      queries: [{expr: 'sum by (result, reason) (rate(boop_jump_agent_streams_total[5m]))', legend: '{{result}} {{reason}}'}]
+queries:
+  - name: Boop Jump agents without a tunnel
+    query: boop_jump_agent_tunnel_up == 0

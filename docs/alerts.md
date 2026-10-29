@@ -167,6 +167,12 @@ groups:
 `GET /api/v1/rules/builtin` returns the built-in rules as they are in the
 running version, to copy from.
 
+The same holds for the rules of an integration in use: an alert of the
+same name in the rule file runs instead of the integration's. So a rule
+file that carries a product's own copy of its rules (Boop's, for one)
+alerts once, not twice. A group in the rule file named like the
+integration's (`nginx/alerts`) replaces that whole group.
+
 ### Rules in git
 
 The rule file is one document, so keep it in a repository and let a

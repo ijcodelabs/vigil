@@ -17,7 +17,7 @@ func TestBuiltinIntegrations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Join(cat.Names(), ","); got != "ai_module_claude,docker,gpu,haproxy,kubernetes,kubernetes_cluster,nginx,postgres,redis,victoriametrics" {
+	if got := strings.Join(cat.Names(), ","); got != "ai_module_claude,boop,boop_jump_agent,boop_jump_gateway,docker,gpu,haproxy,kubernetes,kubernetes_cluster,nginx,postgres,redis,sshd,victoriametrics" {
 		t.Fatalf("catalog: %s", got)
 	}
 	// Each one, switched on with its defaults, gives an agent a valid config.

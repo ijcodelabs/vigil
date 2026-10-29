@@ -1,0 +1,75 @@
+title: SSH logins
+description: Who logged in over SSH, how, and from where, from sshd's lines in the systemd journal. Certificate logins keep the certificate's Key ID, serial and CA, which is what tells a Boop Jump login from any other.
+# Not detected: sshd runs nearly everywhere, and every host would be listed
+# as running something unmonitored.
+detect: {}
+params: {}
+config:
+  logs:
+    journald:
+      enabled: true
+      # The unit, not the syslog identifier, decides what counts as sshd:
+      # anyone can write a line tagged "sshd" with logger, but only sshd
+      # writes under its own unit. Rules check the unit again.
+      unit_templates:
+        ssh.service: sshd_auth
+        sshd.service: sshd_auth
+        "ssh@*.service": sshd_auth
+        "sshd@*.service": sshd_auth
+    templates:
+      # Accepted and Failed lines, OpenSSH 7 to 10:
+      #   Accepted publickey for deploy from 192.0.2.10 port 50401 ssh2: ED25519-CERT SHA256:<key> ID <key id> (serial <n>) CA ED25519 SHA256:<ca>
+      # Anchored at both ends: a Key ID is text the certificate's signer
+      # chose and can contain "(serial …) CA …" itself, so the CA is the
+      # last field of the line, never the first match. Other lines pass
+      # through as they are.
+      sshd_auth:
+        parse: regex
+        pattern: '^(?P<ssh_result>Accepted|Failed) (?P<ssh_method>\S+) for (?:invalid user )?(?P<ssh_user>\S+) from (?P<ssh_from>\S+) port (?P<ssh_port>\d+) ssh2(?:: (?P<ssh_key_type>\S+) (?P<ssh_key_fp>\S+)(?: ID (?P<ssh_key_id>.+) \(serial (?P<ssh_cert_serial>\d+)\) CA (?P<ssh_ca_type>\S+) (?P<ssh_ca_fp>\S+))?)?$'
+rules:
+  - name: logs
+    type: logs
+    interval: 1m
+    rules:
+      - alert: SshPasswordGuessing
+        expr: '_time:10m unit:~"^sshd?(@.+)?[.]service$" ssh_result:=Failed | stats by (agent) count() as failures | filter failures:>100'
+        labels: {severity: info}
+        annotations:
+          summary: '{{ $value }} failed SSH logins on {{ $labels.agent }} in 10 minutes'
+dashboard:
+  title: SSH logins
+  variables:
+    - {name: agent, label: agent, match: vigil_agent_up}
+  panels:
+    - title: Logins
+      type: stat
+      source: logs
+      w: 3
+      h: 2
+      queries: [{expr: 'unit:~"^sshd?(@.+)?[.]service$" agent:~"$agent" ssh_result:=Accepted | stats count() as logins'}]
+    - title: Failed attempts
+      type: stat
+      source: logs
+      w: 3
+      h: 2
+      queries: [{expr: 'unit:~"^sshd?(@.+)?[.]service$" agent:~"$agent" ssh_result:=Failed | stats count() as failures'}]
+    - title: Logins by host, user and method
+      type: table
+      source: logs
+      w: 6
+      h: 4
+      queries: [{expr: 'unit:~"^sshd?(@.+)?[.]service$" agent:~"$agent" ssh_result:=Accepted | stats by (agent, ssh_user, ssh_method, ssh_key_type) count() as logins | sort by (logins desc) | limit 30'}]
+    - title: Failed attempts by source
+      type: table
+      source: logs
+      w: 6
+      h: 4
+      queries: [{expr: 'unit:~"^sshd?(@.+)?[.]service$" agent:~"$agent" ssh_result:=Failed | stats by (agent, ssh_from) count() as failures | sort by (failures desc) | limit 30'}]
+    - {title: Latest logins, type: logs, w: 12, h: 4, limit: 50, queries: [{expr: 'unit:~"^sshd?(@.+)?[.]service$" agent:~"$agent" ssh_result:=Accepted'}]}
+queries:
+  - name: SSH logins by host and user
+    type: logs
+    query: 'unit:~"^sshd?(@.+)?[.]service$" ssh_result:=Accepted | stats by (agent, ssh_user, ssh_method) count() as logins | sort by (logins desc)'
+  - name: SSH logins with a certificate, by CA
+    type: logs
+    query: 'unit:~"^sshd?(@.+)?[.]service$" ssh_result:=Accepted ssh_ca_fp:* | stats by (agent, ssh_ca_fp) count() as logins'

@@ -1,0 +1,273 @@
+title: Boop
+description: Boop's access requests, approvals and grants (its /metrics), the servers it knows from a tenant's export, its audit events over OTLP, and SSH logins on guarded hosts that did not come through Boop Jump. Follows Boop's observability contract v1.
+detect:
+  image: [aps, boop]
+params:
+  metrics_target:
+    default: "localhost:3000"
+    description: Address of Boop's own /metrics (health of the installation).
+  metrics_token_file:
+    default: /etc/vigil/boop-metrics-token
+    description: File on this host with the token Boop's /metrics wants (APS_METRICS_TOKEN). Read at every scrape.
+  export_target:
+    default: "localhost:3000"
+    description: Address of Boop's tenant export, /api/export/v1/metrics. Switch the boop-export job off in a profile where there is none.
+  export_scheme:
+    default: http
+    description: http, or https when the export is reached through an edge.
+  export_token_file:
+    default: /etc/vigil/boop-export-token
+    description: 'File on this host with a tenant export token (bxp_…, from "boop admin jump export-token"). The token decides the tenant.'
+  event_agents:
+    default: ""
+    description: 'Vigil agents whose OTLP endpoint receives Boop''s audit events, as a regular expression (gateway-1|boop-host). Events that arrive anywhere else are not trusted, and an alert says so. Empty: none yet.'
+  emitters:
+    default: ""
+    description: 'Names of Boop''s emitters in those agents'' otlp.tokens_file, as a regular expression (boop-1|gw-euw1). The name comes from the token, so a sender cannot claim it.'
+  tenant_ref:
+    default: ""
+    description: The tenant's tenant_ref (32 hex characters, shown with the export token). Events for another tenant raise an alert.
+  guarded_agents:
+    default: ""
+    description: 'Vigil agents whose SSH logins must all come through Boop Jump, as a regular expression (web-prod-.*). They need the SSH logins integration. Empty: no host is guarded.'
+  tenant_ca:
+    default: ""
+    description: 'Fingerprint of the tenant''s SSH user CA as sshd logs it, SHA256:… (ssh-keygen -lf ca.pub). A certificate login counts as a Boop Jump login only with this CA.'
+config:
+  scrape:
+    static:
+      - job: boop
+        targets: ["${metrics_target}"]
+        path: /metrics
+        bearer_token_file: "${metrics_token_file}"
+      - job: boop-export
+        targets: ["${export_target}"]
+        scheme: "${export_scheme}"
+        path: /api/export/v1/metrics
+        bearer_token_file: "${export_token_file}"
+        interval: 1m
+rules:
+  # Boop's own rule file (deploy/monitoring/boop-rules.yaml in Boop's
+  # repository), under the same alert names: a rule file that carries
+  # Boop's copy replaces these by name instead of doubling them.
+  # Counters are compared with their value a while ago, not increase():
+  # the store counts a counter it sees for the first time as having risen
+  # from zero, so a gateway's old totals would alert on the first scrape.
+  - name: alerts
+    interval: 1m
+    rules:
+      - alert: BoopDown
+        expr: up{job="boop"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: 'Boop {{ $labels.instance }} is not answering scrapes'
+      - alert: BoopShardUnreachable
+        expr: aps_shards_unreachable > 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: '{{ $value }} data shard(s) unreachable from Boop'
+      - alert: BoopJobsStalledFulfilment
+        expr: aps_request_unfulfilled_oldest_seconds > 600
+        labels: {severity: critical}
+        annotations:
+          summary: 'An approved request has waited over 10 minutes for access: is the jobs runner up?'
+      - alert: BoopAccessOverdue
+        expr: aps_access_overdue > 0
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: '{{ $value }} grant(s) are past their end and not removed: is the jobs runner up?'
+      - alert: BoopRevokeStuck
+        expr: aps_grants_revoke_stuck > 0
+        labels: {severity: critical}
+        annotations:
+          summary: 'Removing access failed on every retry for {{ $value }} grant(s): people may still have it'
+      - alert: BoopOutboxBacklog
+        expr: aps_outbox_oldest_seconds > 900
+        labels: {severity: warning}
+        annotations:
+          summary: 'Slack follow-ups have not been delivered for over 15 minutes'
+      - alert: BoopApprovalsWaiting
+        expr: aps_request_pending_oldest_seconds > 4 * 3600
+        labels: {severity: info}
+        annotations:
+          summary: 'A request has waited over 4 hours for a decision'
+      - alert: BoopJumpRecordingProblems
+        expr: sum(aps_jump_recordings_problem_24h{status=~"broken|tampered"}) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: 'Jump recordings ended broken or failed their checks in the last 24 h'
+      - alert: BoopHttpErrors
+        expr: sum(rate(aps_http_requests_total{code="5xx"}[5m])) > 0.1
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: 'Boop is answering with server errors'
+      # Vigil's own, from the contract.
+      - alert: BoopSecretsStoreSealed
+        expr: aps_openbao_sealed == 1
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: 'Boop cannot use its secrets store (sealed or unreachable)'
+      - alert: BoopExportDown
+        expr: up{job="boop-export"} == 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: 'Boop''s tenant export at {{ $labels.instance }} is not answering (token, address or edge?)'
+      - alert: BoopExportTruncated
+        expr: boop_export_truncated == 1
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: 'Boop''s tenant export hit its limit of servers and left some out'
+      - alert: BoopEventsDropped
+        expr: sum by (job, instance) (aps_events_dropped_total - aps_events_dropped_total offset 15m) > 0
+        labels: {severity: info}
+        annotations:
+          summary: 'Boop dropped {{ $value }} audit events on the way to monitoring in 15 minutes: Vigil''s copy has a gap (Boop''s own record has none)'
+  - name: events
+    type: logs
+    interval: 1m
+    rules:
+      # A record that says it is Boop's audit but did not come in through a
+      # pinned agent with a pinned emitter's token, or whose sender calls
+      # itself something else (service.instance.id): forged, or a sender
+      # nobody configured. The token names are Boop's emitter ids.
+      - alert: BoopEventsFromUnknownSource
+        expr: '_time:5m logger:="boop.audit" !(agent:~"^(${event_agents})$" emitter:~"^(${emitters})$" service_instance:~"^(${emitters})$") | stats by (agent, emitter, service_instance) count() as events'
+        labels: {severity: warning}
+        annotations:
+          summary: '{{ $value }} Boop audit events reached {{ $labels.agent }} from {{ $labels.emitter }} (calling itself {{ $labels.service_instance }}), which is not a pinned source: not trusted'
+      - alert: BoopEventsForAnotherTenant
+        expr: '_time:5m logger:="boop.audit" agent:~"^(${event_agents})$" emitter:~"^(${emitters})$" tenant_ref:* !tenant_ref:="${tenant_ref}" | stats by (agent, emitter) count() as events'
+        labels: {severity: warning}
+        annotations:
+          summary: '{{ $value }} Boop audit events from {{ $labels.emitter }} carry a tenant_ref other than the integration''s (is tenant_ref set?)'
+      - alert: BoopBreakGlassUsed
+        expr: '_time:5m logger:="boop.audit" agent:~"^(${event_agents})$" emitter:~"^(${emitters})$" event_name:="boop.break_glass.used" | stats by (resource) count() as uses'
+        labels: {severity: warning}
+        annotations:
+          summary: 'Break-glass access was used in Boop (resource {{ $labels.resource }})'
+  - name: shadow_access
+    type: logs
+    interval: 1m
+    rules:
+      # A login to a guarded host is a Boop Jump login only when all three
+      # hold: a certificate, the contract's Key ID, and the tenant's CA as
+      # the last field of sshd's line (the sshd integration takes it from
+      # there). The unit is checked here again: only sshd writes under its
+      # own unit, and an Accepted line the template could not take apart
+      # counts as not Jump: it fails closed. Best effort; what this cannot
+      # see is in the docs.
+      - alert: SshLoginNotThroughBoopJump
+        expr: '_time:5m unit:~"^sshd?(@.+)?[.]service$" _msg:~"^Accepted " agent:~"^(${guarded_agents})$" !(ssh_key_type:~"-CERT$" ssh_key_id:~"^boop-jump:v1:[0-9a-f]{32}:[0-9a-f-]{36}:[0-9a-f-]{36}$" ssh_ca_fp:="${tenant_ca}") | stats by (agent, ssh_user, ssh_from, ssh_method) count() as logins'
+        labels: {severity: critical}
+        annotations:
+          summary: 'SSH login to {{ $labels.agent }} as {{ $labels.ssh_user }} from {{ $labels.ssh_from }} ({{ $labels.ssh_method }}) did not come through Boop Jump'
+dashboard:
+  title: Boop
+  variables:
+    - {name: hostgroup, label: hostgroup, match: boop_jump_inventory_agent_info}
+  panels:
+    - {title: Boop up, type: stat, w: 2, h: 2, unit: yesno, queries: [{expr: 'min(up{job="boop"})'}]}
+    - {title: Requests waiting, type: stat, w: 2, h: 2, queries: [{expr: 'sum(aps_requests_open)'}]}
+    - {title: Oldest waiting, type: stat, w: 2, h: 2, unit: seconds, warn: 3600, crit: 14400, queries: [{expr: 'max(aps_request_pending_oldest_seconds)'}]}
+    - {title: Access overdue, type: stat, w: 2, h: 2, warn: 1, queries: [{expr: 'sum(aps_access_overdue)'}]}
+    - {title: Live sessions, type: stat, w: 2, h: 2, queries: [{expr: 'sum(aps_jump_sessions_live)'}]}
+    - {title: Secrets store sealed, type: stat, w: 2, h: 2, unit: yesno, warn: 1, queries: [{expr: 'max(aps_openbao_sealed)'}]}
+    - {title: Servers connected, type: stat, w: 2, h: 2, queries: [{expr: 'sum(boop_jump_agent_connected * on (exported_agent) group_left (hostgroup) boop_jump_inventory_agent_info{hostgroup=~"$hostgroup"})'}]}
+    - {title: Servers offline, type: stat, w: 2, h: 2, warn: 1, queries: [{expr: 'count((boop_jump_agent_connected * on (exported_agent) group_left (hostgroup) boop_jump_inventory_agent_info{hostgroup=~"$hostgroup"}) == 0) or vector(0)'}]}
+    - {title: Active grants, type: stat, w: 2, h: 2, queries: [{expr: 'sum(boop_jump_grants_active{hostgroup=~"$hostgroup"})'}]}
+    - {title: Outbox lag, type: stat, w: 2, h: 2, unit: seconds, warn: 900, queries: [{expr: 'max(aps_outbox_oldest_seconds)'}]}
+    - {title: Events dropped (range), type: stat, w: 2, h: 2, warn: 1, queries: [{expr: '(sum(aps_events_dropped_total - aps_events_dropped_total offset $__range) or vector(0)) + (sum(boop_jump_events_dropped_total - boop_jump_events_dropped_total offset $__range) or vector(0))'}]}
+    - {title: Logins without a Jump Key ID (range), type: stat, source: logs, w: 2, h: 2, warn: 1, queries: [{expr: 'unit:~"^sshd?(@.+)?[.]service$" ssh_result:=Accepted !ssh_key_id:~"^boop-jump:v1:" | stats count() as logins'}]}
+    # Admins only in this version. Nodes: Boop, its gateways, the agents
+    # (grouped by host group) and what they reach; colour from the node's
+    # value and its details. Links: who reaches whom, and the sessions open
+    # now, which move.
+    - title: Map
+      type: map
+      w: 12
+      h: 6
+      columns: [hostname, hostgroup, gateway, tag_env, tag_region, tag_team, version, os, kind, host_id, cluster_id]
+      queries:
+        - {expr: 'label_replace(up{job="boop"}, "control", "Boop", "", "")', node: control, tier: Boop, warn: 0.5, crit: 0}
+        - {expr: 'boop_jump_inventory_gateway_info', node: gateway, tier: Gateways}
+        - {expr: 'boop_jump_agent_connected * on (exported_agent) group_left (hostgroup, hostname, gateway, os, tag_env, tag_region, tag_team, version) boop_jump_inventory_agent_info{hostgroup=~"$hostgroup"}', node: exported_agent, name: hostname, group: hostgroup, tier: Agents, warn: 0.5, crit: 0}
+        - {expr: 'boop_jump_resource_info', node: resource, group: kind, tier: Resources}
+        - {expr: 'label_replace(boop_jump_inventory_gateway_info, "control", "Boop", "", "")', from: control, to: gateway}
+        - {expr: 'boop_jump_agent_connected * on (exported_agent) group_left (gateway) boop_jump_inventory_agent_info', from: gateway, to: exported_agent}
+        - {expr: 'boop_jump_resource_info', from: exported_agent, to: resource}
+        - {expr: 'sum by (exported_agent, resource) (boop_jump_agent_streams_open)', from: exported_agent, to: resource, live: true}
+        - {expr: 'label_replace(sum(aps_requests_open), "control", "Boop", "", "")', of: control, legend: Requests waiting}
+        - {expr: 'label_replace(max(aps_outbox_oldest_seconds), "control", "Boop", "", "")', of: control, legend: Outbox lag, unit: seconds, warn: 900}
+        - {expr: 'label_replace(max(aps_openbao_sealed), "control", "Boop", "", "")', of: control, legend: Secrets store sealed, unit: yesno, crit: 1}
+        - {expr: '100 * boop_jump_spool_bytes / boop_jump_spool_limit_bytes * on (instance) group_left (gateway) boop_jump_gateway_info', of: gateway, legend: Spool used, unit: percent, warn: 80, crit: 95}
+        - {expr: 'boop_jump_agent_cert_expiry_timestamp_seconds - time()', of: exported_agent, legend: Certificate left, unit: seconds, warn: 604800, crit: 172800}
+        - {expr: 'time() - boop_jump_agent_last_seen_timestamp_seconds', of: exported_agent, legend: Last seen, unit: seconds}
+    - title: Servers Boop Jump knows
+      type: table
+      w: 12
+      h: 4
+      columns: [hostgroup, exported_agent, hostname, gateway, tag_env, tag_region, tag_team, version]
+      queries:
+        - {expr: 'boop_jump_agent_connected * on (exported_agent) group_left (hostgroup, hostname, gateway, tag_env, tag_region, tag_team, version) boop_jump_inventory_agent_info{hostgroup=~"$hostgroup"}', legend: Connected, unit: yesno, warn: 0.5, crit: 0}
+        - {expr: '(time() - boop_jump_agent_last_seen_timestamp_seconds) * on (exported_agent) group_left (hostgroup, hostname, gateway, tag_env, tag_region, tag_team, version) boop_jump_inventory_agent_info{hostgroup=~"$hostgroup"}', legend: Last seen, unit: seconds, warn: 300, crit: 3600}
+    - title: Resources
+      type: table
+      w: 6
+      h: 4
+      columns: [resource, kind, exported_agent, host_id]
+      queries: [{expr: 'boop_jump_resource_info', legend: Known}]
+    - title: Requests waiting by status
+      type: timeseries
+      w: 6
+      h: 3
+      min: 0
+      queries: [{expr: 'sum by (status) (aps_requests_open)', legend: '{{status}}'}]
+    - title: Time to a decision (90th percentile)
+      type: timeseries
+      w: 6
+      h: 3
+      unit: seconds
+      min: 0
+      queries: [{expr: 'histogram_quantile(0.9, sum by (decision, le) (rate(aps_request_decision_wait_seconds_bucket[1h])))', legend: '{{decision}}'}]
+    - title: Boop HTTP responses by class
+      type: timeseries
+      w: 6
+      h: 3
+      unit: ops/s
+      min: 0
+      queries: [{expr: 'sum by (code) (rate(aps_http_requests_total[5m]))', legend: '{{code}}'}]
+    - title: Open streams by protocol
+      type: timeseries
+      w: 6
+      h: 3
+      min: 0
+      queries: [{expr: 'sum by (protocol) (boop_jump_agent_streams_open)', legend: '{{protocol}}'}]
+    - title: Audit events by name (range, as received)
+      type: table
+      source: logs
+      w: 6
+      h: 4
+      queries: [{expr: 'logger:="boop.audit" | stats by (event_name, outcome, emitter) count() as events | sort by (events desc) | limit 30'}]
+    - title: SSH logins without a Boop Jump Key ID (any host; the alert checks the CA and guarded hosts)
+      type: table
+      source: logs
+      w: 6
+      h: 4
+      queries: [{expr: 'unit:~"^sshd?(@.+)?[.]service$" ssh_result:=Accepted !ssh_key_id:~"^boop-jump:v1:" | stats by (agent, ssh_user, ssh_from, ssh_method) count() as logins | sort by (logins desc) | limit 30'}]
+    - {title: Latest audit events (as received; Boop is the record), type: logs, w: 12, h: 4, limit: 50, queries: [{expr: 'logger:="boop.audit"'}]}
+queries:
+  - name: Boop audit events by name
+    type: logs
+    query: 'logger:="boop.audit" | stats by (event_name, outcome) count() as events | sort by (events desc)'
+  - name: Boop Jump sessions started
+    type: logs
+    query: 'logger:="boop.audit" event_name:="boop.session.started"'
+  - name: Boop servers offline
+    query: boop_jump_agent_connected == 0
