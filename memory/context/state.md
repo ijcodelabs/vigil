@@ -237,6 +237,13 @@ Last updated: 2026-10-13.
   Anthropic, Google) to reconcile with the invoice; per-pod GPU allocation
   on Kubernetes; Slurm.
 - Telegram is the receiver on the trial (token in a file on the server).
+  Since 2026-10-30 the same receiver also posts to a channel in Boop Chat
+  through `slack_configs`: Boop Chat takes Slack's incoming-webhook format,
+  so no vigil code was needed, only `docs/alerts.md` ("Boop Chat,
+  Mattermost and other Slack-compatible chats"). Payloads from the bundled
+  Alertmanager (v0.34) were replayed into Boop Chat's webhook handler and
+  accepted; it refuses unknown attachment fields, so recheck after an
+  Alertmanager upgrade.
 
 ## Trial, traces (2026-10-11)
 
