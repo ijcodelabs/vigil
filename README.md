@@ -160,9 +160,13 @@ pages under `/docs/` (the **Docs** link in the interface).
     make size      # the agent's and relay's size budgets
     make test
     make bpf       # only after changing internal/events/bpf/events.c (needs podman or docker)
+    make release VERSION=v0.1.0   # the release archives and SHA256SUMS in dist/
 
 Building needs only Go: the compiled kernel probes and the interface's two
-small JavaScript libraries are committed.
+small JavaScript libraries are committed. Released binaries and images, and
+how to verify them, are described in
+[Install](docs/install.md#download-a-release); what changed in each
+release is in [CHANGELOG.md](CHANGELOG.md).
 
 ## Quick start
 

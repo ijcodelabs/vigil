@@ -1,11 +1,16 @@
-FROM golang:1.26-alpine AS build
+# The build stage runs on the builder's own platform and cross-compiles, so
+# a multi-arch build (docker buildx --platform linux/amd64,linux/arm64)
+# needs no emulation. Without buildx, TARGETOS and TARGETARCH are empty and
+# Go builds for the machine it runs on.
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 ARG VERSION=dev
+ARG TARGETOS TARGETARCH
 RUN for b in vigil vigil-agent vigil-server vigil-relay; do \
-      CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X github.com/ijcodelabs/vigil/internal/version.Version=${VERSION}" -o /out/$b ./cmd/$b || exit 1; \
+      CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags "-s -w -X github.com/ijcodelabs/vigil/internal/version.Version=${VERSION}" -o /out/$b ./cmd/$b || exit 1; \
     done
 
 # One image per part, so a DaemonSet on every node pulls only the agent:

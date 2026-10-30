@@ -15,6 +15,9 @@ something they say stops being true.
   must not import server code (`internal/depcheck`).
 - After changing `internal/events/bpf/events.c`: `make bpf`, and commit the
   regenerated `events_*_bpfel.{go,o}`.
+- Releases: tags `vX.Y.Z` on `main`, built by `.github/workflows/release.yml`;
+  a user-visible change adds a line under **Unreleased** in `CHANGELOG.md`.
+  See `memory/context/releasing.md`.
 - Code style: `gofmt`, comments that say why, tests next to the code.
 - UI changes are checked in a browser against a running server.
 - User-facing behaviour is documented in `docs/` (shown by the server under `/docs/`); update the page when the behaviour changes.

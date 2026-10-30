@@ -28,6 +28,32 @@ size: linux
 	@check() { s=$$(wc -c < bin/$$1-linux-amd64 | tr -d ' '); echo "$$1: $$s bytes (budget $$2)"; [ $$s -le $$2 ] || { echo "$$1 is over its size budget"; exit 1; }; }; \
 	check vigil-agent $(AGENT_MAX) && check vigil-relay $(RELAY_MAX)
 
+# Release archives in dist/, as the release workflow makes them for a tag:
+# one per binary and architecture with the licence, the README and the
+# unit file, plus SHA256SUMS. `vigil` is also built for macOS, where the
+# operator tools (`vigil apply`) are often run.
+#   make release VERSION=v0.1.0
+SHA256 := $(shell command -v sha256sum >/dev/null 2>&1 && echo sha256sum || echo shasum -a 256)
+.PHONY: release release-notes
+release: linux
+	rm -rf dist && mkdir -p dist
+	for arch in amd64 arm64; do \
+		CGO_ENABLED=0 GOOS=darwin GOARCH=$$arch go build -trimpath -ldflags "$(LDFLAGS)" -o bin/vigil-darwin-$$arch ./cmd/vigil || exit 1; \
+	done
+	for t in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64; do for b in $(BINS); do \
+		[ -f bin/$$b-$$t ] || continue; \
+		d=$$b-$(VERSION:v%=%)-$$t; mkdir -p dist/$$d; \
+		cp bin/$$b-$$t dist/$$d/$$b && cp LICENSE README.md dist/$$d/ || exit 1; \
+		[ ! -f deploy/$$b.service ] || cp deploy/$$b.service dist/$$d/; \
+		tar -C dist -czf dist/$$d.tar.gz $$d && rm -r dist/$$d || exit 1; \
+	done; done
+	cd dist && $(SHA256) *.tar.gz > SHA256SUMS
+	@ls -l dist
+
+# The CHANGELOG.md section for VERSION: the text of its GitHub release.
+release-notes:
+	@scripts/release-notes.sh $(VERSION)
+
 # Recompile the eBPF probe. Needs a container runtime; set CONTAINER=docker
 # if you do not use podman.
 CONTAINER ?= podman
