@@ -90,7 +90,20 @@ type Manager struct {
 	rules  []*ruleState
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
+
+	// marks holds, per aligned group, the end of the last interval it
+	// recorded (Group.Delay).
+	marksMu sync.Mutex
+	marks   map[string]time.Time
 }
+
+// markPrefix starts the alert-state keys under which aligned groups keep
+// their marks; a rule key never starts with it.
+const markPrefix = "\x01mark\x00"
+
+// maxCatchUp is how many missed intervals an aligned group records late,
+// after a restart or while the store did not answer. Older ones stay gaps.
+const maxCatchUp = 30
 
 func NewManager(be Backend, externalURL string, log *slog.Logger) *Manager {
 	return &Manager{be: be, externalURL: externalURL, log: log}
@@ -111,6 +124,12 @@ func (m *Manager) Check(ctx context.Context, f *File) error {
 	return nil
 }
 
+// Query runs one expression the way a rule would, for callers that check
+// whether there is data before they make rules of it (SLOs).
+func (m *Manager) Query(ctx context.Context, typ, expr string, at time.Time) ([]Series, error) {
+	return m.be.Query(ctx, typ, expr, at)
+}
+
 // Apply replaces the running rules. Alerts of rules that are unchanged keep
 // their state; on the first call it is restored from the backend.
 func (m *Manager) Apply(ctx context.Context, f *File) error {
@@ -122,6 +141,15 @@ func (m *Manager) Apply(ctx context.Context, f *File) error {
 		if err != nil {
 			return fmt.Errorf("loading alert state: %w", err)
 		}
+		m.marksMu.Lock()
+		m.marks = map[string]time.Time{}
+		for key, data := range saved {
+			var at time.Time
+			if group, ok := strings.CutPrefix(key, markPrefix); ok && json.Unmarshal(data, &at) == nil {
+				m.marks[group] = at
+			}
+		}
+		m.marksMu.Unlock()
 		for key, data := range saved {
 			var list []*Instance
 			if json.Unmarshal(data, &list) == nil {
@@ -142,6 +170,9 @@ func (m *Manager) Apply(ctx context.Context, f *File) error {
 	m.rules = nil
 	keep := map[string]bool{}
 	for gi := range f.Groups {
+		if f.Groups[gi].Delay > 0 {
+			keep[markPrefix+f.Groups[gi].Name] = true
+		}
 		for ri := range f.Groups[gi].Rules {
 			keep[f.Groups[gi].key(&f.Groups[gi].Rules[ri])] = true
 		}
@@ -218,6 +249,10 @@ func (m *Manager) Stop() {
 }
 
 func (m *Manager) runGroup(ctx context.Context, g *Group, rules []*ruleState) {
+	if g.Delay > 0 {
+		m.runAligned(ctx, g, rules)
+		return
+	}
 	t := time.NewTicker(g.interval())
 	defer t.Stop()
 	for {
@@ -235,14 +270,67 @@ func (m *Manager) runGroup(ctx context.Context, g *Group, rules []*ruleState) {
 	}
 }
 
-func (m *Manager) eval(ctx context.Context, rs *ruleState, now time.Time) {
-	series, err := m.be.Query(ctx, rs.group.Type, rs.rule.Expr, now)
-	if ctx.Err() != nil {
-		return
+// runAligned evaluates a group once per whole interval, Delay after the
+// interval ended, at the interval's end: each interval is recorded exactly
+// once, with its own timestamp, however often the rules are restarted.
+// Intervals missed (a restart, a store that did not answer) are recorded
+// late, up to maxCatchUp of them.
+func (m *Manager) runAligned(ctx context.Context, g *Group, rules []*ruleState) {
+	every := g.interval()
+	for {
+		due := time.Now().Add(-g.Delay).Truncate(every)
+		m.marksMu.Lock()
+		last := m.marks[g.Name]
+		m.marksMu.Unlock()
+		next := last.Add(every)
+		if last.IsZero() || next.Before(due.Add(-maxCatchUp*every)) {
+			next = due
+		}
+		for at := next; !at.After(due); at = at.Add(every) {
+			ok := true
+			for _, rs := range rules {
+				if ctx.Err() != nil {
+					return
+				}
+				if !m.eval(ctx, rs, at) {
+					ok = false
+				}
+			}
+			if !ok {
+				break // try this interval again next time; later ones wait for it
+			}
+			m.setMark(g.Name, at)
+		}
+		wait := time.Until(due.Add(every + g.Delay))
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(wait):
+		}
 	}
+}
+
+func (m *Manager) setMark(group string, at time.Time) {
+	m.marksMu.Lock()
+	m.marks[group] = at
+	m.marksMu.Unlock()
+	data, _ := json.Marshal(at)
+	if err := m.be.SaveAlertState(markPrefix+group, data); err != nil {
+		m.log.Warn("saving the last recorded interval failed", "group", group, "err", err)
+	}
+}
+
+// eval runs one rule as of at and says whether that worked.
+func (m *Manager) eval(ctx context.Context, rs *ruleState, at time.Time) bool {
+	start := time.Now()
+	series, err := m.be.Query(ctx, rs.group.Type, rs.rule.Expr, at)
+	if ctx.Err() != nil {
+		return false
+	}
+	now := at
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
-	rs.lastEval, rs.evalTook = now, time.Since(now)
+	rs.lastEval, rs.evalTook = start, time.Since(start)
 	if err == nil {
 		if rs.rule.Record != "" {
 			err = m.record(ctx, rs, series, now)
@@ -256,12 +344,12 @@ func (m *Manager) eval(ctx context.Context, rs *ruleState, now time.Time) {
 	} else {
 		rs.health, rs.lastErr = "ok", ""
 	}
-	if rs.rule.Alert == "" {
-		return
+	if rs.rule.Alert != "" {
+		// Even after a failed evaluation the known alerts are re-sent, so a
+		// storage hiccup does not make them look resolved.
+		m.publish(ctx, rs, now)
 	}
-	// Even after a failed evaluation the known alerts are re-sent, so a
-	// storage hiccup does not make them look resolved.
-	m.publish(ctx, rs, now)
+	return err == nil
 }
 
 func (m *Manager) record(ctx context.Context, rs *ruleState, series []Series, now time.Time) error {

@@ -284,6 +284,8 @@ fleet/
     shop.yaml
   queries/
     team.yaml
+  slos/
+    shop-api.yaml
 ```
 
 ```bash
@@ -305,6 +307,14 @@ over. `-prune` deletes shared queries that came from files and are in none
 any more; personal queries and shared ones made in the interface are never
 deleted. Without a `queries` directory the saved queries are left alone
 altogether.
+
+Files under `slos/` hold [service level objectives](slo.md), one per file,
+named by their `name:` or the file name. `-prune` deletes SLOs that came
+from files and are gone; those saved through the API are left alone, and
+so is everything when there is no `slos` directory.
+
+A directory without any profile file (only `queries/` or `slos/`, say)
+does not prune profiles: `vigil apply` says so and leaves them alone.
 
 A profile with a `rollout` section is rolled out in steps when applied
 this way too; `vigil apply` says so and returns without waiting for it.

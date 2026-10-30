@@ -33,6 +33,7 @@ var pages = []struct{ name, title string }{
 	{"secrets", "Secrets"},
 	{"dashboards", "Dashboards"},
 	{"alerts", "Alerts"},
+	{"slo", "Service level objectives"},
 	{"grafana", "Grafana"},
 	{"security", "Runtime events"},
 	{"metrics", "Metric reference"},

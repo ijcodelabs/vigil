@@ -1,6 +1,6 @@
 # State
 
-Last updated: 2026-10-13.
+Last updated: 2026-10-30.
 
 ## Built (steps 1–6 of the original plan)
 
@@ -923,6 +923,53 @@ Against Boop's observability contract v1 (Boop Jump repository,
   `TestIntegrationsAndDetection`.
 - Not built: session markers, the request-access link, `host_id`,
   seq-gap and duplicate detection, the 4 KiB record limit, roles (RBAC).
+
+## SLOs, step 1 of slo.md (built 2026-10-30)
+
+- `internal/slo`: the SLO document (strict YAML, name, objective, window
+  default 30d, labels, indicator `probe`, `span` or `ratio`) and what it
+  compiles into: a rule group `slo:<name>` recording
+  `slo_good_per_minute`, `slo_total_per_minute` and `slo_objective`.
+  `ratio` takes series selectors, not expressions; vigil wraps them in
+  `sum(increase(...[1m]))`. A span `latency_below` must be a bucket bound.
+  Not built: `latency_below` for probes (the spec had it as optional),
+  the `slo_version` label on the series.
+- Server (`internal/server/slos.go`): tables `slos` and `slo_versions`
+  with a `tenant` column ("default"), `/api/v1/slos` (viewers read, admins
+  save and delete), a save is checked by running its queries in the
+  metric store and warns when there were no events in the last hour; an
+  identical document is not a new version. The groups run next to the
+  rule file (`applyRules`); a rule-file group of the same name wins.
+- `vigil apply` reads `DIR/slos/*.yaml`. A directory without profile files
+  no longer prunes profiles (it deleted all of the test host's when
+  applying a directory of SLOs only; restored from their versions).
+- **Aligned rule groups** (`rules.Group.Delay`, not in the file format):
+  found live, recording "the last minute" at `now` counted a minute two
+  or three times, because every save restarts the rules and a restarted
+  rule evaluates at once; and VictoriaMetrics hides its last 30 s. Such a
+  group now evaluates each whole interval once, at its end, `Delay` (90 s
+  for SLOs) after it ended, catches up to 30 missed intervals, and keeps
+  the last one in the alert-state table across restarts.
+  The same double counting hit `ai_cost_usd_per_minute` (server,
+  `gpu`, `ai_module_*`): fixed the same day by `alignPerMinute`
+  (`internal/server/integrations.go`), which aligns every group, the rule
+  file's included, whose interval is 1m and whose rules all record
+  `*_per_minute`; `TestCostGroupsAligned` fails if a cost group stops
+  qualifying. Verified on the Lima host with a rule-file group saved three
+  times: one sample per whole minute, sum equal to the raw data, while an
+  unaligned copy got two samples 15 s apart after each save. Not run
+  against real cost data (the capture setup needs the `vigil-test` Podman
+  machine). Spend recorded before this, on the trial too, can be too
+  high.
+- Verified on the Lima host against VictoriaMetrics v1.153: two probe
+  SLOs and one ratio SLO over real counters; the recorded sums equal the
+  raw data over the same minutes exactly (26/26 checks, 405,145 bytes),
+  one sample per minute through saves and a profile outage. A span SLO's
+  queries are accepted by the store, but no spans were sent: `vigil
+  tracegen` has no way to pass an OTLP token, and the test agent requires
+  one.
+- Next: step 2 of slo.md (burn-rate alerts, `min_events`, incidents of
+  kind `slo`).
 
 ## Next
 

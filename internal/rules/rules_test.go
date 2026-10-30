@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	commonmodel "github.com/prometheus/common/model"
+
 	"github.com/ijcodelabs/vigil/internal/alerting"
 	"github.com/ijcodelabs/vigil/internal/model"
 )
@@ -368,5 +370,49 @@ func TestEditedAndRemovedRules(t *testing.T) {
 	}
 	if ended != 1 || !firedAt().IsZero() {
 		t.Errorf("removing the rule sent %d resolved alerts, want 1", ended)
+	}
+}
+
+// An aligned group records every interval once, at its end, through
+// restarts of the rules, a store that does not answer and a new manager.
+func TestAlignedGroup(t *testing.T) {
+	be := newBackend()
+	be.set("count", Series{Labels: map[string]string{}, Value: 4})
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	f := &File{Groups: []Group{{Name: "slo:x", Interval: commonmodel.Duration(time.Second), Delay: 100 * time.Millisecond,
+		Rules: []Rule{{Record: "per_second", Expr: "count"}}}}}
+	m := NewManager(be, "", log)
+	if err := m.Apply(context.Background(), f); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(1500 * time.Millisecond)
+	m.Apply(context.Background(), f) // a restart of the rules, as any save does
+	time.Sleep(1200 * time.Millisecond)
+	be.mu.Lock()
+	be.queryErr = &QueryError{Msg: "store down"}
+	be.mu.Unlock()
+	time.Sleep(2200 * time.Millisecond)
+	be.mu.Lock()
+	be.queryErr = nil
+	be.mu.Unlock()
+	time.Sleep(1200 * time.Millisecond)
+	m.Stop()
+	m2 := NewManager(be, "", log) // a server restart
+	m2.Apply(context.Background(), f)
+	time.Sleep(1200 * time.Millisecond)
+	m2.Stop()
+
+	be.mu.Lock()
+	defer be.mu.Unlock()
+	if len(be.recorded) < 5 {
+		t.Fatalf("only %d intervals recorded", len(be.recorded))
+	}
+	for i, s := range be.recorded {
+		if s.TS%1000 != 0 {
+			t.Errorf("sample %d at %d ms: not at the end of a whole interval", i, s.TS)
+		}
+		if i > 0 && s.TS != be.recorded[i-1].TS+1000 {
+			t.Errorf("sample %d at %d follows %d: an interval was recorded twice or left out", i, s.TS, be.recorded[i-1].TS)
+		}
 	}
 }

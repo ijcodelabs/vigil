@@ -49,6 +49,11 @@ not commitments, and most are not started.
 - **SaaS as well, maybe** (raised 2026-10-25): many tenants, some with
   thousands of hosts, next to self-hosted. The foundations below are
   designed so that it stays possible.
+- **SLOs and error budgets** (picked 2026-10-30 as the first gap against
+  what other monitoring products show): SLOs as objects over probes, spans
+  and any counters, multi-window burn-rate alerts, SLA reports per month.
+  Step 1 (SLO objects and their per-minute counts) is built; the spec is
+  [slo.md](slo.md).
 
 ## Foundations: data pipeline, storage, modules, DORA (agreed 2026-10-25)
 

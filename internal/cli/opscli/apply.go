@@ -15,6 +15,7 @@ import (
 
 	"github.com/ijcodelabs/vigil/internal/fleet"
 	"github.com/ijcodelabs/vigil/internal/pki"
+	"github.com/ijcodelabs/vigil/internal/slo"
 )
 
 // Apply makes the server's profiles match a directory of profile files,
@@ -29,7 +30,8 @@ import (
 // profiles made on the server itself are never touched.
 //
 // Files in a `queries` directory directly under DIR hold saved queries for
-// Explore, shared with everyone; see applyQueries.
+// Explore, shared with everyone; see applyQueries. Files in a `slos`
+// directory hold service level objectives, one per file; see applySLOs.
 func Apply(args []string) error {
 	fs := flag.NewFlagSet("apply", flag.ExitOnError)
 	dir := fs.String("f", "", "directory of profile files (*.yaml, *.yml)")
@@ -67,7 +69,7 @@ func Apply(args []string) error {
 	}
 
 	failed := 0
-	intDir, queryDir := filepath.Join(*dir, "integrations"), filepath.Join(*dir, "queries")
+	intDir, queryDir, sloDir := filepath.Join(*dir, "integrations"), filepath.Join(*dir, "queries"), filepath.Join(*dir, "slos")
 	if entries, err := os.ReadDir(intDir); err == nil {
 		for _, e := range entries {
 			name, isYAML := strings.CutSuffix(e.Name(), ".yaml")
@@ -114,7 +116,7 @@ func Apply(args []string) error {
 	var want []local
 	seen := map[string]string{}
 	err = filepath.WalkDir(*dir, func(path string, d os.DirEntry, err error) error {
-		if err == nil && d.IsDir() && (path == intDir || path == queryDir) {
+		if err == nil && d.IsDir() && (path == intDir || path == queryDir || path == sloDir) {
 			return filepath.SkipDir
 		}
 		if err != nil || d.IsDir() || (!strings.HasSuffix(path, ".yaml") && !strings.HasSuffix(path, ".yml")) {
@@ -222,7 +224,12 @@ func Apply(args []string) error {
 		pending = retry
 	}
 
-	if *prune {
+	// A directory without a single profile file is one that keeps something
+	// else (only queries or SLOs); pruning would delete every file-managed
+	// profile, which is not what that apply means.
+	if *prune && len(want) == 0 {
+		fmt.Println("  no profile files: file-managed profiles are left alone, not pruned")
+	} else if *prune {
 		for _, h := range have {
 			if _, kept := seen[h.Name]; kept || h.Origin != "files" {
 				continue
@@ -240,6 +247,11 @@ func Apply(args []string) error {
 		}
 	}
 	n, err := applyQueries(call, strings.TrimRight(*server, "/")+"/api/v1/queries", queryDir, *dry, *prune)
+	if err != nil {
+		return err
+	}
+	failed += n
+	n, err = applySLOs(call, strings.TrimRight(*server, "/")+"/api/v1/slos", sloDir, *dry, *prune)
 	if err != nil {
 		return err
 	}
@@ -346,6 +358,104 @@ func applyQueries(call func(method, u, body string) (int, string, error), api, d
 			continue
 		}
 		if code, body, _ := call("DELETE", api+"/"+url.PathEscape(h.ID), ""); code != http.StatusNoContent {
+			fmt.Printf("  REFUSED    delete %s: %s\n", label, body)
+			failed++
+		} else {
+			fmt.Printf("  deleted    %s\n", label)
+		}
+	}
+	return failed, nil
+}
+
+// applySLOs makes the server's SLOs match the files in DIR/slos: one SLO
+// per file, named by its `name:` field or the file name. Unchanged ones
+// are left alone. With prune, SLOs that came from files before and are in
+// none now are deleted; those made on the server are never touched.
+// Without the directory nothing is done.
+func applySLOs(call func(method, u, body string) (int, string, error), api, dir string, dry, prune bool) (failed int, err error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return 0, nil
+	}
+	type local struct{ name, doc string }
+	var want []local
+	from := map[string]string{}
+	for _, e := range entries {
+		if e.IsDir() || (!strings.HasSuffix(e.Name(), ".yaml") && !strings.HasSuffix(e.Name(), ".yml")) {
+			continue
+		}
+		path := filepath.Join(dir, e.Name())
+		text, err := os.ReadFile(path)
+		if err != nil {
+			return 0, err
+		}
+		name := strings.TrimSuffix(strings.TrimSuffix(e.Name(), ".yaml"), ".yml")
+		yamlName(text, &name)
+		def, err := slo.Parse(name, string(text))
+		if err != nil {
+			return 0, fmt.Errorf("%s: %w", path, err)
+		}
+		if other, dup := from[def.Name]; dup {
+			return 0, fmt.Errorf("%s and %s both define SLO %s", other, path, def.Name)
+		}
+		from[def.Name] = path
+		want = append(want, local{def.Name, string(text)})
+	}
+	code, body, err := call("GET", api, "")
+	if err != nil {
+		return 0, err
+	}
+	if code != http.StatusOK {
+		return 0, fmt.Errorf("listing SLOs: HTTP %d: %s", code, body)
+	}
+	var have []struct{ Name, Origin string }
+	if err := json.Unmarshal([]byte(body), &have); err != nil {
+		return 0, err
+	}
+	for _, l := range want {
+		label := "slo " + l.name
+		u := api + "/" + url.PathEscape(l.name)
+		if code, body, _ := call("GET", u, ""); code == http.StatusOK {
+			var cur struct{ SLO struct{ Doc string } }
+			if json.Unmarshal([]byte(body), &cur) == nil && cur.SLO.Doc == l.doc {
+				fmt.Printf("  unchanged  %s\n", label)
+				continue
+			}
+		}
+		if dry {
+			fmt.Printf("  would save %s\n", label)
+			continue
+		}
+		code, body, err := call("PUT", u, l.doc)
+		switch {
+		case err != nil:
+			return failed, err
+		case code == http.StatusOK:
+			fmt.Printf("  saved      %s\n", label)
+			var res struct{ Warnings []string }
+			if json.Unmarshal([]byte(body), &res) == nil {
+				for _, w := range res.Warnings {
+					fmt.Printf("             note: %s\n", w)
+				}
+			}
+		default:
+			fmt.Printf("  REFUSED    %s: %s\n", label, body)
+			failed++
+		}
+	}
+	if !prune {
+		return failed, nil
+	}
+	for _, h := range have {
+		if _, kept := from[h.Name]; kept || h.Origin != "files" {
+			continue
+		}
+		label := "slo " + h.Name
+		if dry {
+			fmt.Printf("  would delete %s\n", label)
+			continue
+		}
+		if code, body, _ := call("DELETE", api+"/"+url.PathEscape(h.Name), ""); code != http.StatusNoContent {
 			fmt.Printf("  REFUSED    delete %s: %s\n", label, body)
 			failed++
 		} else {
