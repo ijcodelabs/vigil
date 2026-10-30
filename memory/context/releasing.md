@@ -1,7 +1,10 @@
 # Releasing
 
-How a version of vigil is made. Set up 2026-10-30; no release has been
-made with it yet.
+How a version of vigil is made. Set up 2026-10-30 and first used for
+`v0.1.0-rc.1` the same day: archives, checksums, attestations and the
+images all worked. The ghcr.io packages were public from their first push
+(they belong to the account that owns the public repository and are
+linked to it), so nothing has to be switched on there.
 
 ## The rules
 
@@ -76,8 +79,6 @@ is never replaced; the fix becomes the next patch release.
 - On GitHub: a tag ruleset so that only the owner can create `v*` tags,
   and immutable releases, so a published version cannot be changed. Both
   are repository settings.
-- The ghcr.io packages are private when first pushed; make each public
-  once after the first release.
 - The Kubernetes manifests in `deploy/` still name `vigil-agent:dev`; point
   them at the released images once the first one exists.
 - Packages (`.deb`, `.rpm`) only if someone needs them; `nfpm` would add

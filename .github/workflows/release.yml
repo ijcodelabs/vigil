@@ -84,7 +84,7 @@ jobs:
       # One signature over the checksums covers every archive in them.
       - name: Sign the checksums
         run: cosign sign-blob --yes --bundle dist/SHA256SUMS.sigstore.json dist/SHA256SUMS
-      - uses: actions/attest-build-provenance@v2
+      - uses: actions/attest-build-provenance@v4
         with:
           subject-path: dist/*.tar.gz
       - name: Draft release
@@ -141,17 +141,17 @@ jobs:
             echo "$part=$digest" >> "$GITHUB_OUTPUT"
           done
         id: build
-      - uses: actions/attest-build-provenance@v2
+      - uses: actions/attest-build-provenance@v4
         with:
           subject-name: ghcr.io/${{ github.repository_owner }}/vigil-agent
           subject-digest: ${{ steps.build.outputs.agent }}
           push-to-registry: true
-      - uses: actions/attest-build-provenance@v2
+      - uses: actions/attest-build-provenance@v4
         with:
           subject-name: ghcr.io/${{ github.repository_owner }}/vigil-server
           subject-digest: ${{ steps.build.outputs.server }}
           push-to-registry: true
-      - uses: actions/attest-build-provenance@v2
+      - uses: actions/attest-build-provenance@v4
         with:
           subject-name: ghcr.io/${{ github.repository_owner }}/vigil-relay
           subject-digest: ${{ steps.build.outputs.relay }}
