@@ -8,9 +8,53 @@ Having an AI assistant do it? Give it [Install with an AI
 assistant](install-by-ai.md): the same steps written as a runbook, with the
 questions to ask first and a check after every stage.
 
+## Download a release
+
+Each release on [GitHub](https://github.com/ijcodelabs/vigil/releases) has
+an archive per binary and architecture (the binary, the licence, the
+README and its systemd unit), `SHA256SUMS`, and a signature of the
+checksums. What changed and what to do when upgrading is in its notes and
+in [CHANGELOG.md](https://github.com/ijcodelabs/vigil/blob/main/CHANGELOG.md).
+
+```bash
+v=0.1.0
+base=https://github.com/ijcodelabs/vigil/releases/download/v$v
+curl -fLO $base/vigil-agent-$v-linux-amd64.tar.gz
+curl -fL -O $base/SHA256SUMS -O $base/SHA256SUMS.sigstore.json
+```
+
+Check that the files are the ones the release workflow built. With
+[cosign](https://docs.sigstore.dev/cosign/system_config/installation/):
+
+```bash
+cosign verify-blob SHA256SUMS --bundle SHA256SUMS.sigstore.json \
+  --certificate-identity "https://github.com/ijcodelabs/vigil/.github/workflows/release.yml@refs/tags/v$v" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+sha256sum --ignore-missing -c SHA256SUMS
+```
+
+or with the GitHub CLI, per archive: `gh attestation verify
+vigil-agent-$v-linux-amd64.tar.gz -R ijcodelabs/vigil`. Then unpack and
+install the binary:
+
+```bash
+tar xzf vigil-agent-$v-linux-amd64.tar.gz
+install -m 755 vigil-agent-$v-linux-amd64/vigil-agent /usr/local/bin/
+```
+
+Container images are `ghcr.io/ijcodelabs/vigil-agent`, `vigil-server` and
+`vigil-relay`, tagged with the version (`0.1.0`) and its minor (`0.1`),
+for linux/amd64 and linux/arm64, signed the same way:
+
+```bash
+cosign verify ghcr.io/ijcodelabs/vigil-agent:$v \
+  --certificate-identity "https://github.com/ijcodelabs/vigil/.github/workflows/release.yml@refs/tags/v$v" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
 ## Build
 
-Go 1.26 or newer is the only requirement.
+To build from source instead, Go 1.26 or newer is the only requirement.
 
 ```bash
 make build      # bin/vigil-agent, bin/vigil-server, bin/vigil-relay, bin/vigil for this machine
@@ -381,6 +425,11 @@ Data becomes visible to queries about 30 seconds after it was sent.
 Replace the binary and restart. The server's state is in `data_dir`; an
 agent's unsent data and its place in each log file are in its `spool_dir`,
 so nothing is lost or sent twice across a restart.
+
+Read the release's upgrade notes first. A server accepts agents of its own
+minor version and of the one before (a 0.3 server takes 0.2 and 0.3
+agents), so upgrade the server first and the agents after, one minor
+version at a time.
 
 ### From `vigil` to the separate binaries
 

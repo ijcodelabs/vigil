@@ -1,0 +1,158 @@
+name: Release
+
+# Pushing a tag vX.Y.Z (or vX.Y.Z-rc.N) builds the archives and makes a
+# draft GitHub release from them, with the tag's CHANGELOG.md section as its
+# text. Nothing is public until a person publishes the draft; publishing it
+# builds and pushes the container images. Signing is keyless (Sigstore,
+# through the workflow's own identity), so no key is stored anywhere.
+
+on:
+  push:
+    tags: ['v*']
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      # A release is a commit of main, or of a release/X.Y branch for a
+      # patch release; never of a feature branch.
+      - name: Tag
+        run: |
+          tag=$GITHUB_REF_NAME
+          if ! echo "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$'; then
+            echo "::error::$tag is not vX.Y.Z or vX.Y.Z-rc.N"; exit 1
+          fi
+          git fetch -q origin '+refs/heads/main:refs/remotes/origin/main' '+refs/heads/release/*:refs/remotes/origin/release/*'
+          for b in $(git for-each-ref --format='%(refname)' refs/remotes/origin/main 'refs/remotes/origin/release/*'); do
+            if git merge-base --is-ancestor "$GITHUB_SHA" "$b"; then echo "$tag is on ${b#refs/remotes/origin/}"; exit 0; fi
+          done
+          echo "::error::$tag is not on main or a release/* branch"; exit 1
+      - name: Release notes
+        run: scripts/release-notes.sh "$GITHUB_REF_NAME"
+      - name: gofmt
+        run: |
+          out=$(gofmt -l .)
+          if [ -n "$out" ]; then echo "not formatted:"; echo "$out"; exit 1; fi
+      - name: go vet
+        run: go vet ./...
+      - name: Test
+        run: make test
+      - name: Size budgets
+        run: make size VERSION="$GITHUB_REF_NAME"
+      - name: gitleaks
+        run: |
+          docker run --rm -v "$PWD:/repo:ro" \
+            -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e 'GIT_CONFIG_VALUE_0=*' \
+            ghcr.io/gitleaks/gitleaks:v8.21.2 detect --source /repo --redact --no-banner
+
+  draft:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write      # create the draft release
+      id-token: write      # keyless signing and attestations
+      attestations: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Build
+        run: make release VERSION="$GITHUB_REF_NAME"
+      - uses: sigstore/cosign-installer@v3
+      # One signature over the checksums covers every archive in them.
+      - name: Sign the checksums
+        run: cosign sign-blob --yes --bundle dist/SHA256SUMS.sigstore.json dist/SHA256SUMS
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/*.tar.gz
+      - name: Draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          scripts/release-notes.sh "$GITHUB_REF_NAME" > notes.md
+          pre=
+          case $GITHUB_REF_NAME in *-*) pre=--prerelease ;; esac
+          gh release create "$GITHUB_REF_NAME" --draft --verify-tag $pre \
+            --title "vigil $GITHUB_REF_NAME" --notes-file notes.md \
+            dist/*.tar.gz dist/SHA256SUMS dist/SHA256SUMS.sigstore.json
+
+  images:
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write      # push to ghcr.io
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - uses: sigstore/cosign-installer@v3
+      # vigil-agent:0.2.0 and :0.2; a release candidate gets only its own
+      # tag. No `latest`: a deployment should say which version it runs.
+      - name: Build, push, sign
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+          REPO: ghcr.io/${{ github.repository_owner }}
+        run: |
+          v=${TAG#v}
+          for part in agent server relay; do
+            image=$REPO/vigil-$part
+            tags="-t $image:$v"
+            case $v in *-*) ;; *) tags="$tags -t $image:${v%.*}" ;; esac
+            docker buildx build --platform linux/amd64,linux/arm64 --target "$part" \
+              --build-arg VERSION="$TAG" $tags --push \
+              --label org.opencontainers.image.source="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+              --label org.opencontainers.image.version="$TAG" \
+              --label org.opencontainers.image.revision="$GITHUB_SHA" \
+              --metadata-file "meta-$part.json" .
+            digest=$(jq -r '."containerimage.digest"' "meta-$part.json")
+            cosign sign --yes "$image@$digest"
+            echo "$part=$digest" >> "$GITHUB_OUTPUT"
+          done
+        id: build
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ghcr.io/${{ github.repository_owner }}/vigil-agent
+          subject-digest: ${{ steps.build.outputs.agent }}
+          push-to-registry: true
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ghcr.io/${{ github.repository_owner }}/vigil-server
+          subject-digest: ${{ steps.build.outputs.server }}
+          push-to-registry: true
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ghcr.io/${{ github.repository_owner }}/vigil-relay
+          subject-digest: ${{ steps.build.outputs.relay }}
+          push-to-registry: true
