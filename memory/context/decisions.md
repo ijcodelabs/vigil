@@ -72,6 +72,20 @@ rather than a viewer account: a tool should not be able to do what a
 person signed in as a viewer can (save queries, change a password). The
 query APIs take POST, so "read-only" is decided per route, not by method.
 
+**SLOs count minutes, once each, a little late.** Each SLO records good
+and total events per minute, and every figure (ratio, budget, burn rate,
+report) is a sum over those minutes. Sums stay right when the series
+under them churn and add up across agents and regions, where averaged
+ratios do not. Each minute is evaluated once at its own timestamp, 90 s
+after it ends (`rules.Group.Delay`): recording "the last minute" at `now`
+counted minutes twice whenever the rules restarted, and missed the
+store's hidden last 30 s. Which groups get this is decided by what they
+record, not by a flag: interval 1m and only `*_per_minute` metrics (SLO
+counts, AI costs, the user's own cost rules), so a new integration cannot
+forget it. SLOs are their own documents with versions, not
+part of the rule file, because one SLO is several rules that must change
+together.
+
 **A stopped container alerts only with a non-zero exit code.** Exit 0 is a
 job that finished; a removed container is gone on purpose. A container
 stopped by hand usually ends with 137 or 143 and does alert, which was

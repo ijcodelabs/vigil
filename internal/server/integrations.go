@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"slices"
 	"sort"
+	"strings"
+	"time"
 
 	"github.com/ijcodelabs/vigil/internal/fleet"
 	"github.com/ijcodelabs/vigil/internal/rules"
@@ -136,8 +138,37 @@ func (s *Server) applyRules(ctx context.Context) error {
 			}
 		}
 	}
+	for _, g := range s.sloRuleGroups() {
+		if taken[g.Name] {
+			s.log.Warn("SLO rule group skipped: the rule file has a group of the same name", "group", g.Name)
+			continue
+		}
+		file.Groups = append(file.Groups, g)
+	}
+	for i := range file.Groups {
+		alignPerMinute(&file.Groups[i])
+	}
 	s.rulesStarted.Store(true)
 	return s.rules.Apply(ctx, file)
+}
+
+// alignPerMinute makes a group that only records per-minute amounts
+// (`*_per_minute`: AI costs, SLO counts) count each minute once, at its
+// end and a little late (rules.Group.Delay). Evaluated at "now", such a
+// group recorded a minute again whenever the rules restarted, which every
+// save of a rule file, profile or integration does, and the sums came out
+// too high. The same for the rule file's groups: a group of its own for
+// ai_cost_usd_per_minute is what docs/finops.md asks for.
+func alignPerMinute(g *rules.Group) {
+	if g.Delay > 0 || g.Type == rules.TypeLogs || len(g.Rules) == 0 || time.Duration(g.Interval) != time.Minute {
+		return
+	}
+	for _, r := range g.Rules {
+		if r.Record == "" || !strings.HasSuffix(r.Record, "_per_minute") {
+			return
+		}
+	}
+	g.Delay = rules.AlignDelay
 }
 
 func (s *Server) integrationRoutes(mux *http.ServeMux) {

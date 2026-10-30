@@ -37,6 +37,10 @@ holds.
   Boop integration. Secrets are masked on the host before they leave it.
 - **Alerting:** Prometheus-format rules on metrics and logs, the essential
   ones built in, Alertmanager inside for routing, contacts and silences.
+- **Service level objectives:** over site checks, spans or any counters,
+  counted once a minute into `slo_good_per_minute` and
+  `slo_total_per_minute`; saved through the API or `vigil apply` (a
+  `slos` directory). Burn-rate alerts and an SLOs page come next.
 - **AI and costs:** Claude Code telemetry, sessions and an audit hook;
   language-model calls counted and priced from OpenTelemetry spans; GPU
   costs; one cost metric for all of it.

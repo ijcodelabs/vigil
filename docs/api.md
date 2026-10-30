@@ -74,6 +74,18 @@ API) and `GET` `POST /api/v1/traces/query` (LogsQL over spans); see
 curl -X PUT -H "Authorization: Bearer $T" --data-binary @rules.yaml https://vigil/api/v1/rules/config
 ```
 
+## Service level objectives
+
+| | |
+|---|---|
+| `GET /api/v1/slos` | every SLO: the parsed document, its kind, version, origin and author |
+| `GET /api/v1/slos/{name}` | one SLO with its document (`doc`) and the rule group made of it |
+| `PUT /api/v1/slos/{name}` | save one (YAML body); admin only. Refused (400) if it does not parse or the metric store refuses its queries; the answer has `version`, `changed` (false for an identical document) and `warnings` |
+| `DELETE /api/v1/slos/{name}` | delete one; admin only. Its recorded series stay until the store's retention ends |
+| `GET /api/v1/slos/{name}/versions`, `…/versions/{n}` | history |
+
+See [Service level objectives](slo.md).
+
 ## Fleet
 
 | | |

@@ -19,6 +19,10 @@
 # summed minute by minute that matches increase() over the whole range,
 # where rate()[5m] counted series that live only a few minutes up to twice
 # (tried on the trial against Claude Code's cost counter).
+#
+# The server counts this group once per whole minute, 90 seconds late
+# (alignPerMinute): evaluated at "now", every restart of the rules counted
+# a minute again.
 groups:
   - name: ai_costs
     interval: 1m

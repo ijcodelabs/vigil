@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/ijcodelabs/vigil/internal/config"
+	"github.com/ijcodelabs/vigil/internal/fleet"
+	"github.com/ijcodelabs/vigil/internal/rules"
 	"github.com/prometheus/common/model"
 )
 
@@ -46,5 +48,53 @@ func TestCostRuleGroups(t *testing.T) {
 	}
 	if own := groups[0].Rules[1]; own.Labels["source"] != "vigil" || !strings.Contains(own.Expr, "vigil_ai_cost_total") {
 		t.Errorf("vigil's own: %+v", own)
+	}
+}
+
+// Every group that writes ai_cost_usd_per_minute counts its minutes once:
+// the server's own and those of the integrations. A group that would not
+// be aligned (an alert added to it, another interval) fails here.
+func TestCostGroupsAligned(t *testing.T) {
+	groups := costRuleGroups()
+	cat, err := fleet.Builtin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range cat.Names() {
+		gs, err := cat[name].RuleGroups(map[string]string{})
+		if err != nil {
+			continue // needs parameters this test does not give; none of those record costs
+		}
+		groups = append(groups, gs...)
+	}
+	found := 0
+	for i := range groups {
+		g := &groups[i]
+		costs := false
+		for _, r := range g.Rules {
+			costs = costs || r.Record == "ai_cost_usd_per_minute"
+		}
+		alignPerMinute(g)
+		if costs {
+			found++
+			if g.Delay != rules.AlignDelay {
+				t.Errorf("group %s records AI costs but is not aligned", g.Name)
+			}
+		}
+	}
+	if found < 3 {
+		t.Errorf("found %d groups recording AI costs, want the server's, gpu's and ai_module_claude's", found)
+	}
+
+	// Not aligned: a group with an alert, another interval, another kind of metric.
+	for _, g := range []rules.Group{
+		{Name: "a", Interval: model.Duration(time.Minute), Rules: []rules.Rule{{Record: "x_per_minute", Expr: "1"}, {Alert: "A", Expr: "1"}}},
+		{Name: "b", Interval: model.Duration(30 * time.Second), Rules: []rules.Rule{{Record: "x_per_minute", Expr: "1"}}},
+		{Name: "c", Interval: model.Duration(time.Minute), Rules: []rules.Rule{{Record: "x_total", Expr: "1"}}},
+	} {
+		alignPerMinute(&g)
+		if g.Delay != 0 {
+			t.Errorf("group %s was aligned", g.Name)
+		}
 	}
 }

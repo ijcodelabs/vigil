@@ -85,6 +85,14 @@ func OpenStore(dataDir string) (*Store, error) {
 		`CREATE TABLE IF NOT EXISTS api_tokens (id TEXT PRIMARY KEY, name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE,
 			expires INTEGER NOT NULL, author TEXT NOT NULL, created INTEGER NOT NULL, last_used INTEGER NOT NULL DEFAULT 0)`,
 		`CREATE TABLE IF NOT EXISTS agent_reports (agent_id TEXT PRIMARY KEY, config_hash TEXT NOT NULL, config_error TEXT NOT NULL, at INTEGER NOT NULL)`,
+		// Service level objectives, one YAML document each, with every
+		// earlier version. Tenant-qualified from the start (direction.md,
+		// Foundations); one tenant, "default", until there are more.
+		`CREATE TABLE IF NOT EXISTS slos (tenant TEXT NOT NULL, name TEXT NOT NULL, doc TEXT NOT NULL, version INTEGER NOT NULL,
+			origin TEXT NOT NULL, author TEXT NOT NULL, updated INTEGER NOT NULL, PRIMARY KEY (tenant, name))`,
+		`CREATE TABLE IF NOT EXISTS slo_versions (tenant TEXT NOT NULL, name TEXT NOT NULL, version INTEGER NOT NULL, doc TEXT NOT NULL,
+			origin TEXT NOT NULL, author TEXT NOT NULL, time INTEGER NOT NULL, deleted INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY (tenant, name, version))`,
 	} {
 		if err == nil {
 			_, err = db.Exec(ddl)

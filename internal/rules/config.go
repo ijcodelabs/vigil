@@ -15,6 +15,11 @@ import (
 )
 
 const (
+	// AlignDelay is the Delay for groups recording per-minute amounts: the
+	// metric store hides its last 30 seconds, and agents push every 15
+	// seconds or so.
+	AlignDelay = 90 * time.Second
+
 	TypeMetrics     = "metrics"
 	TypeLogs        = "logs"
 	defaultInterval = time.Minute
@@ -30,6 +35,11 @@ type Group struct {
 	Interval model.Duration    `yaml:"interval"`
 	Labels   map[string]string `yaml:"labels"`
 	Rules    []Rule            `yaml:"rules"`
+	// Delay, set by the server for the groups it generates (SLOs), makes
+	// the group record whole intervals: each one once, at its end, Delay
+	// after it ended, so late samples are in and a restart does not record
+	// an interval twice. Meant for recording rules. Not in the file format.
+	Delay time.Duration `yaml:"-" json:"-"`
 }
 
 type Rule struct {

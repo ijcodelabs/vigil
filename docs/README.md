@@ -46,6 +46,7 @@ events and dashboards. It is a few static Go binaries: the **agent**
 | see at a glance what needs attention | [Home](home.md) |
 | keep the AI key in your OpenBao or Vault | [Secrets](secrets.md) |
 | be told when something is wrong | [Alerts](alerts.md) |
+| set and track objectives: availability, latency, error budgets | [Service level objectives](slo.md) |
 | see what processes do, and catch intrusions | [Runtime events](security.md) |
 | know what a metric means | [Metric reference](metrics.md) |
 | script against it | [API](api.md) |
@@ -63,6 +64,8 @@ events and dashboards. It is a few static Go binaries: the **agent**
   saying which agents it applies to.
 - **Integration**: everything needed to monitor one technology (nginx,
   PostgreSQL, Kubernetes, …): what to collect, alert rules, a dashboard.
+- **SLO**: a service level objective, the share of events that has to be
+  good over a window; what is left to lose is the error budget.
 - **Incident**: one thing that is wrong, made from a firing alert, with a
   history (opened, acknowledged, resolved, reopened).
 - **Detection**: a security rule that matched something a process did.

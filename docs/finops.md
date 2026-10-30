@@ -130,6 +130,13 @@ groups:
 Counters go in as `increase(...[1m])`, not as a rate: added up minute by
 minute that matches the counter's increase over the whole range.
 
+A group whose interval is one minute and whose rules all record metrics
+named `*_per_minute` is counted once per minute, 90 seconds after the
+minute ends, with the minute's end as its time. Saving the rules or
+restarting the server then never counts a minute twice, and up to 30
+minutes the server missed are counted late. Keep anything else (alerts,
+other recordings) in another group.
+
 ## The AI costs dashboard
 
 Comes with the server. At the top, all AI together: what is billed in the
