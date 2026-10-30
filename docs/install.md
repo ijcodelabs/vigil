@@ -13,8 +13,8 @@ questions to ask first and a check after every stage.
 Each release on [GitHub](https://github.com/ijcodelabs/vigil/releases) has
 an archive per binary and architecture (the binary, the licence, the
 README and its systemd unit), `SHA256SUMS`, and a signature of the
-checksums. What changed and what to do when upgrading is in its notes and
-in [CHANGELOG.md](https://github.com/ijcodelabs/vigil/blob/main/CHANGELOG.md).
+checksums. What changed and what to do when upgrading is in its notes,
+which are also collected in `CHANGELOG.md` at the top of the repository.
 
 ```bash
 v=0.1.0
