@@ -54,6 +54,10 @@ large fleets. Expect rough edges, and please say what you find.
   happened. vigil picks and masks the evidence, every claim in the answer
   cites it, a monthly budget is required, and nothing is sent until you set
   it up. [Home](docs/home.md)
+- **Views from a prompt**: ask on the Home page for what you want to see;
+  the model writes a dashboard, vigil runs its queries before drawing it,
+  you change it in words, and Save keeps it as an ordinary dashboard.
+  [Home](docs/home.md#views-from-a-prompt)
 
 ### Collecting
 

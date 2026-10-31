@@ -140,6 +140,19 @@ func initExplanations(db *sql.DB) error {
 	if err == nil {
 		_, err = db.Exec(`CREATE INDEX IF NOT EXISTS explanations_subject ON explanations (subject)`)
 	}
+	// call is the explanation's row in ai_calls (aicalls.go). Added later;
+	// older explanations get theirs from the backfill.
+	if err == nil {
+		if _, aerr := db.Exec(`ALTER TABLE explanations ADD COLUMN call INTEGER NOT NULL DEFAULT 0`); aerr != nil && !strings.Contains(aerr.Error(), "duplicate column") {
+			err = aerr
+		}
+	}
+	if err == nil {
+		err = initAICalls(db)
+	}
+	if err == nil {
+		err = backfillAICalls(db)
+	}
 	return err
 }
 
@@ -178,8 +191,7 @@ func (s *Server) aiState(ctx context.Context) (aiState, error) {
 		return st, err
 	}
 	st.Paused = paused == "true"
-	err = s.store.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(cost), 0) FROM explanations WHERE created >= ?`,
-		monthStart(time.Now()).Unix()).Scan(&st.Spent)
+	st.Spent, err = s.aiSpentSince(ctx, monthStart(time.Now()))
 	return st, err
 }
 
@@ -204,7 +216,7 @@ func (s *Server) handleAIPause(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	s.log.Info("AI explanations "+map[bool]string{true: "paused", false: "resumed"}[in.Paused], "by", caller(r).User)
+	s.log.Info("AI "+map[bool]string{true: "paused", false: "resumed"}[in.Paused], "by", caller(r).User)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -268,14 +280,17 @@ func (s *Server) handleExplain(w http.ResponseWriter, r *http.Request) {
 // the explanation, failed or not: what was sent is on record either way.
 // The error is only that storing failed; a failed call is in ex.Error.
 func (s *Server) explain(ctx context.Context, ex Explanation, b bundle, req ai.Request) (Explanation, error) {
-	ex.Created, ex.Provider, ex.Model, ex.BundleHash, ex.Evidence = time.Now().UTC(), s.ai.Name(), s.ai.Model(), b.Hash, b.Items
-	res, err := s.ai.Complete(ctx, req)
-	ex.Usage, ex.LatencyMS = res.Usage, res.Latency.Milliseconds()
-	if res.Model != "" {
-		ex.Model = res.Model
+	subject := ex.Subject
+	if subject == "" {
+		subject = "incident:" + strconv.FormatInt(ex.Incident, 10)
 	}
-	ex.Cost = s.tokenCost(ex.Model, res.Usage)
-	if err == nil {
+	c, res, err := s.callAI(ctx, aiCall{User: ex.User, Tool: "explain", Subject: subject, Prompt: ex.Prompt}, req)
+	if err != nil {
+		return ex, err
+	}
+	ex.Created, ex.Provider, ex.Model, ex.BundleHash, ex.Evidence = c.Created, c.Provider, c.Model, b.Hash, b.Items
+	ex.Usage, ex.Cost, ex.LatencyMS = c.Usage, c.Cost, c.LatencyMS
+	if c.Error == "" {
 		var a Answer
 		if err = json.Unmarshal(res.JSON, &a); err != nil {
 			err = fmt.Errorf("the answer is not in the expected shape: %w", err)
@@ -283,31 +298,14 @@ func (s *Server) explain(ctx context.Context, ex Explanation, b bundle, req ai.R
 			a.check(b.Items)
 			ex.Answer = &a
 		}
+		if err != nil {
+			ex.Error = err.Error()
+		}
+	} else {
+		ex.Error = c.Error
 	}
-	if err != nil {
-		ex.Error = err.Error()
-	}
-	ex.ID, err = s.saveExplanation(ctx, ex)
+	ex.ID, err = s.saveExplanation(ctx, ex, c.ID)
 	return ex, err
-}
-
-// aiReady answers the request itself when no explanation may be made now:
-// no provider, paused, or the month's budget used up.
-func (s *Server) aiReady(w http.ResponseWriter, ctx context.Context) bool {
-	st, err := s.aiState(ctx)
-	switch {
-	case err != nil:
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	case !st.Enabled:
-		http.Error(w, "no AI provider is set up on this server (ai in the server config)", http.StatusConflict)
-	case st.Paused:
-		http.Error(w, "AI explanations are paused", http.StatusConflict)
-	case st.Spent >= st.Budget:
-		http.Error(w, fmt.Sprintf("this month's AI budget (%.2f) is used up (%.2f spent)", st.Budget, st.Spent), http.StatusConflict)
-	default:
-		return true
-	}
-	return false
 }
 
 func explainQuestion(in incidents.Incident, b bundle) string {
@@ -331,14 +329,14 @@ func (s *Server) tokenCost(model string, u ai.Usage) float64 {
 	return (float64(u.Input)*p.Input + float64(u.Output)*p.Output + float64(u.CacheRead)*p.CacheRead + float64(u.CacheWrite)*p.CacheWrite) / 1e6
 }
 
-func (s *Server) saveExplanation(ctx context.Context, ex Explanation) (int64, error) {
+func (s *Server) saveExplanation(ctx context.Context, ex Explanation, call int64) (int64, error) {
 	evidence, _ := json.Marshal(ex.Evidence)
 	answer, _ := json.Marshal(ex.Answer)
 	usage, _ := json.Marshal(ex.Usage)
 	res, err := s.store.db.ExecContext(ctx, `INSERT INTO explanations (incident, subject, created, user, provider, model, prompt, bundle_hash,
-		evidence, answer, error, usage, cost, latency_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		evidence, answer, error, usage, cost, latency_ms, call) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		ex.Incident, ex.Subject, ex.Created.Unix(), ex.User, ex.Provider, ex.Model, ex.Prompt, ex.BundleHash, string(evidence), string(answer),
-		ex.Error, string(usage), ex.Cost, ex.LatencyMS)
+		ex.Error, string(usage), ex.Cost, ex.LatencyMS, call)
 	if err != nil {
 		return 0, err
 	}
@@ -422,25 +420,4 @@ func (s *Server) handleVerdict(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
-}
-
-// aiSpendTotal is what explanations cost so far, by model, for the cost metric.
-func (s *Server) aiSpendTotal(ctx context.Context) (map[string]float64, error) {
-	rows, err := s.store.db.QueryContext(ctx, `SELECT model, SUM(cost) FROM explanations GROUP BY model`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := map[string]float64{}
-	for rows.Next() {
-		var (
-			m string
-			c float64
-		)
-		if err := rows.Scan(&m, &c); err != nil {
-			return nil, err
-		}
-		out[m] = c
-	}
-	return out, rows.Err()
 }

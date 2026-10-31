@@ -6,7 +6,7 @@ import { MapView } from './map.js';
 const UNITS = [['', 'plain number'], ['percent', 'percent (0–100)'], ['ratio', 'ratio (0–1 shown as %)'], ['bytes', 'bytes'],
   ['bytes/s', 'bytes per second'], ['seconds', 'seconds'], ['ms', 'milliseconds'], ['cores', 'CPU cores'], ['ops/s', 'per second'], ['yesno', 'yes / no (1 / 0)']];
 const TYPES = [['timeseries', 'Lines over time'], ['stat', 'Single number'], ['table', 'Table'], ['logs', 'Log lines']];
-const ROW = 84; // pixels per unit of panel height
+export const ROW = 84; // pixels per unit of panel height
 
 export function Dashboards({ route, admin }) {
   return route.parts[1]
@@ -281,7 +281,7 @@ async function run(panel, from, to, variables, values, width) {
   return { values: rows };
 }
 
-function PanelBody({ panel, admin, from, to, tick, variables, values, height, onZoom }) {
+export function PanelBody({ panel, admin, from, to, tick, variables, values, height, onZoom }) {
   const box = useRef(null);
   const [state, setState] = useState({ data: null, error: null });
   // Maps are for admins in this version: they show the whole layout of

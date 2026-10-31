@@ -106,16 +106,62 @@ refuses until the next month. The key is read from its file on every
 call, so a new key needs no restart (or, without `api_key_file`, from
 your OpenBao or Vault: see [Secrets](secrets.md)), and nothing in the server's
 environment (`ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, credential
-profiles) is used. An admin can **Pause** explanations on the Home page;
-nothing is sent while paused. What explanations cost also appears in
+profiles) is used. An admin can **Pause** AI on the Home page; nothing is
+sent while paused, from any part of vigil. The budget counts every call
+vigil makes to the model, failed ones too (they can use tokens). What the
+calls cost also appears in
 [AI costs](finops.md) as the source `vigil`.
 
 Give vigil a key of its own, in a workspace with its own spending limit
 at the provider, so a leaked key cannot run up a bill beyond that limit.
 
+## Views from a prompt
+
+With a language model set up, admins see a field on the Home page: say
+what you want to look at ("load per host and the 500s in the logs of
+web-1") and **Build view**. The model writes a dashboard, vigil draws it
+here over the last hour, and you change it with more requests ("only the
+load, per host", "drop the logs panel") until it is right. **Save as
+dashboard** makes it an ordinary dashboard in the list, which anyone can
+open and admins can edit; opening it again asks no model.
+
+What keeps it honest:
+
+- The model answers in vigil's own dashboard format and only part of it:
+  at most 8 panels of the kinds lines, single number, table and log lines,
+  at most 3 queries each and 16 in all, no variables, no maps, range
+  selectors up to a day. Anything else is refused; the draft stays as it
+  was and the refusal is shown, and told to the model on the next request.
+- vigil runs every query once over the last hour, each with 5 seconds to
+  answer, before drawing it. A panel whose query fails, is too slow or
+  returns more than 500 series is marked instead of drawn. **No data** is
+  not a failure: a quiet service has none. **Save** runs the queries again
+  and refuses while one fails. Whether a query that runs answers your
+  question, only you can tell: **queries** under each panel shows them.
+- A host you name is looked up by vigil among its agents (the exact name,
+  in any case). The model gets a reference to it, not a list of hosts, and
+  vigil writes the name into the query itself, so the model cannot widen
+  it to other hosts. A name vigil does not know is not looked up further;
+  the model asks you instead.
+- **What is sent** shows it: your words, the hosts recognised in them, the
+  draft, your earlier requests in it and how its queries did, plus a
+  catalog that is the same for everyone (vigil's metric reference, its
+  query primers, and the queries of the dashboards that come with vigil and
+  its built-in integrations; about 30 KB, cached by the provider). No
+  metric values, log lines or lists of hosts.
+- Every request counts against the monthly budget, Pause stops it, and
+  its cost appears in [AI costs](finops.md) with `tool="view"`. One
+  request at a time per admin; **Cancel** stops waiting (what the model
+  already used is still counted).
+
+A draft belongs to the admin who made it and is removed after a day
+without changes, or when it is saved or discarded. What each request sent
+and got back, and where it was saved, is kept for 30 days.
+
 ## Not here yet
 
-Explanations made on their own when an incident starts, memory and other
+Views with variables or maps, views that answer from data ("summarise
+these errors"), explanations made on their own when an incident starts, memory and other
 trends, grading of security findings, other model providers, and the same
 summary as a message to Telegram or Slack. See
 `memory/context/direction.md` in the repository for the plan.

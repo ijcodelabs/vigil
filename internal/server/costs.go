@@ -88,14 +88,21 @@ func (s *Server) priceSamples(ctx context.Context, now time.Time) ([]model.Sampl
 			}
 		}
 	}
-	// What vigil's own explanations cost so far, for the cost metric.
+	// What vigil's own AI calls cost so far, for the cost metric. Explain's
+	// series keeps the labels it had before there were other tools, so its
+	// counter continues instead of starting again as a new series; the cost
+	// rule gives it tool="explain".
 	if s.ai != nil {
 		spent, err := s.aiSpendTotal(ctx)
 		if err != nil {
 			return nil, err
 		}
-		for m, usd := range spent {
-			out = append(out, model.Sample{Name: "vigil_ai_cost_total", Labels: map[string]string{"model": m}, Value: usd, TS: ts})
+		for k, usd := range spent {
+			labels := map[string]string{"model": k[1]}
+			if k[0] != "explain" {
+				labels["tool"] = k[0]
+			}
+			out = append(out, model.Sample{Name: "vigil_ai_cost_total", Labels: labels, Value: usd, TS: ts})
 		}
 	}
 	if len(costs.GPUHours) > 0 {

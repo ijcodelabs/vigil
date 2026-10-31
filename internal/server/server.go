@@ -103,7 +103,8 @@ type Server struct {
 	comingState   atomic.Pointer[comingState] // forecasts.go
 	spendState    atomic.Pointer[Spend]
 	// ai explains incidents (explain.go); nil when no provider is set up.
-	ai ai.Provider
+	ai    ai.Provider
+	views viewState // views.go: turns in flight
 }
 
 func New(cfg *config.Server, log *slog.Logger) (*Server, error) {
@@ -131,6 +132,9 @@ func New(cfg *config.Server, log *slog.Logger) (*Server, error) {
 	tracker, err := incidents.New(st.db)
 	if err == nil {
 		err = initExplanations(st.db)
+	}
+	if err == nil {
+		err = initViews(st.db)
 	}
 	if err != nil {
 		st.Close()
@@ -208,6 +212,7 @@ func (s *Server) Handler() http.Handler {
 	s.fleetRoutes(mux)
 	s.briefingRoutes(mux)
 	s.explainRoutes(mux)
+	s.viewRoutes(mux)
 	s.logLineRoutes(mux)
 	s.secretRoutes(mux)
 
