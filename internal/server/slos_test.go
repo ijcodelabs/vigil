@@ -69,9 +69,15 @@ func TestSLOs(t *testing.T) {
 	if !strings.Contains(body, `slo_good_per_minute`) || !strings.Contains(body, `vector(0.999)`) || !strings.Contains(body, `"doc":"objective: 99.9`) {
 		t.Errorf("one SLO: %s", body)
 	}
-	if _, body := admin("GET", "/api/v1/rules", ""); !strings.Contains(body, `"slo:home"`) {
-		t.Errorf("the SLO's rule group does not run: %s", body)
+	if _, body := admin("GET", "/api/v1/rules", ""); !strings.Contains(body, `"slo:home"`) || !strings.Contains(body, `"slo:home:alerts"`) ||
+		!strings.Contains(body, `"SLOBurnFast"`) || !strings.Contains(body, `"SLOBudgetExhausted"`) {
+		t.Errorf("the SLO's rule groups do not run: %s", body)
 	}
+	// An objective too low for a page to ever fire is saved, with a warning.
+	if code, body := admin("PUT", "/api/v1/slos/loose", "objective: 90\nindicator: {probe: {name: x}}\n"); code != 200 || !strings.Contains(body, "can never fire") {
+		t.Errorf("save loose: %d %s", code, body)
+	}
+	admin("DELETE", "/api/v1/slos/loose", "")
 	_, body, _ = vera.do("GET", "/api/v1/slos/home/versions", "")
 	if !strings.Contains(body, `"version":2`) || !strings.Contains(body, `"version":1`) {
 		t.Errorf("versions: %s", body)
@@ -84,7 +90,7 @@ func TestSLOs(t *testing.T) {
 	if code, body := admin("DELETE", "/api/v1/slos/home", ""); code != 204 {
 		t.Fatalf("delete: %d %s", code, body)
 	}
-	if _, body := admin("GET", "/api/v1/rules", ""); strings.Contains(body, `"slo:home"`) {
+	if _, body := admin("GET", "/api/v1/rules", ""); strings.Contains(body, `"slo:home`) {
 		t.Errorf("the rules of a deleted SLO still run: %s", body)
 	}
 	if _, body, _ := vera.do("GET", "/api/v1/slos/home/versions", ""); !strings.Contains(body, `"deleted":true`) {

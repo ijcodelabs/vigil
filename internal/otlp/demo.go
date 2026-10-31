@@ -145,8 +145,9 @@ func DemoTrace(start time.Time) []*otlpwire.TraceRequest {
 }
 
 // SendDemo sends demo traces to an OTLP endpoint at about rate a second
-// until ctx ends, and returns how many traces went out.
-func SendDemo(ctx context.Context, endpoint string, rate float64) (int, error) {
+// until ctx ends, and returns how many traces went out. A token, if given,
+// goes as a bearer token, for an agent with otlp.tokens_file.
+func SendDemo(ctx context.Context, endpoint, token string, rate float64) (int, error) {
 	if rate <= 0 {
 		rate = 2
 	}
@@ -163,6 +164,9 @@ func SendDemo(ctx context.Context, endpoint string, rate float64) (int, error) {
 				return sent, err
 			}
 			r.Header.Set("Content-Type", "application/x-protobuf")
+			if token != "" {
+				r.Header.Set("Authorization", "Bearer "+token)
+			}
 			resp, err := hc.Do(r)
 			if err != nil {
 				if ctx.Err() != nil {

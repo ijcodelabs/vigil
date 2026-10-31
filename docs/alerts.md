@@ -387,6 +387,11 @@ messages off.
 
 ## Alerts that do not come from a rule
 
+Each [service level objective](slo.md) brings its own burn-rate and budget
+alerts (`SLOBurnFast`, `SLOBurnSlow`, `SLOBudgetExhausted`), generated from
+the SLO and listed under Rules as the groups `slo:<name>` and
+`slo:<name>:alerts`. Change them by changing the SLO.
+
 Security detections from agents ([Runtime events](security.md)) are raised
 as alerts the moment they arrive, named after the rule that matched, with a
 link to the capture if there is one. They clear ten minutes after the last
@@ -406,6 +411,9 @@ is wrong, with a history:
   checks, detections) are listed under it instead of beside it, and come
   back on their own when it reports again. The same holds for a HAProxy
   backend and its servers. Correlation goes no further than that.
+- **An SLO's alerts are about the SLO**, not a host: they are incidents of
+  kind SLO, listed next to the alert that causes the burn (a failing check,
+  say), not under it. One is the cause, the other what it costs.
 - **Open, acknowledged, resolved.** An admin can acknowledge an incident
   with a comment ("someone is on it"). It is resolved a minute after its
   alert ends. If the same alert comes back within 30 minutes it is the

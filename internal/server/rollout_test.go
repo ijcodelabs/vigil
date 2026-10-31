@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 )
 
 // fakeAgent polls for config the way an agent does, and remembers what it runs.
@@ -188,10 +189,15 @@ func TestStagedRollout(t *testing.T) {
 	}
 
 	// With a wait, steps follow by themselves once the agents are healthy.
+	// A step moves on at a tick (each listing is one) once the wait has
+	// passed since it became healthy. A round here can take less than the
+	// wait, so the test waits for the outcome rather than counting rounds,
+	// which failed on fast machines.
 	put("web", "select: ['role=\"web\"']\nrollout: {steps: [1, 2], wait: 1ms}\nconfig: {interval: 20s}\n")
-	for i := 0; i < 8 && len(rollouts()) > 0; i++ {
+	for deadline := time.Now().Add(5 * time.Second); len(rollouts()) > 0 && time.Now().Before(deadline); {
 		pollAll()
 		pollAll()
+		time.Sleep(2 * time.Millisecond)
 	}
 	pollAll()
 	if len(rollouts()) != 0 || with("interval: 20s") != 4 {

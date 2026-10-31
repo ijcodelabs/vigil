@@ -81,6 +81,10 @@ To see the pages before instrumenting anything:
 vigil tracegen            # demo traces of a small shop, to the local agent
 ```
 
+Against an agent with `tokens_file`, give it a token with `-token` (or
+`VIGIL_OTLP_TOKEN`), or `-token-file` naming a file with the token, or the
+agent's tokens file itself (its first token is used).
+
 ## What you get
 
 **Services** lists every service with its request rate, share of failed

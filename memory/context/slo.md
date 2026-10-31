@@ -1,6 +1,6 @@
 # SLOs, error budgets and burn-rate alerts: spec
 
-Draft, 2026-10-30. Step 1 is built (see state.md); the rest is not. It turns "SLOs as objects" (the
+Draft, 2026-10-30. Steps 1 and 2 are built (see state.md); the rest is not. It turns "SLOs as objects" (the
 first gap picked from a comparison with what other monitoring products
 show) into decisions precise enough to build from. Open questions are at
 the end.
@@ -161,10 +161,20 @@ SLO's window length (factors below are for 30 days):
 - Both windows must burn faster than the rate: the long one shows it is
   real, the short one that it is still happening (so the alert resolves
   soon after the cause stops).
+- As built (2026-10-31): the rate is `spend × window ÷ long window`, so
+  other windows spend the same share. The alerts run in their own group
+  `slo:<name>:alerts`, not aligned, and read the minutes with `offset 2m`
+  (good and total of the newest minute are two writes; one was seen
+  without the other, a page at 74.8 % for 7.7 %). A burn alert needs the
+  SLO to have counted for ¾ of its long window, `SLOBudgetExhausted` for
+  ¼ of the SLO's window (`tfirst_over_time`, MetricsQL): a new SLO paged
+  off 8 checks right after it was created.
 - `min_events`: no burn-rate alert while the long window holds fewer
   events than that per hour; one failed request of three is not a page.
   Probe SLOs have a known rate and skip it.
-- `SLOBudgetExhausted` (warning, once per window) when budget left ≤ 0.
+- `SLOBudgetExhausted` (warning) while budget left ≤ 0; rolling windows
+  only (a calendar month's elapsed range cannot be written in a static
+  rule).
 - Labels: `slo`, `service`, `owner`, `severity`, the SLO's labels.
   Annotations: the burn rate, budget left, and a link to the SLO's page.
   `runbook_url` from the SLO if it has one.

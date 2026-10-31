@@ -51,6 +51,9 @@ func TestFromAlert(t *testing.T) {
 		{probeLabel, KindAlert, "check:web-1/shop"},
 		{detection, KindSecurity, "host:web-1"},
 		{map[string]string{"alertname": "Slow", "service": "shop-api"}, KindAlert, "service:shop-api"},
+		{map[string]string{"alertname": "SLOBurnFast", "slo": "shop-api-availability", "service": "shop-api", "severity": "critical"}, KindSLO, "slo:shop-api-availability"},
+		// A rule of someone's own with an slo label is not an SLO incident.
+		{map[string]string{"alertname": "CheckoutSlow", "slo": "shop", "service": "shop-api"}, KindAlert, "service:shop-api"},
 	} {
 		s := alert(c.labels, false)
 		if s.Kind != c.kind || s.Resource != c.resource || s.Title == "" {
