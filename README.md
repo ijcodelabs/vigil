@@ -84,8 +84,9 @@ large fleets. Expect rough edges, and please say what you find.
   the contacts when someone silences an alert.
 - **Service level objectives** over site checks, spans or any counters:
   good and total events counted once a minute, error budgets,
-  multi-window burn-rate alerts, and a page with each SLO's budget, burn
-  rates and history. [SLOs](docs/slo.md)
+  multi-window burn-rate alerts, a page with each SLO's budget, burn
+  rates and history, and monthly or quarterly SLA reports (page, PDF,
+  CSV). [SLOs](docs/slo.md)
 
 ### AI and what it costs
 

@@ -2,9 +2,11 @@ package server_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestSLOs(t *testing.T) {
@@ -92,6 +94,53 @@ func TestSLOs(t *testing.T) {
 	if _, body, _ := vera.do("GET", "/api/v1/slos/home", ""); !strings.Contains(body, `"budget_left":0.5`) || !strings.Contains(body, `"incidents":[]`) {
 		t.Errorf("one SLO's status and incidents: %s", body)
 	}
+	// The SLA report of a closed month is worked out once and stored.
+	_, body, _ = vera.do("GET", "/api/v1/slos/report?period=2026-08", "")
+	var rep struct {
+		Period  string
+		Final   bool
+		Created string
+		SLOs    []map[string]any
+	}
+	if err := json.Unmarshal([]byte(body), &rep); err != nil || len(rep.SLOs) != 1 || !rep.Final {
+		t.Fatalf("report: %v %s", err, body)
+	}
+	if r := rep.SLOs[0]; r["name"] != "home" || r["achieved"] != 99.95 || r["met"] != true || r["budget_used"].(float64) < 0.5-1e-9 ||
+		r["budget_used"].(float64) > 0.5+1e-9 || r["coverage"] != 1.0 || r["counting"] != nil || fmt.Sprint(r["worst_day"]) != "map[achieved:99.9 bad:5 day:2026-08-01]" {
+		t.Errorf("report row: %v", r)
+	}
+	if _, again, _ := vera.do("GET", "/api/v1/slos/report?period=2026-08", ""); again != body {
+		t.Errorf("a stored report changed:\n%s\n%s", body, again)
+	}
+	if _, list, _ := vera.do("GET", "/api/v1/slos/reports", ""); !strings.Contains(list, `"period":"2026-08"`) {
+		t.Errorf("stored reports: %s", list)
+	}
+	if _, csv, _ := vera.do("GET", "/api/v1/slos/report?period=2026-08&format=csv", ""); !strings.HasPrefix(csv, "period,final,slo,") ||
+		!strings.Contains(csv, "\n2026-08,true,home,,,probe,99.9,99.95,true,9995,10000,5,") {
+		t.Errorf("csv: %s", csv)
+	}
+	// The month in progress is not final and not stored.
+	month := time.Now().UTC().Format("2006-01")
+	if _, body, _ := vera.do("GET", "/api/v1/slos/report?period="+month, ""); !strings.Contains(body, `"final":false`) {
+		t.Errorf("current month: %s", body)
+	}
+	if _, list, _ := vera.do("GET", "/api/v1/slos/reports", ""); strings.Contains(list, `"period":"`+month) {
+		t.Errorf("the current month was stored: %s", list)
+	}
+	// A finished period without SLO counts is answered, not stored.
+	if _, body, _ := vera.do("GET", "/api/v1/slos/report?period=2026-02", ""); !strings.Contains(body, `"final":true`) || !strings.Contains(body, `"slos":[]`) {
+		t.Errorf("empty month: %s", body)
+	}
+	if _, list, _ := vera.do("GET", "/api/v1/slos/reports", ""); strings.Contains(list, "2026-02") {
+		t.Errorf("an empty report was stored: %s", list)
+	}
+	if code, body, _ := vera.do("GET", "/api/v1/slos/report?period=2026-13", ""); code != 400 {
+		t.Errorf("bad period: %d %s", code, body)
+	}
+	if code, body := admin("PUT", "/api/v1/slos/report", "objective: 99\nindicator: {probe: {name: x}}\n"); code != 400 || !strings.Contains(body, "taken by the API") {
+		t.Errorf("an SLO called report: %d %s", code, body)
+	}
+
 	if _, body := admin("GET", "/api/v1/rules", ""); !strings.Contains(body, `"slo:home"`) || !strings.Contains(body, `"slo:home:alerts"`) ||
 		!strings.Contains(body, `"SLOBurnFast"`) || !strings.Contains(body, `"SLOBudgetExhausted"`) {
 		t.Errorf("the SLO's rule groups do not run: %s", body)

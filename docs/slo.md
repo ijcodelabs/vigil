@@ -7,8 +7,9 @@ good, and keeps both as metrics. The error budget, burn rates and reports
 are worked out from those two numbers.
 
 Each SLO also alerts when its budget goes too fast (see
-[Alerts](#alerts)), and the [SLOs page](#the-slos-page) shows where each
-one stands. Not built yet: monthly reports.
+[Alerts](#alerts)), the [SLOs page](#the-slos-page) shows where each
+one stands, and [SLA reports](#sla-reports) say what each achieved in a
+month or quarter.
 
 ## An SLO
 
@@ -194,6 +195,41 @@ week of the month is left); an exhausted budget is an alert instead.
 
 The starter dashboard **SLOs** shows every SLO's figures over 30 days and
 its bad share, burn rate and events over time, with a variable `slo`.
+
+## SLA reports
+
+**Reports** on the SLOs page shows a month or a quarter: for each SLO its
+objective, what it achieved, met or missed, the share of the error budget
+used, the bad events, the worst day (the finished UTC day with the lowest share
+of good events), the coverage, and its incidents
+with how long they lasted and who acknowledged them. **CSV** downloads it
+for a spreadsheet; **Print or PDF** prints the page alone (choose "Save as
+PDF" in the print dialog) for people without a vigil account.
+
+- Periods are calendar months and quarters in UTC, whatever an SLO's own
+  window is.
+- A finished period's report is worked out once and kept: a later change
+  to an SLO, to the incidents kept or to the metric store's retention does
+  not change a report already given. vigil stores last month's and last
+  quarter's report by itself within an hour after they end. The current
+  month is shown as **not final** and is worked out anew each time.
+- The objective is the SLO's when the report is made; a `*` marks an SLO
+  whose objective changed during the period.
+- An SLO that counted nothing in the period (made after it, say) is left
+  out. One that started during the period has a coverage below 100 %.
+- vigil says what it measured. Service credits and contract terms are not
+  part of it.
+
+Scripts fetch the same with any token, a read-only `vgr_` one included:
+
+```bash
+curl -H "Authorization: Bearer $VIGIL_READ_TOKEN" "https://vigil/api/v1/slos/report?period=2026-10"
+curl -H "Authorization: Bearer $VIGIL_READ_TOKEN" "https://vigil/api/v1/slos/report?period=2026-Q4&format=csv"
+```
+
+The metric store must keep the SLO series for the whole period when the
+report is made: a quarter needs at least 93 days of retention, unless its
+report is stored right after the quarter ends (which vigil does).
 
 ## Queries
 

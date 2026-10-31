@@ -126,7 +126,9 @@ type RatioIndicator struct {
 }
 
 var (
-	nameRE     = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+	nameRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+	// reserved names are paths of the API next to /api/v1/slos/{name}.
+	reserved   = map[string]bool{"report": true, "reports": true}
 	labelRE    = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 	selectorRE = regexp.MustCompile(`^[a-zA-Z_:][a-zA-Z0-9_:]*\s*(\{[^{}\[\]]*\})?$`)
 	spanKinds  = map[string]bool{"server": true, "consumer": true, "client": true, "producer": true, "internal": true}
@@ -163,6 +165,9 @@ func Parse(name, text string) (*SLO, error) {
 func (s *SLO) Check() error {
 	if !nameRE.MatchString(s.Name) {
 		return fmt.Errorf("SLO name %q: lower-case letters, digits and dashes, up to 63, not starting or ending with a dash", s.Name)
+	}
+	if reserved[s.Name] {
+		return fmt.Errorf("SLO name %q is taken by the API (/api/v1/slos/%s); pick another", s.Name, s.Name)
 	}
 	if s.Objective <= 50 || s.Objective >= 100 {
 		return fmt.Errorf("objective %g: a percentage above 50 and below 100, e.g. 99.9", s.Objective)

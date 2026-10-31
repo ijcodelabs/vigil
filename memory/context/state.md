@@ -1032,6 +1032,33 @@ Against Boop's observability contract v1 (Boop Jump repository,
 - Not built: version changes marked on the charts, deploy markers (after
   DORA), filter by exact label.
 
+## SLOs, step 4 of slo.md: SLA reports (built 2026-10-31)
+
+- `GET /api/v1/slos/report?period=2026-10|2026-Q4[&format=csv]`
+  (`internal/server/slo_reports.go`), last month without a period;
+  `GET /api/v1/slos/reports` lists the stored ones. Viewers and `vgr_`
+  tokens read them. SLO names `report` and `reports` are refused (they
+  are API paths next to `/api/v1/slos/{name}`).
+- Per SLO: objective (the SLO's now; `objective_changed` when the
+  recorded `slo_objective` varied in the period), good, total, bad,
+  achieved, met, budget used, coverage over the whole period, when it
+  started counting, the worst UTC day (days that ended; a range query
+  with step 1d from midnight), and its incidents (`OfResource`, clipped
+  to the period). An SLO with no recorded minute in the period is left out.
+- Stored once in `slo_reports` (tenant, period; `INSERT OR IGNORE`, the
+  first stored wins) when the period ended at least 10 min ago and the
+  report has an SLO in it: an empty one might come from a store that
+  answered nothing for a while. `sloReportLoop` stores last month's and
+  last quarter's within an hour after they end (only up to 7 days after,
+  so a server started much later does not make a report from leftovers).
+- Page `#/slos/~report/<period>` (Reports on the SLOs page and on an
+  SLO's page): table, incidents per SLO, CSV, Print or PDF; `@media
+  print` in app.css hides the menu and buttons and prints dark on white.
+- Checked on the Lima host: October (not final) against the step 3
+  figures, CSV, the period picker, September (empty, now not stored),
+  the print rules applied on screen.
+- Not built: a report per SLO, service credits (out of scope by design).
+
 ## Next
 
 - Foundations, build order in `direction.md`: step 1 on paper (data

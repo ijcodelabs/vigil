@@ -27,6 +27,7 @@ const windowText = w => (w === 'calendar_month' ? 'calendar month' : w.replace('
 let saved = null;
 
 export function SLOs({ route, admin }) {
+  if (route.parts[1] === '~report') return html`<${Report} key=${route.parts[2] || ''} period=${route.parts[2] || ''} />`;
   const name = route.parts[1] && decodeURIComponent(route.parts[1]);
   if (name) return html`<${SLOView} key=${name} name=${name} admin=${admin} />`;
   return html`<${SLOList} admin=${admin} />`;
@@ -91,6 +92,7 @@ function SLOList({ admin }) {
   return html`
     <div class="head"><h1>SLOs</h1><span class="spacer"></span>
       ${data && data.slos.length > 3 && html`<input type="search" placeholder="Service, owner, label…" value=${filter} onInput=${e => setFilter(e.target.value)} aria-label="Filter SLOs" style="width: 220px" />`}
+      ${data && data.slos.length > 0 && html`<a class="btn" href="#/slos/~report">Reports</a>`}
       ${admin && html`<button class="primary" onClick=${() => setCreating(true)}>New SLO</button>`}
       <a class="btn" href="/docs/slo" target="_blank" rel="noopener">Help</a></div>
     <${ErrorBox} error=${error} />
@@ -231,6 +233,7 @@ function SLOView({ name, admin }) {
     <div class="head">${back}<h1>${name}</h1>
       ${firing.map(a => html`<${Badge} kind=${a === 'SLOBurnFast' ? 'bad' : 'warn'}>${a}<//>`)}
       <span class="spacer"></span>
+      <a class="btn" href="#/slos/~report">Reports</a>
       ${admin && html`<button onClick=${() => setEditing(true)}>Edit</button><button onClick=${remove}>Delete</button>`}
       <a class="btn" href="/docs/slo" target="_blank" rel="noopener">Help</a></div>
     ${warnings.length > 0 && html`<div class="notice">Saved, with ${warnings.length === 1 ? 'a warning' : 'warnings'}:
@@ -316,4 +319,80 @@ function SLOView({ name, admin }) {
       <div class="actions"><span class="spacer"></span><button onClick=${() => setShowVersion(null)}>Close</button>
         ${admin && showVersion.version !== slo.version && html`<button class="primary" disabled=${busy} onClick=${() => restore(showVersion.version)}>${busy ? 'Restoring…' : 'Restore this version'}</button>`}</div>
     <//>`}`;
+}
+
+// Periods to offer: the months of the last year and the quarters of the
+// last two, newest first, with any stored report further back.
+function periods(stored) {
+  const out = new Set(), now = new Date();
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+    out.add(d.toISOString().slice(0, 7));
+  }
+  for (let i = 0; i < 8; i++) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 3 * i, 1));
+    out.add(`${d.getUTCFullYear()}-Q${Math.floor(d.getUTCMonth() / 3) + 1}`);
+  }
+  for (const r of stored || []) out.add(r.period);
+  // Months and quarters of a year together, the year's quarters after its months.
+  const key = p => p.includes('Q') ? p.slice(0, 5) + String(Number(p.slice(6)) * 3).padStart(2, '0') + 'q' : p;
+  return [...out].sort((a, b) => (key(a) < key(b) ? 1 : -1));
+}
+const periodName = p => {
+  if (p.includes('Q')) return `${p.slice(5)} ${p.slice(0, 4)}`;
+  return new Date(p + '-01T00:00:00Z').toLocaleDateString(undefined, { month: 'long', year: 'numeric', timeZone: 'UTC' });
+};
+
+// Report is the SLA report of a month or quarter: the page to print or
+// save as PDF, and the CSV for a spreadsheet.
+function Report({ period }) {
+  const { data: stored } = useLoad(() => api('/api/v1/slos/reports'), []);
+  const { data: rep, error } = useLoad(() => api('/api/v1/slos/report' + (period ? '?period=' + encodeURIComponent(period) : '')), [period]);
+  const p = period || rep?.period || '';
+  const pick = e => { location.hash = '#/slos/~report/' + e.target.value; };
+  const days = s => fmtUnit(s, 'seconds');
+  return html`
+    <div class="head no-print"><a href="#/slos">← SLOs</a><h1>SLA report</h1><span class="spacer"></span>
+      <select value=${p} onChange=${pick} aria-label="Period">${periods(stored).map(x => html`<option value=${x} selected=${x === p}>${periodName(x)}</option>`)}</select>
+      ${rep && html`<a class="btn" href=${'/api/v1/slos/report?format=csv&period=' + encodeURIComponent(rep.period)} download>CSV</a>
+        <button onClick=${() => print()}>Print or PDF</button>`}
+      <a class="btn" href="/docs/slo#sla-reports" target="_blank" rel="noopener">Help</a></div>
+    <${ErrorBox} error=${error} />
+    ${!rep && !error && html`<div class="empty">Working it out…</div>`}
+    ${rep && html`
+      <div class="report">
+        <h2 style="margin-top: 0">Service levels, ${periodName(rep.period)}</h2>
+        <p class="muted">${new Date(rep.from).toISOString().slice(0, 10)} to ${new Date(new Date(rep.to) - 1).toISOString().slice(0, 10)} (UTC).
+          ${rep.final ? `Made ${new Date(rep.created).toLocaleString()}; a report of a finished period does not change afterwards.`
+            : html`<${Badge} kind="warn">not final<//> The period is still running: these figures are up to ${new Date(rep.created).toLocaleString()} and change until it ends.`}</p>
+        ${rep.slos.length === 0 ? html`<div class="panel empty">No SLO counted anything in this period.</div>` : html`
+        <div class="panel flush"><table>
+          <thead><tr><th>SLO</th><th style="text-align: right">Objective</th><th style="text-align: right">Achieved</th><th>Met</th>
+            <th style="text-align: right">Budget used</th><th style="text-align: right">Bad events</th><th>Worst day</th>
+            <th style="text-align: right">Coverage</th><th style="text-align: right">Incidents</th></tr></thead>
+          <tbody>${rep.slos.map(r => html`<tr>
+            <td><strong>${r.name}</strong>${(r.service || r.owner) && html`<div class="muted" style="font-size: 12.5px">${[r.service, r.owner].filter(Boolean).join(' · ')}</div>`}
+              ${r.description && html`<div class="muted" style="font-size: 12.5px">${r.description}</div>`}</td>
+            <td class="num">${fmtPct(r.objective)}${r.objective_changed && html`<span title="The objective changed during the period; the achieved share is judged against the one at the end"> *</span>`}</td>
+            <td class="num">${r.achieved == null ? '–' : fmtPct(r.achieved)}</td>
+            <td>${r.met == null ? html`<span class="muted">no events</span>` : r.met ? html`<${Badge} kind="ok">met<//>` : html`<${Badge} kind="bad">missed<//>`}</td>
+            <td class="num">${r.budget_used == null ? '–' : (r.budget_used * 100).toFixed(0) + '%'}</td>
+            <td class="num">${fmtNum(Math.round(r.bad))} <span class="muted">of ${fmtNum(Math.round(r.total))}</span></td>
+            <td>${r.worst_day ? html`${r.worst_day.day} <span class="muted">${fmtPct(r.worst_day.achieved)}</span>` : html`<span class="muted">–</span>`}</td>
+            <td class="num"><span class=${r.coverage < 0.99 ? 'warn-text' : ''} title=${r.counting ? 'Counting since ' + new Date(r.counting).toLocaleString() : ''}>${(r.coverage * 100).toFixed(r.coverage < 0.99 ? 1 : 0)}%</span></td>
+            <td class="num">${r.incidents.length}</td></tr>`)}</tbody></table></div>
+        ${rep.slos.filter(r => r.incidents.length > 0).map(r => html`
+          <h3 class="section">${r.name}: incidents</h3>
+          <div class="panel flush"><table>
+            <thead><tr><th>Opened</th><th>Alert</th><th style="text-align: right">Lasted</th><th>Acknowledged</th></tr></thead>
+            <tbody>${r.incidents.map(i => html`<tr>
+              <td style="white-space: nowrap">${new Date(i.opened).toLocaleString()}</td>
+              <td><${Badge} kind=${i.severity === 'critical' ? 'bad' : 'warn'}>${i.alert || 'alert'}<//> <span class="muted">${i.title}</span></td>
+              <td class="num">${days(i.seconds)}${!i.resolved && html` <span class="muted">open</span>`}</td>
+              <td class="muted">${i.ack_by ? `${i.ack_by}${i.ack_comment ? ': ' + i.ack_comment : ''}` : ''}</td></tr>`)}</tbody></table></div>`)}`}
+        <p class="muted">Achieved is the share of good events in the period; budget used is the share of bad events the objective allows
+          that were spent (above 100 %, the objective was missed). Coverage is the share of the period's minutes that were counted: a minute
+          the server did not count is neither good nor bad, and an SLO started during the period shows the minutes from then on.
+          The worst day is the UTC day with the lowest share of good events. vigil reports what it measured; what a contract makes of it is not part of this.</p>
+      </div>`}`;
 }
