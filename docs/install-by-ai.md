@@ -74,12 +74,14 @@ stage. The other pages in `docs/` have the detail; this one is the route.
   | server config | `/etc/vigil/server.yaml` (or next to the compose file) |
   | server state | `data_dir`, default `/var/lib/vigil` |
 
-- **There are no published packages or images yet.** Build from the
-  repository: `make linux` gives `bin/vigil-agent-linux-amd64`,
-  `bin/vigil-server-linux-amd64`, `bin/vigil-relay-linux-amd64` and the
-  same for arm64 (needs Go 1.26+; nothing else), and
-  `docker build --target agent -t vigil-agent:dev .` gives the agent's
-  container image (`--target server`, `--target relay` for the others).
+- **Releases** are on GitHub (`https://github.com/ijcodelabs/vigil/releases`):
+  archives of `vigil-agent`, `vigil-server`, `vigil-relay` and `vigil`
+  for linux amd64 and arm64, signed checksums, and the images
+  `ghcr.io/ijcodelabs/vigil-agent`, `vigil-server` and `vigil-relay`
+  tagged with the version (`0.1.0`); [Install](install.md#download-a-release)
+  says how to verify them. Building from the repository works too:
+  `make linux` (needs Go 1.26+; nothing else), and
+  `docker build --target agent -t vigil-agent:dev .` for an image.
 
 ## What to find out first
 
@@ -405,10 +407,9 @@ The agent enrols under its host name and keeps its own token in
 ### B5. A host that only runs containers
 
 Run the agent as a container that sees the host. It needs an image
-(`docker build --target agent -t vigil-agent:dev .` in the repository, or
-the three-line Dockerfile above with `vigil-agent` in place of
-`vigil-server`) and an `/etc/vigil/agent.yaml` on the host, written as in
-B4:
+(`ghcr.io/ijcodelabs/vigil-agent:0.1.0`, or your own build with
+`docker build --target agent -t vigil-agent:dev .`) and an
+`/etc/vigil/agent.yaml` on the host, written as in B4:
 
 ```bash
 docker run -d --name vigil-agent --restart unless-stopped --pid host --network host \
@@ -416,7 +417,7 @@ docker run -d --name vigil-agent --restart unless-stopped --pid host --network h
   -v /proc:/host/proc:ro -v /sys:/host/sys:ro -v /etc:/host/etc:ro -v /:/host/root:ro \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v /etc/vigil:/etc/vigil:ro -v /var/lib/vigil:/var/lib/vigil \
-  vigil-agent:dev -config /etc/vigil/agent.yaml
+  ghcr.io/ijcodelabs/vigil-agent:0.1.0 -config /etc/vigil/agent.yaml
 ```
 
 Prefer the host install (B3) where you can: in a container there is no

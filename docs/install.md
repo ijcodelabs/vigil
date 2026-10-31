@@ -336,11 +336,13 @@ docker run -d --name vigil-agent --pid host --network host \
   -v /proc:/host/proc:ro -v /sys:/host/sys:ro -v /etc:/host/etc:ro -v /:/host/root:ro \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v /etc/vigil:/etc/vigil:ro -v /var/lib/vigil:/var/lib/vigil \
-  vigil-agent:dev -config /etc/vigil/agent.yaml
+  ghcr.io/ijcodelabs/vigil-agent:0.1.0 -config /etc/vigil/agent.yaml
 ```
 
-The image is built with `docker build --target agent -t vigil-agent:dev .`
-(`--target server` and `--target relay` for the others).
+That is the released image (see [Download a release](#download-a-release)
+to verify it). Your own is built with `docker build --target agent -t
+vigil-agent:dev .` (`--target server` and `--target relay` for the
+others).
 
 The `HOST_*` variables tell the agent where the host's files are, so the
 numbers describe the host and not the container. Add `--privileged` if you

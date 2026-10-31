@@ -79,7 +79,5 @@ is never replaced; the fix becomes the next patch release.
 - On GitHub: a tag ruleset so that only the owner can create `v*` tags,
   and immutable releases, so a published version cannot be changed. Both
   are repository settings.
-- The Kubernetes manifests in `deploy/` still name `vigil-agent:dev`; point
-  them at the released images once the first one exists.
 - Packages (`.deb`, `.rpm`) only if someone needs them; `nfpm` would add
   them without changing the rest.

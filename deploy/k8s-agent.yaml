@@ -79,7 +79,7 @@ spec:
         - operator: Exists
       containers:
         - name: agent
-          image: vigil-agent:dev # docker build --target agent; replace with your registry/image
+          image: ghcr.io/ijcodelabs/vigil-agent:0.1.0 # or your own: docker build --target agent
           args: ["-config", "/etc/vigil/agent.yaml"]
           # Root for the pod log files. Privileged is only needed for runtime
           # events (security.enabled); without them, drop it.

@@ -29,7 +29,7 @@ spec:
       securityContext: {runAsNonRoot: true, runAsUser: 65534}
       containers:
         - name: relay
-          image: vigil-relay:dev    # docker build --target relay; replace with your registry/image
+          image: ghcr.io/ijcodelabs/vigil-relay:0.1.0 # or your own: docker build --target relay
           args: ["-config", "/etc/vigil/relay.yaml"]
           env:
             - name: VIGIL_CA_PIN
