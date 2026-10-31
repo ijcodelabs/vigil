@@ -85,6 +85,7 @@ curl -X PUT -H "Authorization: Bearer $T" --data-binary @rules.yaml https://vigi
 | `GET /api/v1/slos/{name}/versions`, `…/versions/{n}` | history |
 | `GET /api/v1/slos/report?period=2026-10` | the SLA report of a month (`2026-10`) or quarter (`2026-Q4`), last month without `period`; `&format=csv` for CSV. `final` is false while the period runs; a finished period's report is stored and does not change |
 | `GET /api/v1/slos/reports` | the stored reports: `period`, `created` |
+| `GET /api/v1/slos/templates` | admin only: SLOs the templates offer for what reported in the last day: `template`, `title`, `value`, `name`, the filled-in `doc`, and `exists` |
 
 See [Service level objectives](slo.md).
 

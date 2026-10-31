@@ -141,6 +141,20 @@ func TestSLOs(t *testing.T) {
 		t.Errorf("an SLO called report: %d %s", code, body)
 	}
 
+	// Templates: one offer for each check that exists, filled in.
+	code, body = admin("GET", "/api/v1/slos/templates", "")
+	var offers []struct{ Template, Name, Doc, Value string }
+	if err := json.Unmarshal([]byte(body), &offers); err != nil || code != 200 || len(offers) != 1 {
+		t.Fatalf("templates: %d %v %s", code, err, body)
+	}
+	if o := offers[0]; o.Template != "vigil/check" || o.Name != "check-shop-home" || !strings.HasPrefix(o.Doc, "name: check-shop-home\n") ||
+		!strings.Contains(o.Doc, `indicator: {probe: {name: "shop-home"}}`) {
+		t.Errorf("offer: %+v", o)
+	}
+	if code, _, _ := vera.do("GET", "/api/v1/slos/templates", ""); code != 403 {
+		t.Errorf("a viewer got the templates: %d", code)
+	}
+
 	if _, body := admin("GET", "/api/v1/rules", ""); !strings.Contains(body, `"slo:home"`) || !strings.Contains(body, `"slo:home:alerts"`) ||
 		!strings.Contains(body, `"SLOBurnFast"`) || !strings.Contains(body, `"SLOBudgetExhausted"`) {
 		t.Errorf("the SLO's rule groups do not run: %s", body)

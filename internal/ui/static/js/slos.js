@@ -78,7 +78,8 @@ async function save(name, text) {
 function SLOList({ admin }) {
   const { data, error, reload } = useLoad(() => api('/api/v1/slos?status=1'), [], 60000);
   const [filter, setFilter] = useState('');
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState(null); // the document to start from
+  const [picking, setPicking] = useState(false);
   const created = useRef('');
   const rows = useMemo(() => {
     if (!data) return null;
@@ -93,13 +94,14 @@ function SLOList({ admin }) {
     <div class="head"><h1>SLOs</h1><span class="spacer"></span>
       ${data && data.slos.length > 3 && html`<input type="search" placeholder="Service, owner, label…" value=${filter} onInput=${e => setFilter(e.target.value)} aria-label="Filter SLOs" style="width: 220px" />`}
       ${data && data.slos.length > 0 && html`<a class="btn" href="#/slos/~report">Reports</a>`}
-      ${admin && html`<button class="primary" onClick=${() => setCreating(true)}>New SLO</button>`}
+      ${admin && html`<button onClick=${() => setPicking(true)}>From a template</button>
+        <button class="primary" onClick=${() => setCreating(TEMPLATE)}>New SLO</button>`}
       <a class="btn" href="/docs/slo" target="_blank" rel="noopener">Help</a></div>
     <${ErrorBox} error=${error} />
     <div class="panel flush">${!rows ? html`<div class="empty">Loading…</div>` : data.slos.length === 0
       ? html`<div class="empty">No SLOs yet. An SLO says what share of events must be good over a window (99.9 % of requests without
           a server error over 30 days, say); vigil counts good and total events every minute, keeps the error budget and alerts when it
-          burns too fast. ${admin ? 'Create one with New SLO, or' : 'An admin creates them here, or'} keep them in git and
+          burns too fast. ${admin ? 'Start from a template (one for each check, traced service or HAProxy backend), create one with New SLO, or' : 'An admin creates them here, or'} keep them in git and
           apply them with <code>vigil apply -f DIR</code> (<code>DIR/slos/*.yaml</code>). <a href="/docs/slo" target="_blank" rel="noopener">How</a></div>`
       : html`<table>
         <thead><tr><th>SLO</th><th>Service</th><th style="text-align: right">Objective</th><th style="text-align: right">Achieved</th>
@@ -120,15 +122,46 @@ function SLOList({ admin }) {
         </tr>`)}</tbody></table>`}</div>
     ${data && data.slos.length > 0 && html`<p class="muted">Achieved and budget left are over each SLO's window; the burn rate is how fast
       the budget went in the last hour (1 spends it exactly in one window). Coverage is the share of minutes counted since the SLO started counting.</p>`}
+    ${picking && html`<${TemplatePicker} onClose=${() => setPicking(false)} onPick=${doc => { setPicking(false); setCreating(doc); }} />`}
     ${creating && html`<${YamlEditor} title="New SLO" help="The server checks the indicator's queries against the metric store before it saves."
-      load=${() => Promise.resolve(TEMPLATE)}
+      load=${() => Promise.resolve(creating)}
       save=${async text => {
         created.current = newSLO(text);
         // A PUT replaces: a new SLO must not take an existing one's name.
         if (data && data.slos.some(x => x.name === created.current)) throw new Error(`There is an SLO called ${created.current} already; change it on its own page, or pick another name.`);
         await save(created.current, text);
       }}
-      onClose=${ok => { setCreating(false); if (ok) location.hash = '#/slos/' + encodeURIComponent(created.current); else reload(); }} />`}`;
+      onClose=${ok => { setCreating(null); if (ok) location.hash = '#/slos/' + encodeURIComponent(created.current); else reload(); }} />`}`;
+}
+
+// TemplatePicker lists the SLOs the templates offer for what reports now:
+// vigil's (checks, traced services) and those of the integrations in use.
+function TemplatePicker({ onClose, onPick }) {
+  const { data, error } = useLoad(() => api('/api/v1/slos/templates'), []);
+  const groups = useMemo(() => {
+    const out = new Map();
+    for (const o of data || []) {
+      if (!out.has(o.template)) out.set(o.template, { ...o, offers: [] });
+      out.get(o.template).offers.push(o);
+    }
+    return [...out.values()];
+  }, [data]);
+  return html`<${Dialog} title="SLO from a template" wide onClose=${onClose}>
+    <p class="muted" style="margin-top: 0">One for each check, traced service or integration backend that reported in the last day.
+      Pick one to see and change its document before it is saved.</p>
+    <${ErrorBox} error=${error} />
+    ${!data && !error && html`<div class="empty">Looking…</div>`}
+    ${data && groups.length === 0 && html`<div class="empty">Nothing to offer: no checks, no traced services and no integration with
+      SLO templates (HAProxy) reported in the last day.</div>`}
+    <div style="max-height: 60vh; overflow: auto">${groups.map(g => html`
+      <h3 class="section" style="margin-bottom: 2px">${g.title} <span class="muted" style="font-weight: 400; font-size: 12.5px">${g.source}</span></h3>
+      ${g.description && html`<div class="muted" style="font-size: 12.5px; margin-bottom: 6px">${g.description}</div>`}
+      <div class="panel flush"><table><tbody>${g.offers.map(o => html`<tr>
+        <td class="mono">${o.value}</td><td class="muted">${o.name}</td>
+        <td style="text-align: right">${o.exists ? html`<a href=${'#/slos/' + encodeURIComponent(o.name)} onClick=${onClose}>exists</a>`
+          : html`<button class="small" onClick=${() => onPick(o.doc)}>Use</button>`}</td></tr>`)}</tbody></table></div>`)}</div>
+    <div class="actions"><span class="spacer"></span><button onClick=${onClose}>Close</button></div>
+  <//>`;
 }
 
 // series builds a result the Chart takes from [t, value] pairs.

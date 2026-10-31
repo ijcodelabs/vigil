@@ -85,8 +85,9 @@ large fleets. Expect rough edges, and please say what you find.
 - **Service level objectives** over site checks, spans or any counters:
   good and total events counted once a minute, error budgets,
   multi-window burn-rate alerts, a page with each SLO's budget, burn
-  rates and history, and monthly or quarterly SLA reports (page, PDF,
-  CSV). [SLOs](docs/slo.md)
+  rates and history, monthly or quarterly SLA reports (page, PDF, CSV),
+  and templates for checks, traced services and HAProxy backends.
+  [SLOs](docs/slo.md)
 
 ### AI and what it costs
 

@@ -196,3 +196,17 @@ queries:
   - name: HAProxy slowest paths
     type: logs
     query: app:haproxy total_ms:* | stats by (backend, path) avg(total_ms) as avg_ms, count() as requests | filter requests:>2 | sort by (avg_ms desc) | limit 20
+slos:
+  - id: backend-errors
+    title: Backend answers without server errors
+    description: The share of a backend's HTTP responses that are not 5xx, over all the hosts that run it.
+    each: {match: haproxy_backend_http_responses_total, label: proxy}
+    name: haproxy-${proxy}
+    doc: |
+      service: "${proxy}"
+      description: HAProxy backend ${proxy} answers without server errors
+      objective: 99.9
+      indicator:
+        ratio:
+          bad: 'haproxy_backend_http_responses_total{proxy="${proxy}", code="5xx"}'
+          total: 'haproxy_backend_http_responses_total{proxy="${proxy}"}'

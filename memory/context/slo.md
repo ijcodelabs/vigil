@@ -1,6 +1,6 @@
 # SLOs, error budgets and burn-rate alerts: spec
 
-Draft, 2026-10-30. Steps 1 to 4 are built (see state.md); the rest is not. It turns "SLOs as objects" (the
+Draft, 2026-10-30. Steps 1 to 5 are built (see state.md); step 6 (later) is not. It turns "SLOs as objects" (the
 first gap picked from a comparison with what other monitoring products
 show) into decisions precise enough to build from. Open questions are at
 the end.
@@ -240,7 +240,9 @@ SLO's window length (factors below are for 30 days):
    the status is: `?status=1`).
 4. SLA report and stored monthly results. Built 2026-10-31 (quarters
    too); the names `report` and `reports` are refused for SLOs.
-5. Integration templates (HAProxy, nginx, probes); `docs/slo.md`.
+5. Integration templates (HAProxy, nginx, probes); `docs/slo.md`. Built
+   2026-10-31: checks, traced services and HAProxy; nginx waits for the
+   logs indicator (step 6), its status codes being only in its logs.
 6. Later: logs indicator with delayed counting, backfill of missed
    minutes, error-budget policy (e.g. a rollout pauses itself while an SLO
    of the service burns fast), OpenSLO import.
