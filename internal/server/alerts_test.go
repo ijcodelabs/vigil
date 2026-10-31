@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -40,6 +41,23 @@ func (a *alertStores) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			io.WriteString(w, `{"status":"error","errorType":"422","error":"cannot parse \"bad(\": missing closing parenthesis"}`)
 		case q == "cpu_high" && a.cpuHigh:
 			vector(`{"metric":{"__name__":"cpu","instance":"web-01","agent":"web-01"},"value":[1700000000,"97.5"]}`)
+		case strings.Contains(q, "_per_minute["):
+			// The SLO page's sums over all SLOs (the alerts select one SLO
+			// and get nothing): SLO home counted a day, 9995 good of 10000
+			// in its window and 990 of 1000 in the last hour.
+			v := map[string]string{
+				"sum_over_time(slo_good_per_minute[30d]": "9995", "sum_over_time(slo_total_per_minute[30d]": "10000",
+				"count_over_time(slo_total_per_minute[30d]":  "1440",
+				"tfirst_over_time(slo_total_per_minute[30d]": strconv.FormatInt(time.Now().Add(-24*time.Hour).Unix(), 10),
+				"sum_over_time(slo_good_per_minute[1h]":      "990", "sum_over_time(slo_total_per_minute[1h]": "1000",
+			}
+			for k, x := range v {
+				if strings.Contains(q, k) {
+					vector(`{"metric":{"slo":"home"},"value":[1700000000,"` + x + `"]}`)
+					return
+				}
+			}
+			vector("")
 		default:
 			vector("")
 		}

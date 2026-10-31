@@ -48,7 +48,17 @@ func (s *Server) sloRoutes(mux *http.ServeMux) {
 		for i := range list {
 			list[i].Doc = ""
 		}
-		writeJSON(w, list)
+		// ?status=1 adds where each SLO stands now, for the SLOs page.
+		if r.URL.Query().Get("status") == "" {
+			writeJSON(w, list)
+			return
+		}
+		status, err := s.sloStatus(r.Context(), list, time.Now())
+		if err != nil {
+			http.Error(w, "the metric store did not answer: "+err.Error(), http.StatusBadGateway)
+			return
+		}
+		writeJSON(w, map[string]any{"slos": list, "status": status})
 	}))
 	mux.HandleFunc("GET /api/v1/slos/{name}", s.viewer(func(w http.ResponseWriter, r *http.Request) {
 		row, found, err := s.store.SLO(defaultTenant, r.PathValue("name"))
@@ -60,7 +70,24 @@ func (s *Server) sloRoutes(mux *http.ServeMux) {
 		default:
 			out := map[string]any{"slo": row}
 			if row.Error == "" {
+				now := time.Now()
 				out["rules"] = row.SLO.RuleGroups()
+				// The page shows the rest without the figures when the store
+				// does not answer.
+				if st, err := s.sloStatus(r.Context(), []SLORow{row}, now); err == nil {
+					out["status"] = st[0]
+				} else {
+					out["status_error"] = err.Error()
+				}
+				list, err := s.incidents.OfResource(r.Context(), "slo:"+row.Name, row.SLO.WindowStart(now), 50)
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				out["incidents"] = list
+				if bad, total := row.SLO.OperationsQueries(24 * time.Hour); bad != "" {
+					out["operations"] = map[string]string{"bad": bad, "total": total}
+				}
 			}
 			writeJSON(w, out)
 		}

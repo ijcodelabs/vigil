@@ -69,6 +69,29 @@ func TestSLOs(t *testing.T) {
 	if !strings.Contains(body, `slo_good_per_minute`) || !strings.Contains(body, `vector(0.999)`) || !strings.Contains(body, `"doc":"objective: 99.9`) {
 		t.Errorf("one SLO: %s", body)
 	}
+	// Where it stands: 9995 good of 10000 at 99.9 % is half the budget
+	// left; 10 bad in 1000 in the last hour burns at 10.
+	_, body, _ = vera.do("GET", "/api/v1/slos?status=1", "")
+	var withStatus struct {
+		SLOs   []struct{ Name string }
+		Status []struct {
+			Name                           string
+			Achieved, BudgetLeft, Coverage *float64
+			Burn                           map[string]float64
+			Firing                         []string
+		}
+	}
+	if err := json.Unmarshal([]byte(strings.ReplaceAll(body, `"budget_left"`, `"budgetleft"`)), &withStatus); err != nil || len(withStatus.Status) != 1 {
+		t.Fatalf("status: %v %s", err, body)
+	}
+	near := func(p *float64, want float64) bool { return p != nil && *p > want-1e-9 && *p < want+1e-9 }
+	if st := withStatus.Status[0]; st.Name != "home" || !near(st.Achieved, 99.95) || !near(st.BudgetLeft, 0.5) ||
+		len(st.Burn) != 1 || st.Burn["1h"] < 10-1e-9 || st.Burn["1h"] > 10+1e-9 || st.Coverage == nil || *st.Coverage < 0.99 || st.Firing == nil {
+		t.Errorf("status: %s", body)
+	}
+	if _, body, _ := vera.do("GET", "/api/v1/slos/home", ""); !strings.Contains(body, `"budget_left":0.5`) || !strings.Contains(body, `"incidents":[]`) {
+		t.Errorf("one SLO's status and incidents: %s", body)
+	}
 	if _, body := admin("GET", "/api/v1/rules", ""); !strings.Contains(body, `"slo:home"`) || !strings.Contains(body, `"slo:home:alerts"`) ||
 		!strings.Contains(body, `"SLOBurnFast"`) || !strings.Contains(body, `"SLOBudgetExhausted"`) {
 		t.Errorf("the SLO's rule groups do not run: %s", body)

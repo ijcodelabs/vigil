@@ -422,6 +422,13 @@ func (t *Tracker) Around(ctx context.Context, agent string, from, to time.Time) 
 		agent, to.Unix(), from.Unix())
 }
 
+// OfResource lists the incidents of a resource (an SLO's "slo:<name>")
+// that were open at some point since then, newest first.
+func (t *Tracker) OfResource(ctx context.Context, resource string, since time.Time, limit int) ([]Incident, error) {
+	return t.list(ctx, `resource = ? AND (resolved_at = 0 OR resolved_at >= ?) ORDER BY first_seen DESC LIMIT ?`,
+		resource, since.Unix(), limit)
+}
+
 // Get returns one incident and its history.
 func (t *Tracker) Get(ctx context.Context, id int64) (Incident, []Event, error) {
 	list, err := t.list(ctx, `id = ?`, id)

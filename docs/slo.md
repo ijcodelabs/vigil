@@ -7,9 +7,8 @@ good, and keeps both as metrics. The error budget, burn rates and reports
 are worked out from those two numbers.
 
 Each SLO also alerts when its budget goes too fast (see
-[Alerts](#alerts)). Not built yet: an SLOs page in the interface and
-monthly reports. Until then the queries below show the same in Explore or
-on a dashboard.
+[Alerts](#alerts)), and the [SLOs page](#the-slos-page) shows where each
+one stands. Not built yet: monthly reports.
 
 ## An SLO
 
@@ -74,7 +73,9 @@ indicator:
 
 ## Saving one
 
-Admins save SLOs; everyone signed in can read them.
+Admins save SLOs on the [SLOs page](#the-slos-page) (**New SLO**, or
+**Edit** on an SLO's page) or through the API; everyone signed in can
+read them.
 
 ```bash
 curl -X PUT -H "Authorization: Bearer $T" --data-binary @shop-api.yaml https://vigil/api/v1/slos/shop-api-availability
@@ -159,6 +160,40 @@ and the annotations `summary` (with the burn rate), `objective`,
 is an incident of kind SLO with a link to its burn rate over three days.
 These alerts use MetricsQL's `tfirst_over_time`, so they need
 VictoriaMetrics as the metric store.
+
+## The SLOs page
+
+**SLOs** in the menu (shown to admins, and to everyone once there is an
+SLO) lists every SLO with its objective, what it achieved over its
+window, the error budget left, the burn rate over the last hour, the
+coverage and the alerts that fire. Above three SLOs a filter finds them by
+name, service, owner or label.
+
+An SLO's page has:
+
+- **Achieved**, **Error budget left** (with how many more bad events the
+  budget allows at the window's volume), the **burn rates** over 1 hour,
+  6 hours, 1 day and 3 days, and the **coverage**: the share of minutes
+  counted since the SLO started counting. A burn rate is red above the
+  rate its alert fires at.
+- **Error budget left** over the window, with a straight line for a budget
+  spent evenly: above the line is better than even. For a calendar month
+  the line runs to the end of the month.
+- The **bad share** and the number of **events**, per hour (per three
+  hours for windows over ten days).
+- For a span SLO, **where the budget goes**: the operations with bad
+  events in the last 24 hours.
+- The SLO's **incidents** in the window, its silences, its **history**
+  (show and restore an earlier version; admins), and the **generated
+  rules**.
+
+Figures are read two minutes behind, like the alerts, so the page and the
+alerts agree. On the Home page, an SLO with less than a quarter of its
+budget left is under "Coming up" (for a calendar month, while more than a
+week of the month is left); an exhausted budget is an alert instead.
+
+The starter dashboard **SLOs** shows every SLO's figures over 30 days and
+its bad share, burn rate and events over time, with a variable `slo`.
 
 ## Queries
 

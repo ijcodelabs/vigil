@@ -3,6 +3,7 @@ package slo
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestParseDefaultsAndQueries(t *testing.T) {
@@ -178,5 +179,29 @@ indicator: {span: {service: api}}
 	w := strings.Join(m.Warnings(), "\n")
 	if !strings.Contains(w, "SLOBurnFast over 1h can never fire") || !strings.Contains(w, "calendar month") {
 		t.Errorf("warnings: %s", w)
+	}
+}
+
+func TestWindowAndOperations(t *testing.T) {
+	now := time.Date(2026, 10, 31, 10, 0, 0, 0, time.UTC)
+	month, err := Parse("m", "objective: 99\nwindow: calendar_month\nindicator: {span: {service: shop, latency_below: 500ms}}\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if from, to := month.WindowStart(now), month.WindowEnd(now); !from.Equal(time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)) ||
+		!to.Equal(time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)) {
+		t.Errorf("calendar month: %s to %s", from, to)
+	}
+	bad, total := month.OperationsQueries(24 * time.Hour)
+	if total != `sum by (span_name) (increase(traces_spans_total{service="shop", kind="server"}[1d]))` ||
+		!strings.Contains(bad, `sum by (span_name) (increase(traces_span_duration_seconds_bucket{service="shop", kind="server", status="ok", le="0.5"}[1d]))`) {
+		t.Errorf("operations: %s / %s", bad, total)
+	}
+	rolling, _ := Parse("r", "objective: 99\nindicator: {probe: {name: home}}\n")
+	if from, to := rolling.WindowStart(now), rolling.WindowEnd(now); !from.Equal(now.Add(-30*24*time.Hour)) || !to.Equal(now) {
+		t.Errorf("rolling: %s to %s", from, to)
+	}
+	if bad, _ := rolling.OperationsQueries(time.Hour); bad != "" {
+		t.Errorf("a probe SLO has operations: %s", bad)
 	}
 }

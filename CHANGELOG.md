@@ -40,9 +40,11 @@ holds.
 - **Service level objectives:** over site checks, spans or any counters,
   counted once a minute into `slo_good_per_minute` and
   `slo_total_per_minute`; saved through the API or `vigil apply` (a
-  `slos` directory). Multi-window burn-rate alerts (`SLOBurnFast`,
-  `SLOBurnSlow`) and `SLOBudgetExhausted`, shown as SLO incidents on Home.
-  An SLOs page comes next.
+  `slos` directory) or on the SLOs page. Multi-window burn-rate alerts
+  (`SLOBurnFast`, `SLOBurnSlow`) and `SLOBudgetExhausted`, shown as SLO
+  incidents on Home. The SLOs page shows each one's budget left, burn
+  rates, coverage, incidents and history; Home lists nearly spent budgets
+  under "Coming up"; a starter dashboard "SLOs".
 - `vigil tracegen -token` and `-token-file`, for an agent that requires
   OTLP tokens.
 - **AI and costs:** Claude Code telemetry, sessions and an audit hook;

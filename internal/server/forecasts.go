@@ -23,7 +23,7 @@ const forecastInterval = 10 * time.Minute
 
 // Coming is one thing that will need attention.
 type Coming struct {
-	Kind     string  `json:"kind"` // disk_full, cert_expiry, agent_limited
+	Kind     string  `json:"kind"` // disk_full, cert_expiry, agent_limited, slo_budget
 	Agent    string  `json:"agent,omitempty"`
 	Resource string  `json:"resource"`
 	Title    string  `json:"title"`
@@ -32,6 +32,8 @@ type Coming struct {
 	Latest   float64 `json:"latest_s,omitempty"`
 	// Query shows the data the forecast is made from, for a chart.
 	Query string `json:"query,omitempty"`
+	// Link is a page of vigil's that shows it better than a chart does.
+	Link string `json:"link,omitempty"`
 }
 
 type comingState struct {
@@ -66,7 +68,7 @@ func (s *Server) forecastLoop(ctx context.Context) {
 func (s *Server) forecasts(ctx context.Context, now time.Time) comingState {
 	st := comingState{At: now, Items: []Coming{}}
 	var errs []string
-	for _, f := range []func(context.Context, time.Time) ([]Coming, error){s.diskForecasts, s.certForecasts, s.limitedAgents} {
+	for _, f := range []func(context.Context, time.Time) ([]Coming, error){s.diskForecasts, s.certForecasts, s.limitedAgents, s.sloForecasts} {
 		items, err := f(ctx, now)
 		if err != nil {
 			errs = append(errs, err.Error())

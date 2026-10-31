@@ -996,8 +996,41 @@ Against Boop's observability contract v1 (Boop Jump repository,
   `body-broken` paged at 09:08, 46 min after they were saved; `health-ok`
   and `catalog-fast` (burn 1.2) did not; the page's burn rate 86.95
   against 86.80 from the raw span counters.
-- Not built: the SLOs page (step 3), SLA reports (step 4), linking an SLO
-  incident to the alert that causes it.
+- Not built: SLA reports (step 4), linking an SLO incident to the alert
+  that causes it.
+
+## SLOs, step 3 of slo.md: the page (built 2026-10-31)
+
+- `#/slos` (`internal/ui/static/js/slos.js`), in the menu for admins and
+  for everyone once an SLO exists: objective, achieved, budget left (bar),
+  burn rate 1h, coverage, firing alerts; a filter above three SLOs. New
+  SLO (YAML editor with a template; a name already taken is refused in
+  the page, because a PUT replaces).
+- An SLO's page: achieved, budget left (and bad events still allowed),
+  burn rates 1h/6h/1d/3d (red above the alert's rate), coverage; budget
+  left over the window against a line spent evenly, bad share and events
+  per 1 h (3 h above ten days); for span SLOs the operations with bad
+  events in the last day (`SLO.OperationsQueries`); incidents in the
+  window (`Tracker.OfResource`), silences on `slo=<name>`, history with
+  show and restore, the generated rules. Edit and delete for admins.
+- Figures from the server: `GET /api/v1/slos?status=1` and the status in
+  `GET /api/v1/slos/{name}` (`slo_status.go`): four queries per window
+  length plus eight for the burn windows, by `slo`, whatever the number of
+  SLOs, read `slo.ReadOffset` (2 min) back like the alerts. Coverage is
+  minutes recorded ÷ minutes since the first one in the window.
+- Range queries for the charts start on a multiple of the step: the store
+  evaluates at start + k·step, and an unaligned start put every point in
+  an empty bucket (seen on the Lima host: charts empty).
+- Home: "Coming up" item `slo_budget` (budget left under 25 %, above 0;
+  a calendar month only with more than a week to go; warning under 10 %),
+  with a `link` to the SLO's page; SLO incidents link to it too.
+- Starter dashboard `slos` (table over 30 days, bad share, burn rate,
+  events); rows only for SLOs whose objective is still recorded.
+- Checked in the browser on the Lima host: list, page, charts, edit with a
+  warning, new (and the duplicate refused), delete, restore, Home item,
+  viewer (no edit buttons), phone width.
+- Not built: version changes marked on the charts, deploy markers (after
+  DORA), filter by exact label.
 
 ## Next
 
