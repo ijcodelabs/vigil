@@ -40,6 +40,9 @@ type Integration struct {
 	// Queries are offered in Explore under "Saved" while the integration
 	// is in use. They cannot be changed there; a copy can be saved.
 	Queries []Query `yaml:"queries" json:"-"`
+	// SLOs are SLO templates the SLOs page offers while the integration
+	// is in use, one for each value of a label.
+	SLOs []SLOTemplate `yaml:"slos" json:"-"`
 
 	Builtin bool `yaml:"-" json:"builtin"`
 }
@@ -95,6 +98,9 @@ func ParseIntegration(name, text string) (*Integration, error) {
 	}
 	if err := CheckQueries(in.Queries); err != nil {
 		return nil, fmt.Errorf("queries: %w", err)
+	}
+	if err := CheckSLOTemplates(in.SLOs); err != nil {
+		return nil, fmt.Errorf("slos: %w", err)
 	}
 	return in, nil
 }

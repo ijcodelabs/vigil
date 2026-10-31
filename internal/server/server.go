@@ -260,6 +260,7 @@ func (s *Server) Handler() http.Handler {
 	s.queryRoutes(mux)
 	s.sloRoutes(mux)
 	s.sloReportRoutes(mux)
+	s.sloTemplateRoutes(mux)
 	s.tokenRoutes(mux)
 	mux.Handle("GET /docs/", ui.DocsHandler())
 	mux.Handle("/", ui.Handler())

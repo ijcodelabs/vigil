@@ -1,0 +1,31 @@
+# SLO templates that come with vigil, offered on the SLOs page next to
+# those of the integrations in use: one for each value of the label.
+- id: check
+  title: Site check succeeds
+  description: The share of a check's runs that succeed, from every agent that runs it.
+  each: {match: probe_success, label: probe}
+  name: check-${probe}
+  doc: |
+    description: The check ${probe} succeeds
+    objective: 99.5
+    indicator: {probe: {name: "${probe}"}}
+- id: service-errors
+  title: Service answers without errors
+  description: The share of a traced service's requests (server spans) that do not fail.
+  each: {match: 'traces_spans_total{kind="server"}', label: service}
+  name: ${service}-errors
+  doc: |
+    service: "${service}"
+    description: ${service} answers its requests without errors
+    objective: 99.9
+    indicator: {span: {service: "${service}"}}
+- id: service-latency
+  title: Service answers fast
+  description: The share of a traced service's requests that succeed within 500 ms.
+  each: {match: 'traces_spans_total{kind="server"}', label: service}
+  name: ${service}-fast
+  doc: |
+    service: "${service}"
+    description: ${service} answers within 500 ms
+    objective: 99
+    indicator: {span: {service: "${service}", latency_below: 500ms}}

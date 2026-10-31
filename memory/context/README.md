@@ -10,7 +10,7 @@ delete what stops being true.
 | [state.md](state.md) | What is built, what is in progress, what is next |
 | [decisions.md](decisions.md) | Design decisions and the reasons behind them |
 | [direction.md](direction.md) | Where the project is meant to go beyond the current plan |
-| [slo.md](slo.md) | Spec for SLOs, error budgets, burn-rate alerts and SLA reports (steps 1–4 built) |
+| [slo.md](slo.md) | Spec for SLOs, error budgets, burn-rate alerts and SLA reports (steps 1–5 built) |
 | [releasing.md](releasing.md) | How a version is tagged, built, signed and published |
 | [testing.md](testing.md) | How to run it against real stores and a real kernel, and known pitfalls |
 

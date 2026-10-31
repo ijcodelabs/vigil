@@ -101,6 +101,26 @@ fleet/
 vigil apply -f fleet/            # -prune also deletes SLOs that came from files and are gone
 ```
 
+## Templates
+
+**From a template** on the SLOs page (admins) offers an SLO for what
+reported in the last day, as a document to look at and change before it
+is saved; nothing is made by itself.
+
+| Template | One for each | Objective |
+|---|---|---|
+| Site check succeeds | check (`probe`) | 99.5 % of runs |
+| Service answers without errors | traced service with server spans | 99.9 % of requests |
+| Service answers fast | traced service | 99 % within 500 ms |
+| HAProxy: backend answers without server errors | backend, while the HAProxy integration is in use | 99.9 % of responses not 5xx |
+
+nginx has no template: its status codes are only in its logs, and SLOs
+read metrics. Your own integrations can ship templates (`slos:`, see
+[Fleet](fleet.md#your-own-integrations)). An offer whose SLO name exists
+links to that SLO instead.
+
+`GET /api/v1/slos/templates` (admins) returns the same offers.
+
 ## What is recorded
 
 Each SLO runs as a rule group `slo:<name>` (under Alerts > Rules, not

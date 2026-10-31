@@ -1059,6 +1059,29 @@ Against Boop's observability contract v1 (Boop Jump repository,
   the print rules applied on screen.
 - Not built: a report per SLO, service credits (out of scope by design).
 
+## SLOs, step 5 of slo.md: templates (built 2026-10-31)
+
+- `fleet.SLOTemplate` (`internal/fleet/slotemplate.go`): `id`, `title`,
+  `description`, `each: {match, label}`, `name` and `doc` with
+  `${label}`. Integrations ship them under `slos:` (HAProxy:
+  `backend-errors`, 5xx share per `proxy`); vigil's own are in
+  `internal/server/slo_templates.yaml` (each check; each traced service,
+  errors and 500 ms latency).
+- `GET /api/v1/slos/templates` (admins; `slo_templates.go`): for each
+  template, the label's values that reported in the last day
+  (`group by (label) (last_over_time(match[1d]))`), at most 50, values
+  limited to `[A-Za-z0-9_.:/@-]` so they cannot change the YAML or the
+  queries; each filled document must parse, `exists` when the name is
+  taken. `templates` is a reserved SLO name.
+- SLOs page: **From a template** (admins) lists the offers; Use opens the
+  New SLO editor with the document. Nothing is made by itself.
+- nginx has no template: status codes only in its logs, SLOs read metrics
+  (a logs indicator is step 6).
+- Tests fill every shipped template with a plain and an awkward value
+  (`TestSLOTemplatesParse`). Checked on the Lima host: offers for 10
+  checks and 4 services, one saved, then shown as exists. HAProxy's
+  template is checked only by the test (no HAProxy on the Lima host).
+
 ## Next
 
 - Foundations, build order in `direction.md`: step 1 on paper (data

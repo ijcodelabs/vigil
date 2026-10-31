@@ -266,10 +266,23 @@ queries:                        # optional, offered in Explore under Saved
   - name: Shop errors
     type: logs                  # metrics (PromQL) is the default
     query: app:shop level:error
+slos:                           # optional, SLO templates: one offer per value of a label
+  - id: endpoint-errors
+    title: Endpoint answers without server errors
+    each: {match: shop_requests_total, label: endpoint}
+    name: shop-${endpoint}      # becomes a valid SLO name (lower case, dashes)
+    doc: |                      # an SLO document without its name
+      objective: 99.9
+      indicator:
+        ratio:
+          bad: 'shop_requests_total{endpoint="${endpoint}", code=~"5.."}'
+          total: 'shop_requests_total{endpoint="${endpoint}"}'
 ```
 
 The queries show up in Explore, for everyone, while a profile switches the
-integration on. They cannot be changed there, only copied.
+integration on. They cannot be changed there, only copied. The SLO
+templates are offered on the SLOs page under **From a template** (see
+[SLOs](slo.md#templates)).
 
 ## Keeping profiles in git
 

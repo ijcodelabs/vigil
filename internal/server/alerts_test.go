@@ -41,6 +41,10 @@ func (a *alertStores) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			io.WriteString(w, `{"status":"error","errorType":"422","error":"cannot parse \"bad(\": missing closing parenthesis"}`)
 		case q == "cpu_high" && a.cpuHigh:
 			vector(`{"metric":{"__name__":"cpu","instance":"web-01","agent":"web-01"},"value":[1700000000,"97.5"]}`)
+		case strings.HasPrefix(q, "group by (probe) (last_over_time(probe_success[1d]))"):
+			// Checks the SLO templates offer an SLO for; one name cannot go
+			// into a document.
+			vector(`{"metric":{"probe":"shop-home"},"value":[1700000000,"1"]},{"metric":{"probe":"has \"quotes\""},"value":[1700000000,"1"]}`)
 		case strings.Contains(q, "_per_minute["):
 			// The SLO page's sums over all SLOs (the alerts select one SLO
 			// and get nothing): SLO home counted a day, 9995 good of 10000
