@@ -969,7 +969,35 @@ Against Boop's observability contract v1 (Boop Jump repository,
   tracegen` has no way to pass an OTLP token, and the test agent requires
   one.
 - Next: step 2 of slo.md (burn-rate alerts, `min_events`, incidents of
-  kind `slo`).
+  kind `slo`): built 2026-10-31, below.
+
+## SLOs, step 2 of slo.md: alerts (built 2026-10-31)
+
+- `SLO.AlertGroup` (`internal/slo/slo.go`): a group `slo:<name>:alerts`
+  next to the recording one, not aligned. `SLOBurnFast` (critical; 1h/5m
+  and 6h/30m) and `SLOBurnSlow` (warning; 1d/2h and 3d/6h), rate =
+  spend × window ÷ long window (14.4, 6, 3, 1 for 30 days), the pairs of
+  one alert joined with `or`; `SLOBudgetExhausted` (warning) for rolling
+  windows. `alerting: {page, ticket, min_events}` (default 10 events an
+  hour over the long window, not for probe SLOs). A save warns when a
+  pair can never fire (rate × budget ≥ 1) and for a calendar month.
+- Found live and fixed before it shipped: an alert read the newest minute
+  while only its total was visible (74.8 % for 7.7 %), so alerts read the
+  minutes with `offset 2m`; and new SLOs paged off a few minutes of data
+  (8 checks after a server restart), so a burn alert needs ¾ of its long
+  window counted and `SLOBudgetExhausted` ¼ of the SLO's window
+  (`tfirst_over_time`, MetricsQL). Alerts now lag events by about 4 min.
+- Incidents: kind `slo` (alertname `SLO*` with an `slo` label), resource
+  `slo:<name>`; Home links to the burn rate over three days.
+- `vigil tracegen -token` / `-token-file` (a file with the token, or an
+  agent's tokens_file); first live span SLOs with it.
+- Verified on the Lima host (receiver `none`): four SLOs with demo traces
+  and probes; `frontend-availability` (~8.7 % errors at 99.9 %) and
+  `body-broken` paged at 09:08, 46 min after they were saved; `health-ok`
+  and `catalog-fast` (burn 1.2) did not; the page's burn rate 86.95
+  against 86.80 from the raw span counters.
+- Not built: the SLOs page (step 3), SLA reports (step 4), linking an SLO
+  incident to the alert that causes it.
 
 ## Next
 

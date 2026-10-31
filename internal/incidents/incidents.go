@@ -27,6 +27,7 @@ const (
 	KindHostDown = "host_down" // the agent stopped reporting; the parent of that host's other incidents
 	KindAlert    = "alert"
 	KindSecurity = "security" // a runtime detection
+	KindSLO      = "slo"      // an SLO spends its error budget too fast, or has spent it
 )
 
 // States of an incident.
@@ -40,7 +41,7 @@ const (
 type Signal struct {
 	Key      string // kind, resource and what tells it apart; stable while the problem lasts
 	Kind     string
-	Resource string // host:<agent>, container:<agent>/<name>, check:<agent>/<probe>, pod:<ns>/<pod>, backend:<agent>/<proxy>[/<server>], service:<name>, or empty
+	Resource string // slo:<name>, host:<agent>, container:<agent>/<name>, check:<agent>/<probe>, pod:<ns>/<pod>, backend:<agent>/<proxy>[/<server>], service:<name>, or empty
 	// ParentResource is what contains Resource besides its host: an open
 	// incident on it holds this one (a HAProxy server under its backend).
 	ParentResource string
@@ -63,8 +64,13 @@ func FromAlert(a alerting.ActiveAlert) Signal {
 		sig.Kind = KindHostDown
 	case l["source"] == "security":
 		sig.Kind = KindSecurity
+	case l["slo"] != "" && strings.HasPrefix(l["alertname"], "SLO"):
+		sig.Kind = KindSLO
 	}
 	switch {
+	case sig.Kind == KindSLO:
+		// The SLO is what is wrong, not a host: its alerts carry no agent.
+		sig.Resource = "slo:" + l["slo"]
 	case l["container"] != "" && l["agent"] != "":
 		sig.Resource = "container:" + l["agent"] + "/" + l["container"]
 	case l["probe"] != "":

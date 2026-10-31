@@ -40,7 +40,11 @@ holds.
 - **Service level objectives:** over site checks, spans or any counters,
   counted once a minute into `slo_good_per_minute` and
   `slo_total_per_minute`; saved through the API or `vigil apply` (a
-  `slos` directory). Burn-rate alerts and an SLOs page come next.
+  `slos` directory). Multi-window burn-rate alerts (`SLOBurnFast`,
+  `SLOBurnSlow`) and `SLOBudgetExhausted`, shown as SLO incidents on Home.
+  An SLOs page comes next.
+- `vigil tracegen -token` and `-token-file`, for an agent that requires
+  OTLP tokens.
 - **AI and costs:** Claude Code telemetry, sessions and an audit hook;
   language-model calls counted and priced from OpenTelemetry spans; GPU
   costs; one cost metric for all of it.

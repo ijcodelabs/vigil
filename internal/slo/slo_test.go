@@ -99,3 +99,84 @@ func TestRefused(t *testing.T) {
 		t.Error("a name with capitals and underscores was accepted")
 	}
 }
+
+func TestAlerts(t *testing.T) {
+	s, err := Parse("api", `
+objective: 99.9
+runbook_url: https://wiki.example.com/api
+indicator: {span: {service: api}}
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, ok := s.AlertGroup()
+	if !ok || g.Name != "slo:api:alerts" || g.Delay != 0 || g.Labels["slo"] != "api" || len(g.Rules) != 3 {
+		t.Fatalf("alert group: %+v", g)
+	}
+	fast, slow, gone := g.Rules[0], g.Rules[1], g.Rules[2]
+	if fast.Alert != "SLOBurnFast" || fast.Labels["severity"] != "critical" || slow.Alert != "SLOBurnSlow" || gone.Alert != "SLOBudgetExhausted" {
+		t.Fatalf("alerts: %s %s %s", fast.Alert, slow.Alert, gone.Alert)
+	}
+	// The usual rates for 30 days, both windows, and the event minimum
+	// (10 an hour by default) over the long window.
+	// The usual rates for 30 days, both windows ending two minutes back, the
+	// event minimum (10 an hour by default) and a full long window.
+	for _, want := range []string{
+		`sum(sum_over_time(slo_good_per_minute{slo="api"}[1h] offset 2m)) / sum(sum_over_time(slo_total_per_minute{slo="api"}[1h] offset 2m))) / 0.001) > 14.4`,
+		`[5m] offset 2m))) / 0.001) > 14.4`,
+		`(time() - tfirst_over_time(slo_total_per_minute{slo="api"}[1h])) >= 2700`,
+		`sum(sum_over_time(slo_total_per_minute{slo="api"}[1h] offset 2m)) >= 10`,
+		`[30m] offset 2m))) / 0.001) > 6`,
+		`(time() - tfirst_over_time(slo_total_per_minute{slo="api"}[6h])) >= 16200`,
+		`sum(sum_over_time(slo_total_per_minute{slo="api"}[6h] offset 2m)) >= 60`,
+	} {
+		if !strings.Contains(fast.Expr, want) {
+			t.Errorf("SLOBurnFast lacks %s:\n%s", want, fast.Expr)
+		}
+	}
+	for _, want := range []string{"[1d]", "> 3 and", "[2h]", "[3d]", "> 1 and", "[6h]", ">= 240", ">= 720"} {
+		if !strings.Contains(slow.Expr, want) {
+			t.Errorf("SLOBurnSlow lacks %s:\n%s", want, slow.Expr)
+		}
+	}
+	if !strings.Contains(gone.Expr, "[30d] offset 2m") || !strings.Contains(gone.Expr, ">= 0.001 and on()") || !strings.HasSuffix(gone.Expr, "[30d])) >= 648000") {
+		t.Errorf("SLOBudgetExhausted: %s", gone.Expr)
+	}
+	if fast.Annotations["runbook_url"] != "https://wiki.example.com/api" || !strings.Contains(fast.Annotations["summary"], `{{ printf "%.1f" $value }}`) {
+		t.Errorf("annotations: %v", fast.Annotations)
+	}
+	if len(s.Warnings()) != 0 {
+		t.Errorf("warnings: %v", s.Warnings())
+	}
+
+	// A 7-day window spends the same share of its budget, faster; a probe
+	// SLO has no event minimum; switches leave alerts out.
+	p, _ := Parse("home", "objective: 99\nwindow: 7d\nindicator: {probe: {name: x}}\nalerting: {ticket: false}")
+	g, _ = p.AlertGroup()
+	if len(g.Rules) != 1 || g.Rules[0].Alert != "SLOBurnFast" || !strings.Contains(g.Rules[0].Expr, "> 3.36 and") ||
+		!strings.Contains(g.Rules[0].Expr, "> 1.4 and") || strings.Contains(g.Rules[0].Expr, "offset 2m)) >=") {
+		t.Errorf("7d probe SLO: %+v", g.Rules)
+	}
+	off, _ := Parse("off", "objective: 99\nindicator: {probe: {name: x}}\nalerting: {page: false, ticket: false}")
+	if _, ok := off.AlertGroup(); ok || len(off.RuleGroups()) != 1 {
+		t.Error("an SLO with both alert kinds off still has an alert group")
+	}
+	none, _ := Parse("none", "objective: 99\nindicator: {span: {service: a}}\nalerting: {min_events: 0}")
+	if g, _ := none.AlertGroup(); strings.Contains(g.Rules[0].Expr, "offset 2m)) >=") {
+		t.Errorf("min_events 0 still sets a minimum: %s", g.Rules[0].Expr)
+	}
+
+	// A calendar month has no budget alert; an objective so low that a
+	// page would need more than every event failing says so.
+	m, _ := Parse("m", "objective: 90\nwindow: calendar_month\nindicator: {probe: {name: x}}")
+	g, _ = m.AlertGroup()
+	for _, r := range g.Rules {
+		if r.Alert == "SLOBudgetExhausted" {
+			t.Error("a calendar-month SLO got SLOBudgetExhausted")
+		}
+	}
+	w := strings.Join(m.Warnings(), "\n")
+	if !strings.Contains(w, "SLOBurnFast over 1h can never fire") || !strings.Contains(w, "calendar month") {
+		t.Errorf("warnings: %s", w)
+	}
+}

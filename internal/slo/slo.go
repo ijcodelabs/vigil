@@ -66,9 +66,31 @@ type SLO struct {
 	Objective   float64           `yaml:"objective" json:"objective"` // percent
 	Window      string            `yaml:"window,omitempty" json:"window"`
 	Indicator   Indicator         `yaml:"indicator" json:"indicator"`
+	Alerting    Alerting          `yaml:"alerting,omitempty" json:"alerting"`
 	Labels      map[string]string `yaml:"labels,omitempty" json:"labels,omitempty"`
 	RunbookURL  string            `yaml:"runbook_url,omitempty" json:"runbook_url,omitempty"`
 }
+
+// Alerting says which alerts the SLO raises. Both kinds are on unless
+// switched off.
+type Alerting struct {
+	// Page is SLOBurnFast (critical): the budget goes fast enough that
+	// someone should look now.
+	Page *bool `yaml:"page,omitempty" json:"page,omitempty"`
+	// Ticket is SLOBurnSlow (warning) and SLOBudgetExhausted.
+	Ticket *bool `yaml:"ticket,omitempty" json:"ticket,omitempty"`
+	// MinEvents per hour: while the long window holds fewer, no burn-rate
+	// alert, so one failed request out of three is not a page. Not used
+	// for probe SLOs, whose rate is known. Default DefaultMinEvents.
+	MinEvents *float64 `yaml:"min_events,omitempty" json:"min_events,omitempty"`
+}
+
+// DefaultMinEvents is the events per hour below which burn-rate alerts
+// stay quiet, unless an SLO says otherwise.
+const DefaultMinEvents = 10
+
+func (a Alerting) page() bool   { return a.Page == nil || *a.Page }
+func (a Alerting) ticket() bool { return a.Ticket == nil || *a.Ticket }
 
 // Indicator says how events are counted; exactly one kind is set.
 type Indicator struct {
@@ -158,6 +180,9 @@ func (s *SLO) Check() error {
 		if ownLabels[k] {
 			return fmt.Errorf("label %q is set by the SLO itself (slo, service and owner); use the field instead", k)
 		}
+	}
+	if s.Alerting.MinEvents != nil && *s.Alerting.MinEvents < 0 {
+		return errors.New("alerting.min_events: events per hour, 0 or more")
 	}
 	if strings.ContainsAny(s.Service+s.Owner, "\r\n") {
 		return errors.New("service and owner are one line each")
@@ -374,4 +399,157 @@ func (s *SLO) RuleGroup() rules.Group {
 			{Record: ObjectiveMetric, Expr: fmt.Sprintf("vector(%s)", strconv.FormatFloat(s.Ratio(), 'g', -1, 64))},
 		},
 	}
+}
+
+// A burn-rate pair: the alert fires when both windows burn faster than the
+// rate at which Spend of the budget goes in Long. The rate is worked out
+// for the SLO's window: for 30 days these are the usual 14.4, 6, 3 and 1
+// (Google's SRE workbook, "multiwindow, multi-burn-rate alerts").
+type burnPair struct {
+	Alert, Severity string
+	Long, Short     time.Duration
+	Spend           float64 // share of the window's budget
+}
+
+var burnPairs = []burnPair{
+	{"SLOBurnFast", "critical", time.Hour, 5 * time.Minute, 0.02},
+	{"SLOBurnFast", "critical", 6 * time.Hour, 30 * time.Minute, 0.05},
+	{"SLOBurnSlow", "warning", 24 * time.Hour, 2 * time.Hour, 0.10},
+	{"SLOBurnSlow", "warning", 72 * time.Hour, 6 * time.Hour, 0.10},
+}
+
+// BurnRate is the rate a pair fires at for this SLO.
+func (s *SLO) burnRate(p burnPair) float64 {
+	return p.Spend * s.WindowDuration().Hours() / p.Long.Hours()
+}
+
+// budget is 1 - objective, as a ratio.
+func (s *SLO) budget() float64 { return math.Round((1-s.Ratio())*1e10) / 1e10 }
+
+// alertOffset keeps alerts off the minute that is being written. Its good
+// and total counts are two writes, and for a moment one can be visible
+// without the other (seen live: a page at 74.8 % bad for 7.7 %). A minute
+// is written about Delay after it ends, so a window that ends this much
+// earlier never holds it.
+const alertOffset = 2 * time.Minute
+
+// sums are the good and total events over d, from the recorded minutes,
+// as alerts read them.
+func (s *SLO) sums(d time.Duration) (good, total string) {
+	w := model.Duration(d).String() + "] offset " + model.Duration(alertOffset).String()
+	sel := fmt.Sprintf("{slo=%q}", s.Name)
+	return fmt.Sprintf("sum(sum_over_time(%s%s[%s))", GoodMetric, sel, w),
+		fmt.Sprintf("sum(sum_over_time(%s%s[%s))", TotalMetric, sel, w)
+}
+
+// measuredFor holds when the SLO has counted for at least d of the
+// window before now, so that an alert judges a full window and not the
+// first minutes of a new SLO. tfirst_over_time is MetricsQL: SLO alerts
+// need VictoriaMetrics, as the site-check dashboards do.
+func (s *SLO) measuredFor(window, d time.Duration) string {
+	return fmt.Sprintf("(time() - tfirst_over_time(%s{slo=%q}[%s])) >= %s",
+		TotalMetric, s.Name, model.Duration(window).String(), fmtFloat(d.Seconds()))
+}
+
+// BurnQuery is how fast the budget went over d: 1 spends exactly the
+// budget in one window.
+func (s *SLO) BurnQuery(d time.Duration) string {
+	good, total := s.sums(d)
+	return fmt.Sprintf("((1 - %s / %s) / %s)", good, total, fmtFloat(s.budget()))
+}
+
+func fmtFloat(v float64) string { return strconv.FormatFloat(v, 'g', -1, 64) }
+
+// Warnings are things about the SLO that do not stop a save.
+func (s *SLO) Warnings() []string {
+	var out []string
+	for _, p := range burnPairs {
+		if (p.Severity == "critical" && !s.Alerting.page()) || (p.Severity != "critical" && !s.Alerting.ticket()) {
+			continue
+		}
+		if r := s.burnRate(p); r*s.budget() >= 1 {
+			out = append(out, fmt.Sprintf("%s over %s can never fire: at an objective of %g %% it needs a burn rate of %.3g, more than every event failing", p.Alert, model.Duration(p.Long), s.Objective, r))
+		}
+	}
+	if s.Window == CalendarMonth && s.Alerting.ticket() {
+		out = append(out, "SLOBudgetExhausted is not raised for a calendar month (only for rolling windows); the burn-rate alerts are")
+	}
+	return out
+}
+
+// AlertGroup holds the SLO's alerts. It runs apart from the recording
+// group: alerts judge now, while the counts are recorded per finished
+// minute, and catching up on missed minutes must not make an alert fire
+// and resolve in bursts. Its rules read the recorded minutes, so they lag
+// the events by about Delay.
+func (s *SLO) AlertGroup() (rules.Group, bool) {
+	g := rules.Group{Name: GroupPrefix + s.Name + ":alerts", Interval: model.Duration(time.Minute), Labels: s.SeriesLabels()}
+	min := float64(DefaultMinEvents)
+	if s.Alerting.MinEvents != nil {
+		min = *s.Alerting.MinEvents
+	}
+	window := s.Window
+	if window == CalendarMonth {
+		window = "calendar month"
+	}
+	annotations := func(summary string) map[string]string {
+		a := map[string]string{"summary": summary, "objective": fmt.Sprintf("%g %% over %s", s.Objective, window)}
+		if s.Description != "" {
+			a["description"] = s.Description
+		}
+		if s.RunbookURL != "" {
+			a["runbook_url"] = s.RunbookURL
+		}
+		return a
+	}
+	byAlert := map[string][]string{}
+	var order []string
+	for _, p := range burnPairs {
+		if (p.Severity == "critical" && !s.Alerting.page()) || (p.Severity != "critical" && !s.Alerting.ticket()) {
+			continue
+		}
+		rate := fmtFloat(math.Round(s.burnRate(p)*1000) / 1000)
+		cond := fmt.Sprintf("%s > %s and %s > %s and on() %s", s.BurnQuery(p.Long), rate, s.BurnQuery(p.Short), rate,
+			s.measuredFor(p.Long, p.Long*3/4))
+		if s.Indicator.Probe == nil && min > 0 {
+			_, total := s.sums(p.Long)
+			cond += fmt.Sprintf(" and on() %s >= %s", total, fmtFloat(min*p.Long.Hours()))
+		}
+		if byAlert[p.Alert] == nil {
+			order = append(order, p.Alert)
+		}
+		byAlert[p.Alert] = append(byAlert[p.Alert], "("+cond+")")
+	}
+	for _, name := range order {
+		sev, speed := "critical", "fast"
+		if name == "SLOBurnSlow" {
+			sev, speed = "warning", "steadily"
+		}
+		g.Rules = append(g.Rules, rules.Rule{
+			Alert:       name,
+			Expr:        strings.Join(byAlert[name], "\nor\n"),
+			Labels:      map[string]string{"severity": sev},
+			Annotations: annotations(fmt.Sprintf("SLO %s spends its error budget %s: {{ printf \"%%.1f\" $value }} times the rate the objective allows", s.Name, speed)),
+		})
+	}
+	if s.Alerting.ticket() && s.Window != CalendarMonth {
+		good, total := s.sums(s.WindowDuration())
+		g.Rules = append(g.Rules, rules.Rule{
+			Alert: "SLOBudgetExhausted",
+			Expr: fmt.Sprintf("(1 - %s / %s) >= %s and on() %s", good, total, fmtFloat(s.budget()),
+				s.measuredFor(s.WindowDuration(), s.WindowDuration()/4)),
+			Labels:      map[string]string{"severity": "warning"},
+			Annotations: annotations(fmt.Sprintf("SLO %s has spent its error budget for the last %s: {{ humanizePercentage $value }} of events were bad", s.Name, s.Window)),
+		})
+	}
+	return g, len(g.Rules) > 0
+}
+
+// RuleGroups are both groups the server runs for this SLO.
+func (s *SLO) RuleGroups() []rules.Group {
+	out := []rules.Group{s.RuleGroup()}
+	if g, ok := s.AlertGroup(); ok {
+		out = append(out, g)
+	}
+	return out
 }

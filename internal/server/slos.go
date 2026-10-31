@@ -60,7 +60,7 @@ func (s *Server) sloRoutes(mux *http.ServeMux) {
 		default:
 			out := map[string]any{"slo": row}
 			if row.Error == "" {
-				out["rules"] = row.SLO.RuleGroup()
+				out["rules"] = row.SLO.RuleGroups()
 			}
 			writeJSON(w, out)
 		}
@@ -120,8 +120,8 @@ func (s *Server) putSLO(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "SLO not saved: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	g := def.RuleGroup()
-	if err := s.rules.Check(r.Context(), &rules.File{Groups: []rules.Group{g}}); err != nil {
+	groups := def.RuleGroups()
+	if err := s.rules.Check(r.Context(), &rules.File{Groups: groups}); err != nil {
 		var qe *rules.QueryError
 		if errors.As(err, &qe) && qe.Bad {
 			http.Error(w, "SLO not saved, the metric store refuses its queries: "+err.Error(), http.StatusBadRequest)
@@ -130,12 +130,14 @@ func (s *Server) putSLO(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "SLO not saved, its queries could not be checked: "+err.Error(), http.StatusServiceUnavailable)
 		return
 	}
-	warnings := []string{}
+	warnings := append([]string{}, def.Warnings()...)
 	if series, err := s.rules.Query(r.Context(), rules.TypeMetrics, def.EventsQuery(time.Hour), time.Now()); err == nil && len(series) == 0 {
 		warnings = append(warnings, "no events in the last hour from "+def.Source()+"; check the name. The SLO counts from when there are some")
 	}
-	if s.ruleFileHas(g.Name) {
-		warnings = append(warnings, fmt.Sprintf("the rule file has a group called %q, which runs instead of this SLO's", g.Name))
+	for _, g := range groups {
+		if s.ruleFileHas(g.Name) {
+			warnings = append(warnings, fmt.Sprintf("the rule file has a group called %q, which runs instead of this SLO's", g.Name))
+		}
 	}
 	cur, found, err := s.store.SLO(defaultTenant, name)
 	if err != nil {
@@ -195,7 +197,7 @@ func (s *Server) sloRuleGroups() []rules.Group {
 			s.log.Warn("SLO skipped: its document does not parse", "slo", row.Name, "err", row.Error)
 			continue
 		}
-		out = append(out, row.SLO.RuleGroup())
+		out = append(out, row.SLO.RuleGroups()...)
 	}
 	return out
 }
