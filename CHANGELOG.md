@@ -14,6 +14,8 @@ after. How a release is made: [releasing.md](memory/context/releasing.md).
 
 ## Unreleased
 
+## v0.1.0 (2026-10-31)
+
 The first release. vigil was used from source until now; this is what it
 holds.
 
@@ -72,3 +74,7 @@ holds.
   `vigil agent`, `vigil server`, `vigil relay`, `vigil enroll` and `vigil
   events` still work in this release, with a warning, and are removed in
   0.2.0.
+- From `v0.1.0-rc.1`: replace the binaries or images. The server adds its
+  new tables (SLOs, the record of AI calls, drafts of views) when it
+  starts; explanations made before keep counting against the month's AI
+  budget.
