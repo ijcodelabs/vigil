@@ -259,6 +259,7 @@ func (s *Server) Handler() http.Handler {
 	s.dashboardRoutes(mux)
 	s.queryRoutes(mux)
 	s.sloRoutes(mux)
+	s.sloReportRoutes(mux)
 	s.tokenRoutes(mux)
 	mux.Handle("GET /docs/", ui.DocsHandler())
 	mux.Handle("/", ui.Handler())
@@ -377,6 +378,7 @@ func (s *Server) Run(ctx context.Context) error {
 	go s.priceLoop(ctx)
 	go s.incidentLoop(ctx)
 	go s.forecastLoop(ctx)
+	go s.sloReportLoop(ctx)
 	go s.spendLoop(ctx)
 	go s.vaultLoop(ctx)
 	go func() { // rollouts move on by themselves

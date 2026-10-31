@@ -1,6 +1,6 @@
 # SLOs, error budgets and burn-rate alerts: spec
 
-Draft, 2026-10-30. Steps 1 to 3 are built (see state.md); the rest is not. It turns "SLOs as objects" (the
+Draft, 2026-10-30. Steps 1 to 4 are built (see state.md); the rest is not. It turns "SLOs as objects" (the
 first gap picked from a comparison with what other monitoring products
 show) into decisions precise enough to build from. Open questions are at
 the end.
@@ -238,7 +238,8 @@ SLO's window length (factors below are for 30 days):
    taken by `GET /api/v1/slos/{name}` for an SLO named `report`; refuse
    that name in `Check` (or put the report under a query parameter, as
    the status is: `?status=1`).
-4. SLA report and stored monthly results.
+4. SLA report and stored monthly results. Built 2026-10-31 (quarters
+   too); the names `report` and `reports` are refused for SLOs.
 5. Integration templates (HAProxy, nginx, probes); `docs/slo.md`.
 6. Later: logs indicator with delayed counting, backfill of missed
    minutes, error-budget policy (e.g. a rollout pauses itself while an SLO

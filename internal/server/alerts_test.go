@@ -50,6 +50,10 @@ func (a *alertStores) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				"count_over_time(slo_total_per_minute[30d]":  "1440",
 				"tfirst_over_time(slo_total_per_minute[30d]": strconv.FormatInt(time.Now().Add(-24*time.Hour).Unix(), 10),
 				"sum_over_time(slo_good_per_minute[1h]":      "990", "sum_over_time(slo_total_per_minute[1h]": "1000",
+				// August 2026 for the SLA report, counted all month.
+				"sum_over_time(slo_good_per_minute[31d]": "9995", "sum_over_time(slo_total_per_minute[31d]": "10000",
+				"count_over_time(slo_total_per_minute[31d]":  "44640",
+				"tfirst_over_time(slo_total_per_minute[31d]": "1785542460",
 			}
 			for k, x := range v {
 				if strings.Contains(q, k) {
@@ -61,6 +65,20 @@ func (a *alertStores) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		default:
 			vector("")
 		}
+	case "/api/v1/query_range":
+		// Per day for the SLA report: the first two days of the range, the
+		// first with 5 bad events in 5000, the second with none.
+		start, _ := strconv.ParseInt(r.URL.Query().Get("start"), 10, 64)
+		v := [2]string{"4995", "5000"}
+		if strings.Contains(q, "slo_total_per_minute") {
+			v = [2]string{"5000", "5000"}
+		}
+		if !strings.Contains(q, "_per_minute[1d]") {
+			fmt.Fprint(w, `{"status":"success","data":{"resultType":"matrix","result":[]}}`)
+			return
+		}
+		fmt.Fprintf(w, `{"status":"success","data":{"resultType":"matrix","result":[{"metric":{"slo":"home"},"values":[[%d,%q],[%d,%q]]}]}}`,
+			start, v[0], start+86400, v[1])
 	case "/select/logsql/stats_query":
 		if strings.Contains(q, "error") {
 			vector(`{"metric":{"__name__":"errors","app":"shop"},"value":[1700000000,"12"]}`)

@@ -93,6 +93,8 @@ func OpenStore(dataDir string) (*Store, error) {
 		`CREATE TABLE IF NOT EXISTS slo_versions (tenant TEXT NOT NULL, name TEXT NOT NULL, version INTEGER NOT NULL, doc TEXT NOT NULL,
 			origin TEXT NOT NULL, author TEXT NOT NULL, time INTEGER NOT NULL, deleted INTEGER NOT NULL DEFAULT 0,
 			PRIMARY KEY (tenant, name, version))`,
+		`CREATE TABLE IF NOT EXISTS slo_reports (tenant TEXT NOT NULL, period TEXT NOT NULL, created INTEGER NOT NULL, doc TEXT NOT NULL,
+			PRIMARY KEY (tenant, period))`,
 	} {
 		if err == nil {
 			_, err = db.Exec(ddl)

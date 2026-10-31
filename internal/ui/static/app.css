@@ -302,3 +302,16 @@ table.kv td { border: none; padding: 2px 14px 2px 0; vertical-align: top; } tabl
 .budget > i { display: block; height: 100%; }
 .budget > i.ok { background: var(--ok); } .budget > i.warn { background: var(--warn); } .budget > i.bad { background: var(--bad); }
 .bad-text { color: var(--bad); font-weight: 600; } .warn-text { color: var(--warn); }
+
+/* Printing (an SLA report, saved as PDF by the browser): the page alone,
+   dark ink on white. */
+@media print {
+  .side, .no-print, .notice { display: none !important; }
+  .shell { display: block; }
+  .main { padding: 0; max-width: none; overflow: visible; }
+  body, .main, .panel, .report { background: #fff !important; color: #000 !important; }
+  .panel { border-color: #bbb !important; box-shadow: none !important; break-inside: avoid; }
+  .muted { color: #444 !important; }
+  th, td { border-color: #ccc !important; color: #000 !important; }
+  .badge { border: 1px solid #888; background: none !important; color: #000 !important; }
+}

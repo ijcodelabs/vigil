@@ -44,7 +44,10 @@ holds.
   (`SLOBurnFast`, `SLOBurnSlow`) and `SLOBudgetExhausted`, shown as SLO
   incidents on Home. The SLOs page shows each one's budget left, burn
   rates, coverage, incidents and history; Home lists nearly spent budgets
-  under "Coming up"; a starter dashboard "SLOs".
+  under "Coming up"; a starter dashboard "SLOs". SLA reports per month
+  or quarter (achieved, met, budget used, worst day, coverage, incidents)
+  as a page to print or save as PDF, as CSV and through the API; a
+  finished period's report is stored and does not change.
 - `vigil tracegen -token` and `-token-file`, for an agent that requires
   OTLP tokens.
 - **AI and costs:** Claude Code telemetry, sessions and an audit hook;
