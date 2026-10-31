@@ -33,7 +33,8 @@ groups:
             label_replace(increase(genai_tokens_total[1m]) * on (model, type) group_left genai_token_price, "owner", "$1", "service", "(.*)")
           )
         labels: {source: application, billing: api}
-      # vigil's own explanations of incidents (explain.go), priced when made.
+      # vigil's own AI calls (aicalls.go), priced when made. Explain's
+      # series has no tool label (it is older than the others).
       - record: ai_cost_usd_per_minute
-        expr: 'sum by (model) (increase(vigil_ai_cost_total[1m]))'
-        labels: {source: vigil, owner: vigil, tool: explain, billing: api}
+        expr: 'label_replace(sum by (model, tool) (increase(vigil_ai_cost_total[1m])), "tool", "explain", "tool", "")'
+        labels: {source: vigil, owner: vigil, billing: api}

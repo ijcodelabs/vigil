@@ -27,7 +27,9 @@ holds.
 - **Home:** incidents with a history (acknowledge, resolve, reopen), what
   changed since you last looked, what is coming up (disks filling,
   certificates expiring), AI spend, and optional AI explanations of an
-  incident, previewed and with a monthly budget.
+  incident, previewed and with a monthly budget; admins can ask for a view
+  in words, which the model writes as a dashboard and vigil checks before
+  drawing it.
 - **Collecting:** host and container metrics, Prometheus scraping
   (including Kubernetes pods by annotation), process groups, systemd units,
   GPUs, OpenTelemetry (metrics, logs, traces); logs from files, journald,

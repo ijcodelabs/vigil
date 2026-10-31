@@ -60,12 +60,19 @@ API) and `GET` `POST /api/v1/traces/query` (LogsQL over spans); see
 | `GET /api/v1/incidents` | resolved incidents, newest first; `?days=7` (at most 30), `?limit=100` (at most 500) |
 | `GET /api/v1/incidents/{id}` | one incident and its history (opened, resolved, reopened, acknowledged, silenced) |
 | `POST /api/v1/incidents/{id}/ack` | `{"comment": "…"}`: someone is on it; admin only. Lasts until the incident is resolved |
-| `GET /api/v1/ai` | whether AI explanations are set up and paused, the model, what may be sent, the monthly budget and what was spent |
+| `GET /api/v1/ai` | whether AI is set up and paused, the model, what may be sent, the monthly budget and what was spent |
 | `PUT /api/v1/ai/paused` | `{"paused": true}`: stop sending anything; admin only |
 | `GET /api/v1/incidents/{id}/explain` | the evidence that would be sent, without sending it; admin only |
 | `POST /api/v1/incidents/{id}/explain` | send it and return the explanation; admin only. 409 when not set up, paused or over budget |
 | `GET /api/v1/incidents/{id}/explanations` | the last ten explanations of an incident, with the evidence as sent |
 | `POST /api/v1/explanations/{id}/verdict` | `{"verdict": "right" \| "partly" \| "wrong" \| "unhelpful", "note": "…"}` |
+| `GET /api/v1/views` | your drafts of views from a prompt; admin only, as are all `views` routes |
+| `POST /api/v1/views` | `{"ask": "…"}`: a new draft from one request; 409 when AI is not set up, paused or over budget, 429 while one of yours is being made |
+| `GET /api/v1/views/{id}` | a draft: the dashboard, how each query did, what the last request changed, the requests so far |
+| `POST /api/v1/views/{id}/turns` | `{"ask": "…", "revision": n}`: change it; 409 when `revision` is not the draft's current one |
+| `POST /api/v1/views/{id}/save` | `{"title": "…"}`: run the queries again and save as a dashboard; returns its `id`; 409 while a query fails |
+| `DELETE /api/v1/views/{id}` | discard a draft |
+| `GET /api/v1/views/catalog` | the catalog sent with every request, its size and version |
 | `POST /api/v1/loglines/context` | `{"line": {…}}`, a line as the log query answered it (needs `_time`, `agent`, `_stream_id`): lines like it, the lines around it, what happened on the host, open incidents, notes |
 | `POST /api/v1/loglines/explain/preview` | the same body: the evidence that would be sent, and an earlier explanation of lines like it if there is one; admin only |
 | `POST /api/v1/loglines/explain` | send it and return the explanation (`"again": true` for a new one instead of the earlier); admin only. 409 without `data: [logs]` |

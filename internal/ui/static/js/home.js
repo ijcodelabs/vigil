@@ -1,4 +1,5 @@
 import { html, useState, useEffect, api, useLoad, Badge, ErrorBox, Dialog, ago } from './lib.js';
+import { ViewPrompt } from './views.js';
 
 // Home: what needs attention, what will soon, and what happened since you
 // last looked. It reads one prepared answer from the server
@@ -118,7 +119,7 @@ export function Preview({ p, busy, onSend, onCancel }) {
       <pre class="secret" style="user-select: text; max-height: 220px; overflow: auto">${e.text}</pre></details>`)}
     ${bundle.withheld?.length > 0 && html`<p class="muted">Not sent: ${bundle.withheld.join('; ')}</p>`}
     <p class="muted">This month: ${ai.spent_this_month.toFixed(2)} of ${ai.monthly_budget.toFixed(2)} spent.</p>
-    ${ai.paused && html`<div class="error">AI explanations are paused.</div>`}
+    ${ai.paused && html`<div class="error">AI is paused.</div>`}
     <div class="row" style="gap: 8px"><span class="spacer"></span><button onClick=${onCancel}>Cancel</button>
       <button class="primary" disabled=${busy || ai.paused || left <= 0} onClick=${onSend}>${busy ? 'Waiting for the answer…' : 'Send and explain'}</button></div>`;
 }
@@ -218,9 +219,11 @@ export function Home({ me, admin }) {
       ${cov.rules_failing.length > 0 && html`<a href="#/alerts"><${Badge} kind="bad">${n(cov.rules_failing.length, 'rule')} cannot be evaluated<//></a>`}
       ${cov.silences > 0 && html`<a href="#/alerts"><${Badge}>${n(cov.silences, 'silence')} in effect<//></a>`}
       ${ai?.enabled && html`<span class="spacer"></span>
-        <span class="muted" title=${`${ai.provider} ${ai.model}; sends: ${ai.data.join(', ')}`}>AI explanations ${ai.paused ? 'paused' : 'on'}, ${usd(ai.spent_this_month)} of ${usd(ai.monthly_budget)} this month</span>
+        <span class="muted" title=${`${ai.provider} ${ai.model}; sends: ${ai.data.join(', ')}`}>AI ${ai.paused ? 'paused' : 'on'}, ${usd(ai.spent_this_month)} of ${usd(ai.monthly_budget)} this month</span>
         ${admin && html`<button class="small" onClick=${() => pause(!ai.paused)}>${ai.paused ? 'Resume' : 'Pause'}</button>`}`}
     </div>
+
+    ${admin && ai?.enabled && html`<${ViewPrompt} ai=${ai} onSpend=${reloadAI} />`}
 
     <${Section} title="Needs attention">
       ${loud.length ? loud.map(row) : html`<div class="empty" style="padding: 18px">

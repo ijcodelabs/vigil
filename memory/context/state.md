@@ -1082,6 +1082,70 @@ Against Boop's observability contract v1 (Boop Jump repository,
   checks and 4 services, one saved, then shown as exists. HAProxy's
   template is checked only by the test (no HAProxy on the Lima host).
 
+## One ledger of AI calls (built 2026-10-31)
+
+Step 1 of "Views from a prompt" in direction.md; useful on its own.
+
+- `internal/server/aicalls.go`: table `ai_calls` (created, user, tool,
+  subject, provider, model, prompt version, usage, cost, latency, error),
+  one row for every request to the model, failed ones included.
+  `callAI` sends and records; Explain (incidents and log lines) goes
+  through it and links its explanation by `explanations.call`. The
+  explanation keeps its own copy of model, usage and cost for its page.
+- The monthly budget (`aiState`), `aiReady` and `vigil_ai_cost_total` read
+  `ai_calls`. Explanations made before the ledger get their calls at start
+  (`backfillAICalls`, once), so the month's spend does not drop.
+- `vigil_ai_cost_total{model}` stays as it was for Explain, so its counter
+  continues as the same series; other tools will add `tool`. The `ai_costs`
+  rule sums by `model, tool` and sets `tool="explain"` where it is empty.
+- The pause message and the Home status say "AI", not "AI explanations".
+- Not yet: a call is recorded after it returns, so two at once can both
+  pass the budget check; a row before sending is for when drafts come.
+
+## Views from a prompt, first release (built 2026-10-31)
+
+Steps 2 to 6 of "Views from a prompt" in direction.md, on the ledger above.
+
+- `internal/server/views.go`: drafts (`view_drafts`, per admin, kept a day
+  after the last change) and the audit of each turn (`view_turns`: what
+  was sent besides the catalog, the catalog's fingerprint, the answer, the
+  refusal, `saved_as`; kept 30 days). Routes under `/api/v1/views`, all
+  admin. One turn in flight per admin, two on the server.
+- The model answers in a JSON Schema of the dashboard format: timeseries,
+  stat, table, logs; source metrics or logs. `checkView`: at most 8
+  panels, 3 queries each, 16 in all, no variables or maps, range
+  selectors up to 1d, `| stats` only where it belongs, no `_time:` in
+  LogsQL, then `parseDashboard`. Sizes and limits are clamped rather than
+  refused. A refused answer leaves the draft and goes to the next turn as
+  `<earlier_answer_refused>`.
+- Hosts: words of the request that equal an agent id (any case) become
+  `@h1`…; the model must write them as a whole quoted value of an exact
+  matcher (`agent="@h1"`, `agent:="@h1"`), `fillHosts` writes the id in.
+  No other lookup; no label values are listed.
+- Query check (`checkViewQueries`): every query once at now over the last
+  hour, 4 at a time, 5 s each, through the server's own helpers (not the
+  public proxies): ok, no_data, invalid, slow, too_large (over 500
+  series), unavailable. LogsQL stats get `_time:3600s` in front. Run again
+  on Save, which refuses while one fails (no_data is fine).
+- Catalog (`views_catalog.go`): docs/metrics.md, five sections of
+  docs/explore.md, and the queries of the starter dashboards and of the
+  built-in integrations in use; about 30 KB, in the system prompt so the
+  provider caches it; shown by **What is sent**.
+- UI: `internal/ui/static/js/views.js` on Home (admins, AI set up): ask,
+  draft drawn with the dashboards' `PanelBody` over the last hour, check
+  badges, the queries under each panel, what changed, drafts list, Cancel
+  (AbortController), Save dialog that opens the new dashboard.
+- Verified: `TestViews` (fake Messages API and stores: reference written
+  in, widened reference refused, refusal told next turn, invalid query
+  marked, stale revision 409, Save refused then saved, ledger spend) and
+  `TestCheckView`; in the browser against a local server with a fake
+  model and stores: ask, change, What is sent, Save. Not yet against the
+  real model: the trial has the key, the owner tests there.
+- Not built: the evaluation set against the real model (direction.md),
+  variables, maps, picking among several matching hosts, a row in the
+  ledger before the call (two admins at once can pass the budget check
+  together).
+
 ## Next
 
 - Foundations, build order in `direction.md`: step 1 on paper (data

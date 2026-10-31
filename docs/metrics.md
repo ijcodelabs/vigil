@@ -131,7 +131,7 @@ See [AI costs](finops.md) and [Claude Code](claude-code.md).
 | `genai_token_price` | price of one token, from the server's `costs.tokens` (written by the server) | `model`, `type` |
 | `gpu_hour_price` | price of one GPU for an hour, from `costs.gpu_hours` (written by the server) | `model` |
 | `ai_cost_usd_per_minute` | money spent on AI in each minute, from every source; `sum_over_time` over a range is the spend in it (recording rules on the server) | `source`: application, coding_tool, gpu, vigil; `billing`: api, hourly, subscription; `owner`, `model`, `agent`, `tool` |
-| `vigil_ai_cost_total` | what vigil's own incident explanations have cost (written by the server) | `model` |
+| `vigil_ai_cost_total` | what vigil's own AI calls have cost (written by the server) | `model`; `tool` on calls other than explanations (`view`) |
 | `claude_code_cost_usage_total`, `claude_code_token_usage_total`, … | Claude Code's own metrics; see [Claude Code](claude-code.md#what-arrives) | `model`, `user_email`, `query_source`, … |
 
 ## Traces

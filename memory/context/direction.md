@@ -373,6 +373,125 @@ stratum, known bad domains and suspicious process ancestry count as strong
 evidence; a file name alone does not. CVE matching (Trivy, Grype, OSV over
 the image inventory) is later.
 
+## Views from a prompt (proposed 2026-10-31, not agreed)
+
+The owner's idea: a prompt field on the Home page. "Show me a map of the
+whole fleet", "show me nginx 5xx for shop-api by path": the AI builds a
+view, the owner asks for changes ("make that per host", "drop the CPU
+panel") until it is right, then saves it as a dashboard, so opening it
+again needs no AI call. A first release is built (state.md, 2026-10-31):
+the ledger and steps 2 to 6 below; the real-model evaluation set is not.
+Reviewed with a second model
+(Codex, two rounds, 2026-10-31); the points below include its corrections.
+Entry point: the Home page (owner's choice, 2026-10-31, over the review's
+suggestion of the dashboard list). The draft opens from there; Save puts
+it in the dashboard list like any other.
+
+- **The AI writes a dashboard, not a page.** Its answer is the dashboard
+  JSON vigil already stores (title, variables, panels with PromQL and
+  LogsQL queries; the time range and refresh are not part of it), held to
+  a JSON Schema with existing panel types only. No generated HTML or code.
+- **Checking is a separate, limited preflight.** `parseDashboard` checks
+  shape only: it does not parse queries, check variables against them or
+  run them. The preflight parses each query and runs it on a short fixed
+  range with a deadline, a series cap, a query-count cap and a log-range
+  cap, and says per query: valid, valid with no data, invalid, too costly.
+  "No data" is not "invalid" (a quiet service is real). Run again on save.
+  It cannot tell a query that answers the wrong question; that is what
+  the evaluation set and the operator's review are for.
+- **A small trusted catalog, not the fleet.** The model gets the JSON
+  contract, a few built-in dashboards as examples, metric names with type,
+  unit and label keys from vigil's own integrations, and the log fields
+  and LogsQL forms vigil supports. Not every series, label value or host
+  name: on thousands of hosts that is huge, and it would send the
+  inventory out. A host or service the operator names is found by the
+  server, which asks the operator to choose when there are several, and
+  sends only the chosen id. Names, labels and log fields are written by
+  whoever runs the hosts: they go in as delimited data, never as
+  instructions. No log lines, command lines, captures or credentials.
+- **Admins only to start**, like Explain: today any viewer can query and
+  only admins save dashboards, and a draft must never show what its user
+  could not query.
+- **Each turn returns the whole dashboard**, not a patch; the server
+  computes and shows the difference. Drafts are stored on the server per
+  user, with revisions, and expire after a day.
+- **Saving makes an ordinary dashboard**, editable by hand, linked in the
+  audit record to the draft and prompt rather than carrying the prompt.
+- **Explain's plumbing, made shared.** `internal/ai`, the pause switch and
+  the monthly budget are there, but the budget and `vigil_ai_cost_total`
+  sum only the `explanations` table (`internal/server/explain.go`), so AI
+  calls need one ledger first. Each turn records caller, draft revision,
+  catalog version, prompt version, model, tokens, cost, the request as
+  sent, the answer and the preflight results.
+- **Evaluation from the start:** fixed prompts against a synthetic fixture
+  (good basics, ambiguous asks that must ask back, unknown metrics, too
+  broad LogsQL, injection text in host names and labels, viewer vs admin),
+  checked by required selectors and panel types rather than exact JSON,
+  replayed on every prompt, model or catalog change.
+
+- **The model never writes a selector for a chosen host.** It returns
+  the query with a slot for an opaque reference (`resource:r7`) the server
+  handed out; vigil substitutes the quoted matcher after validation, so
+  the model cannot widen or invent the operator's pick. Resolution in the
+  first step covers only what SQLite knows (agents, enabled integrations),
+  with a result cap and the operator choosing; not label-value listing,
+  which today goes unbounded to VictoriaMetrics.
+- **What is not bounded today:** the browser queries through plain
+  reverse proxies (`internal/server/server.go`) with no deadline, series
+  cap or range policy; dashboards trim what they draw (40 series, 200
+  rows) after fetching all of it; `logQuery` caps returned rows, not the
+  scan; the server's HTTP client has one 30 s timeout. So the preflight is
+  its own server-side path with a short deadline, small caps, bounded
+  concurrency and an allowlist of LogsQL forms per panel type (no `tail`,
+  no unanchored regex), never the public proxy routes. Real limits on the
+  stores' own work need their settings or a separate query endpoint.
+- **The catalog is mostly written by hand.** vigil records no metric
+  type, unit or help at ingest; `/api/v1/metadata` is passed through to
+  VictoriaMetrics and not normalised. So: a curated metric file (meaning,
+  unit, labels) from `docs/metrics.md` and the built-in integrations, plus
+  starter dashboards as examples (about 150 KB of sources, much less after
+  trimming), version-stamped. Locally changed integrations are not sent
+  automatically.
+- **Also needed in the first release:** cancel, a per-user cooldown and a
+  global limit, retries keyed by draft revision and request, expiry
+  cleanup, failed calls counted in the ledger, the Home control renamed
+  from "AI explanations" to "AI features", a docs page (what is sent,
+  limits, cost, retention), and clear states for no provider, paused,
+  budget spent, rejected and no data.
+- **Evaluation in two layers:** `go test` with a fake provider (as
+  `explain_test.go` does) and small fixture stores, free and in CI; and an
+  opt-in run against the real model on the synthetic fixture, with its own
+  budget cap, never in CI.
+
+First step: admins, up to a few `timeseries`, `stat`, `table` and `logs`
+panels, no variables, no maps, nothing sent but the catalog, explicit
+Save. Maps come later and only from server-owned topology templates; the
+map panel exists but needs explicit node and link queries.
+
+Ideas for what it could show. Realistic with today's data: log lines with
+their rate (nginx 5xx by path if those fields are collected), host and
+container views, checks, AI cost, SLO burn from the SLO series, `sudo` and
+`docker exec` as filtered logs. The rest needs data or models vigil does
+not have yet (a topology graph, a change timeline, baselines, deploy
+events, process trees) or is a data-reading feature rather than a
+dashboard (chart explanations, the briefing):
+
+- Fleet: the topology map (relay, regionals, hosts, containers, services)
+  coloured by open incidents and SLO burn; what changed in the last day
+  (deploys, config, new containers, agent upgrades) on one timeline; hosts
+  that stopped looking like their peers; disks by days left.
+- Logs: a log panel with its rate chart; log patterns new since the last
+  deploy; errors next to deploy markers.
+- Security: a host's process tree for the last hour with the unusual
+  executions marked; outbound connections to destinations never seen
+  before; `sudo` and `docker exec` as a timeline.
+- SLOs, DORA, cost: error budget burn for every SLO, worst first; DORA per
+  team this quarter against the last; AI spend per model with the month's
+  forecast against the budget.
+- Lighter: a morning "fleet weather" paragraph with four panels;
+  "explain this chart" on any panel; when the fleet is quiet; the hosts
+  that make the most alerts per useful incident.
+
 ## AI modules: Claude Code first (agreed 2026-10-19)
 
 Watching AI coding agents is a family of integrations named
