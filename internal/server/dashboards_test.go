@@ -43,7 +43,7 @@ func TestDashboards(t *testing.T) {
 	}
 
 	// A new server comes with the starter dashboards, each of them valid.
-	if got := ids(); got != "ai-costs,containers,hosts,logs-and-security,checks,vigil-agents" {
+	if got := ids(); got != "ai-costs,containers,hosts,logs-and-security,checks,slos,vigil-agents" {
 		t.Fatalf("starter dashboards: %q", got)
 	}
 	code, body := admin("GET", "/api/v1/dashboards/hosts", "")
@@ -117,7 +117,7 @@ func TestDashboards(t *testing.T) {
 	srv.Close()
 	srv, central = start()
 	defer func() { central.Close(); srv.Close() }()
-	if got := ids(); got != "ai-costs,hosts,logs-and-security,shop,checks,vigil-agents" {
+	if got := ids(); got != "ai-costs,hosts,logs-and-security,shop,checks,slos,vigil-agents" {
 		t.Errorf("after restart: %q", got)
 	}
 }

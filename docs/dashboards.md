@@ -6,8 +6,8 @@ interval and one set of variables.
 A new server comes with **Hosts**, **Containers**, **Logs and security**,
 **Site checks** (what answers, how fast, and the days left on
 certificates), **vigil agents** (what each agent sends and what it costs
-its host) and **AI costs** (all AI spending together: applications,
-coding tools and GPU time, priced).
+its host), **AI costs** (all AI spending together: applications,
+coding tools and GPU time, priced) and **SLOs** (see [SLOs](slo.md)).
 Integrations add their own the first time they are used (Kubernetes,
 PostgreSQL, …). All of them are ordinary dashboards: change or delete them.
 

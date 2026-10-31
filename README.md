@@ -83,8 +83,9 @@ large fleets. Expect rough edges, and please say what you find.
 - Alertmanager inside for routing, contacts and silences, and a message to
   the contacts when someone silences an alert.
 - **Service level objectives** over site checks, spans or any counters:
-  good and total events counted once a minute, error budgets, and
-  multi-window burn-rate alerts. A page for them comes next. [SLOs](docs/slo.md)
+  good and total events counted once a minute, error budgets,
+  multi-window burn-rate alerts, and a page with each SLO's budget, burn
+  rates and history. [SLOs](docs/slo.md)
 
 ### AI and what it costs
 

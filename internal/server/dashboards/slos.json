@@ -1,0 +1,91 @@
+{
+ "id": "slos",
+ "title": "SLOs",
+ "variables": [
+  {
+   "name": "slo",
+   "label": "slo",
+   "match": "slo_objective"
+  }
+ ],
+ "panels": [
+  {
+   "title": "Over 30 days",
+   "type": "table",
+   "w": 12,
+   "h": 3,
+   "columns": [
+    "slo"
+   ],
+   "queries": [
+    {
+     "expr": "100 * max by (slo) (slo_objective{slo=~\"$slo\"})",
+     "legend": "Objective, %",
+     "unit": ""
+    },
+    {
+     "expr": "round(100 * sum by (slo) (sum_over_time(slo_good_per_minute{slo=~\"$slo\"}[30d])) / sum by (slo) (sum_over_time(slo_total_per_minute{slo=~\"$slo\"}[30d])), 0.001) and on (slo) max by (slo) (slo_objective{slo=~\"$slo\"})",
+     "legend": "Achieved, %",
+     "unit": ""
+    },
+    {
+     "expr": "(1 - (1 - sum by (slo) (sum_over_time(slo_good_per_minute{slo=~\"$slo\"}[30d])) / sum by (slo) (sum_over_time(slo_total_per_minute{slo=~\"$slo\"}[30d]))) / (1 - max by (slo) (slo_objective{slo=~\"$slo\"}))) and on (slo) max by (slo) (slo_objective{slo=~\"$slo\"})",
+     "legend": "Budget left",
+     "unit": "ratio",
+     "warn": 0.25,
+     "crit": 0
+    },
+    {
+     "expr": "((1 - sum by (slo) (sum_over_time(slo_good_per_minute{slo=~\"$slo\"}[1h])) / sum by (slo) (sum_over_time(slo_total_per_minute{slo=~\"$slo\"}[1h]))) / (1 - max by (slo) (slo_objective{slo=~\"$slo\"}))) and on (slo) max by (slo) (slo_objective{slo=~\"$slo\"})",
+     "legend": "Burn rate, 1h",
+     "unit": "",
+     "warn": 1,
+     "crit": 14.4
+    }
+   ]
+  },
+  {
+   "title": "Bad share per hour",
+   "type": "timeseries",
+   "w": 6,
+   "h": 3,
+   "unit": "ratio",
+   "min": 0,
+   "queries": [
+    {
+     "expr": "(1 - sum by (slo) (sum_over_time(slo_good_per_minute{slo=~\"$slo\"}[1h])) / sum by (slo) (sum_over_time(slo_total_per_minute{slo=~\"$slo\"}[1h])))",
+     "legend": "{{slo}}"
+    }
+   ]
+  },
+  {
+   "title": "Burn rate, 1 hour",
+   "type": "timeseries",
+   "w": 6,
+   "h": 3,
+   "unit": "",
+   "min": 0,
+   "queries": [
+    {
+     "expr": "(1 - sum by (slo) (sum_over_time(slo_good_per_minute{slo=~\"$slo\"}[1h])) / sum by (slo) (sum_over_time(slo_total_per_minute{slo=~\"$slo\"}[1h]))) / (1 - max by (slo) (slo_objective{slo=~\"$slo\"}))",
+     "legend": "{{slo}}"
+    }
+   ]
+  },
+  {
+   "title": "Events per minute",
+   "type": "timeseries",
+   "w": 12,
+   "h": 3,
+   "unit": "",
+   "min": 0,
+   "fill": true,
+   "queries": [
+    {
+     "expr": "sum by (slo) (slo_total_per_minute{slo=~\"$slo\"})",
+     "legend": "{{slo}}"
+    }
+   ]
+  }
+ ]
+}

@@ -30,12 +30,7 @@ function links(inc) {
   if (l.container && l.agent) out.push(['Logs', `#/explore/logs?q=${encodeURIComponent(`agent:=${q(l.agent)} container:=${q(l.container)}`)}&last=3600`]);
   else if (inc.kind === 'security' && l.agent) out.push(['Events', `#/explore/logs?q=${encodeURIComponent(`source:=security agent:=${q(l.agent)} rule:=${q(l.alertname)}`)}&last=86400`]);
   if (l.probe) out.push(['Site checks', '#/dashboards/checks']);
-  if (inc.kind === 'slo' && l.slo) {
-    // How fast the budget goes, hour by hour, over the last three days.
-    const sel = `{slo=${q(l.slo)}}`;
-    const burn = `(1 - sum(sum_over_time(slo_good_per_minute${sel}[1h])) / sum(sum_over_time(slo_total_per_minute${sel}[1h]))) / (1 - max(slo_objective${sel}))`;
-    out.push(['Burn rate', '#/explore/metrics?q=' + encodeURIComponent(burn) + '&last=259200']);
-  }
+  if (inc.kind === 'slo' && l.slo) out.push(['SLO', '#/slos/' + encodeURIComponent(l.slo)]);
   if (l.agent && inc.kind === 'host_down') out.push(['Fleet', '#/fleet']);
   return out;
 }
@@ -240,6 +235,7 @@ export function Home({ me, admin }) {
       ${b.coming.items.map(c => html`<div class="row" style="gap: 8px; margin-bottom: 6px">
         <${Badge} kind=${SEVERITY[c.severity] || 'info'}>${c.severity === 'warning' ? 'soon' : 'later'}<//>
         <span>${c.title}</span><span class="spacer"></span>
+        ${c.link && html`<a href=${c.link}>open</a>`}
         ${c.query && html`<a href=${'#/explore/metrics?q=' + encodeURIComponent(c.query) + '&last=604800'}>chart</a>`}</div>`)}
     <//>`}
 

@@ -296,19 +296,7 @@ func (s *SLO) Queries() (good, total string) {
 		total = fmt.Sprintf("sum(count_over_time(%s[1m]))", sel)
 		good = fmt.Sprintf("sum(sum_over_time(%s[1m]))", sel)
 	case ind.Span != nil:
-		sp := ind.Span
-		matchers := []string{"service=" + strconv.Quote(sp.Service), "kind=" + strconv.Quote(sp.Kind)}
-		if m := oneOf("span_name", sp.SpanName); m != "" {
-			matchers = append(matchers, m)
-		}
-		total = fmt.Sprintf("sum(increase(traces_spans_total{%s}[1m]))", strings.Join(matchers, ", "))
-		ok := append(matchers, `status="ok"`)
-		if sp.LatencyBelow != 0 {
-			le, _ := bucketFor(time.Duration(sp.LatencyBelow))
-			good = fmt.Sprintf("sum(increase(traces_span_duration_seconds_bucket{%s, le=%q}[1m]))", strings.Join(ok, ", "), le)
-		} else {
-			good = fmt.Sprintf("sum(increase(traces_spans_total{%s}[1m]))", strings.Join(ok, ", "))
-		}
+		good, total = ind.Span.counts("", "1m")
 	default:
 		r := ind.Ratio
 		total = fmt.Sprintf("sum(increase(%s[1m]))", strings.TrimSpace(r.Total))
@@ -322,6 +310,40 @@ func (s *SLO) Queries() (good, total string) {
 	// none; a minute without events has neither.
 	good = fmt.Sprintf("((%s) or vector(0)) and on() %s", good, total)
 	return good, total
+}
+
+// counts are a span indicator's good and total events over rng, summed
+// by the labels in by (all together when by is empty).
+func (sp *SpanIndicator) counts(by, rng string) (good, total string) {
+	sum := "sum"
+	if by != "" {
+		sum += " by (" + by + ") "
+	}
+	matchers := []string{"service=" + strconv.Quote(sp.Service), "kind=" + strconv.Quote(sp.Kind)}
+	if m := oneOf("span_name", sp.SpanName); m != "" {
+		matchers = append(matchers, m)
+	}
+	total = fmt.Sprintf("%s(increase(traces_spans_total{%s}[%s]))", sum, strings.Join(matchers, ", "), rng)
+	ok := append(matchers, `status="ok"`)
+	if sp.LatencyBelow != 0 {
+		le, _ := bucketFor(time.Duration(sp.LatencyBelow))
+		good = fmt.Sprintf("%s(increase(traces_span_duration_seconds_bucket{%s, le=%q}[%s]))", sum, strings.Join(ok, ", "), le, rng)
+	} else {
+		good = fmt.Sprintf("%s(increase(traces_spans_total{%s}[%s]))", sum, strings.Join(ok, ", "), rng)
+	}
+	return good, total
+}
+
+// OperationsQueries are, for a span SLO, the events of each operation
+// (span_name) over d and the share of them that were bad, to show where
+// the budget goes. Both are empty for other kinds.
+func (s *SLO) OperationsQueries(d time.Duration) (bad, total string) {
+	if s.Indicator.Span == nil {
+		return "", ""
+	}
+	good, total := s.Indicator.Span.counts("span_name", model.Duration(d).String())
+	// An operation without a good event has no good series at all.
+	return fmt.Sprintf("1 - ((%s) or (%s) * 0) / (%s)", good, total, total), total
 }
 
 // EventsQuery counts the events over d instead of a minute, to tell
@@ -426,12 +448,42 @@ func (s *SLO) burnRate(p burnPair) float64 {
 // budget is 1 - objective, as a ratio.
 func (s *SLO) budget() float64 { return math.Round((1-s.Ratio())*1e10) / 1e10 }
 
+// Budget is the share of events the objective allows to be bad.
+func (s *SLO) Budget() float64 { return s.budget() }
+
+// WindowStart is where the window that ends at now begins: its length
+// before now, or the first of the month (UTC) for a calendar month.
+func (s *SLO) WindowStart(now time.Time) time.Time {
+	if s.Window == CalendarMonth {
+		now = now.UTC()
+		return time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	}
+	return now.Add(-s.WindowDuration())
+}
+
+// WindowEnd is where the window ends: now for a rolling window, the
+// first of the next month for a calendar month.
+func (s *SLO) WindowEnd(now time.Time) time.Time {
+	if s.Window == CalendarMonth {
+		return s.WindowStart(now).AddDate(0, 1, 0)
+	}
+	return now
+}
+
+// BurnWindows are the long windows of the burn-rate alerts, the burn
+// rates an SLO's page shows.
+var BurnWindows = []time.Duration{time.Hour, 6 * time.Hour, 24 * time.Hour, 72 * time.Hour}
+
 // alertOffset keeps alerts off the minute that is being written. Its good
 // and total counts are two writes, and for a moment one can be visible
 // without the other (seen live: a page at 74.8 % bad for 7.7 %). A minute
 // is written about Delay after it ends, so a window that ends this much
 // earlier never holds it.
 const alertOffset = 2 * time.Minute
+
+// ReadOffset is how far before now the recorded minutes are read, for
+// the same reason: anything that reads them reads them this way.
+const ReadOffset = alertOffset
 
 // sums are the good and total events over d, from the recorded minutes,
 // as alerts read them.

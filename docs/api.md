@@ -78,8 +78,8 @@ curl -X PUT -H "Authorization: Bearer $T" --data-binary @rules.yaml https://vigi
 
 | | |
 |---|---|
-| `GET /api/v1/slos` | every SLO: the parsed document, its kind, version, origin and author |
-| `GET /api/v1/slos/{name}` | one SLO with its document (`doc`) and the rule group made of it |
+| `GET /api/v1/slos` | every SLO: the parsed document, its kind, version, origin and author. With `?status=1`, `{"slos": […], "status": […]}`: per SLO the window (`from`, `to`), `good`, `total`, `achieved` (percent), `budget_left` (1 untouched, below 0 overspent), `burn` by window (`1h`, `6h`, `1d`, `3d`), `counting`, `coverage` and the alerts `firing`; 502 when the metric store does not answer |
+| `GET /api/v1/slos/{name}` | one SLO with its document (`doc`), the rule groups made of it, its `status` (as above), its `incidents` in the window and, for span SLOs, the `operations` queries |
 | `PUT /api/v1/slos/{name}` | save one (YAML body); admin only. Refused (400) if it does not parse or the metric store refuses its queries; the answer has `version`, `changed` (false for an identical document) and `warnings` |
 | `DELETE /api/v1/slos/{name}` | delete one; admin only. Its recorded series stay until the store's retention ends |
 | `GET /api/v1/slos/{name}/versions`, `…/versions/{n}` | history |
