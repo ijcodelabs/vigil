@@ -15,6 +15,9 @@ curl -H "Authorization: Bearer $VIGIL_ADMIN_TOKEN" https://vigil.example.com/api
   only pulls numbers, or [Grafana](grafana.md). `GET` `POST /api/v1/tokens`
   and `DELETE /api/v1/tokens/{id}` manage them (admins); a new token's
   value is in the answer to the `POST` and nowhere afterwards.
+- An **issuer token** (Users → Read-only tokens → It may: only issue
+  evidence grants; `"scope": "issue"` in the `POST`) reads nothing. It may
+  only issue [evidence grants](#evidence-grants).
 - A browser session (cookie) works too; requests that change something must
   then carry the header `X-Vigil-CSRF: 1`.
 - **viewer** accounts may read; **admin** accounts may change.
@@ -80,6 +83,27 @@ API) and `GET` `POST /api/v1/traces/query` (LogsQL over spans); see
 ```bash
 curl -X PUT -H "Authorization: Bearer $T" --data-binary @rules.yaml https://vigil/api/v1/rules/config
 ```
+
+## Evidence grants
+
+A grant lets one run of an AI agent (a Boop Chat workroom investigating an
+incident, say) read one incident's evidence for a short time, and nothing
+else: no queries, no other incident, no change. The evidence is the bundle
+Explain would send (`GET /api/v1/incidents/{id}/explain` shows it), masked
+again on the way out, with logs only if the server's `ai.data` allows them.
+The system that starts runs holds an issuer token, so it never holds a
+token that can read anything itself.
+
+| | |
+|---|---|
+| `POST /api/v1/evidence-grants` | admin or issuer token. `{"incident": 12, "purpose": "workroom run 7", "ttl_minutes": 30}`, or `"labels": {…}` (one alert's labels as Alertmanager's webhook delivers them) in place of `incident`. `ttl_minutes` 1 to 60, default 30; `purpose` is required (at most 120 characters). Returns the grant's `token` (`vge_…`) once. 404 when no incident has those labels, 409 for an incident resolved more than a day ago |
+| `GET /api/v1/evidence` | with the grant's token: `{"incident": {…}, "bundle": {"items": […], "withheld": […]}, "expires": …}`. At most 20 reads per grant (429 after) |
+| `GET /api/v1/evidence-grants` | grants of the last 30 days with their reads; admin only (Users page) |
+| `DELETE /api/v1/evidence-grants/{id}` | end a grant at once; admin only |
+
+Every issue, read and revocation is in the server's log. The token goes
+in the `Authorization: Bearer` header and is accepted on
+`/api/v1/evidence` only.
 
 ## Service level objectives
 

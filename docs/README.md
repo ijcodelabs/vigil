@@ -39,7 +39,7 @@ events and dashboards. It is a few static Go binaries: the **agent**
 | monitor Kubernetes | [Kubernetes](kubernetes.md) |
 | reach the server from a site that cannot connect to it | [Relays](relay.md) |
 | look at data | [Explore](explore.md), [Dashboards](dashboards.md), or your own [Grafana](grafana.md) |
-| see how your applications do: requests, errors, latency, traces | [Services and traces](apm.md) |
+| see how your applications do: requests, errors, latency, traces | [Services and traces](apm.md); set-up for [Python](apm-python.md) and [Go](apm-go.md) |
 | watch GPUs and what AI use costs | [GPUs and AI machines](gpu.md), [AI costs](finops.md) |
 | see what Claude Code costs and does | [Claude Code](claude-code.md) |
 | watch Boop and Boop Jump, and SSH logins that bypass them | [Boop and Boop Jump](boop.md) |

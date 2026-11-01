@@ -1,6 +1,6 @@
 # State
 
-Last updated: 2026-10-30.
+Last updated: 2026-11-01.
 
 ## Built (steps 1–6 of the original plan)
 
@@ -1145,6 +1145,45 @@ Steps 2 to 6 of "Views from a prompt" in direction.md, on the ledger above.
   variables, maps, picking among several matching hosts, a row in the
   ledger before the call (two admins at once can pass the budget check
   together).
+
+## Agentic plan, first slice: vigil's part (built 2026-11-01, uncommitted)
+
+The first slice of [agentic.md](agentic.md).
+
+- **Evidence grants** (`internal/server/evidencegrants.go`, table
+  `evidence_grants`): `POST /api/v1/evidence-grants` with an incident id or
+  one alert's labels (the incident is found by the key `FromAlert` makes,
+  `Tracker.ByKey`), a purpose and a TTL of 1–60 minutes (30 by default);
+  returns a `vge_…` token once. `GET /api/v1/evidence` with that token
+  returns the incident and the Explain bundle (masked, logs only if
+  `ai.data` allows), at most 20 reads (429 after). Accepted nowhere else.
+  Issued by an admin or by an **issuer token**: `api_tokens.scope`
+  (`read` by default, `issue`), a principal that `require` refuses
+  everywhere. Admins list and end grants on the Users page. Every issue,
+  read and revocation is logged. Incidents resolved more than a day ago
+  get no grant.
+- **The server traces itself** (`internal/server/tracing.go`,
+  `internal/cli/servercli/tracing.go`): off unless
+  `OTEL_EXPORTER_OTLP_ENDPOINT` (or `…_TRACES_ENDPOINT`) is set; then a
+  server span per request under `/api/`, `/alertmanager/`, `/select/`,
+  child of an incoming `traceparent`, named after the mux pattern, with
+  only method, route and status (no address, user agent, path or query;
+  why: privacy, decisions in agentic.md). Agents' pushes make no spans.
+  Written by hand rather than with otelhttp so exactly those attributes
+  go out. The SDK was already in the server through Alertmanager.
+- **Guides**: `docs/apm-python.md`, `docs/apm-go.md`.
+- Verified: unit tests (grants: scopes, lookup by labels, masking, read
+  cap, revocation; spans: route name, parent, attributes, no spans for
+  pushes); a local server with a test alert: an issuer token found the
+  incident from the alert's labels, the grant read the bundle (logs
+  withheld); the Users page in the browser (scope column, grants list,
+  the scope choice in the new-token dialog); the server's spans arrived at
+  a local OTLP receiver with route names and nothing else.
+- Not verified: the Python guide against a real service (Boop Core's
+  instrumentation will be the first); a `traceparent` from a real caller
+  end to end (covered by the unit test only); the trial server.
+- Not built: spans for the server's outgoing calls (stores, AI provider),
+  trace ids in the server's own log lines.
 
 ## Next
 

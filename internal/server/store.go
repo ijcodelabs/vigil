@@ -84,6 +84,11 @@ func OpenStore(dataDir string) (*Store, error) {
 		// hash is kept.
 		`CREATE TABLE IF NOT EXISTS api_tokens (id TEXT PRIMARY KEY, name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE,
 			expires INTEGER NOT NULL, author TEXT NOT NULL, created INTEGER NOT NULL, last_used INTEGER NOT NULL DEFAULT 0)`,
+		// Evidence grants: one incident's evidence, for a short time and a
+		// few reads (evidencegrants.go). Only the hash is kept.
+		`CREATE TABLE IF NOT EXISTS evidence_grants (id TEXT PRIMARY KEY, token_hash TEXT NOT NULL UNIQUE, incident INTEGER NOT NULL,
+			purpose TEXT NOT NULL, issuer TEXT NOT NULL, created INTEGER NOT NULL, expires INTEGER NOT NULL,
+			uses INTEGER NOT NULL DEFAULT 0, last_used INTEGER NOT NULL DEFAULT 0)`,
 		`CREATE TABLE IF NOT EXISTS agent_reports (agent_id TEXT PRIMARY KEY, config_hash TEXT NOT NULL, config_error TEXT NOT NULL, at INTEGER NOT NULL)`,
 		// Service level objectives, one YAML document each, with every
 		// earlier version. Tenant-qualified from the start (direction.md,
@@ -98,6 +103,11 @@ func OpenStore(dataDir string) (*Store, error) {
 	} {
 		if err == nil {
 			_, err = db.Exec(ddl)
+		}
+	}
+	if err == nil { // added later: what a token may do, "read" or "issue"
+		if _, aerr := db.Exec(`ALTER TABLE api_tokens ADD COLUMN scope TEXT NOT NULL DEFAULT 'read'`); aerr != nil && !strings.Contains(aerr.Error(), "duplicate column") {
+			err = aerr
 		}
 	}
 	if err != nil {
