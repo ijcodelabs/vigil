@@ -195,6 +195,41 @@ function ServiceMap({ services, range, win }) {
       other one (<code>peer.service</code>) or when stored traces show it.</p>`;
 }
 
+// CheckChange asks the server whether the service did better or worse
+// after a moment (a deploy, a config change): the same time before and
+// after, on requests, failures and the 95th percentile.
+const VERDICT = { better: 'ok', worse: 'bad', mixed: 'warn', 'no change': 'info', 'not enough data': 'off' };
+function CheckChange({ name }) {
+  const local = d => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  const [when, setWhen] = useState(local(new Date(Date.now() - 30 * 60000)));
+  const [win, setWin] = useState('15m');
+  const [res, setRes] = useState(null);
+  const [err, setErr] = useState(null);
+  const check = async e => {
+    e.preventDefault();
+    setErr(null);
+    try {
+      const at = Math.floor(new Date(when).getTime() / 1000);
+      setRes(await api(`/api/v1/verify?service=${encodeURIComponent(name)}&at=${at}&window=${win}`));
+    } catch (x) { setErr(x.message); setRes(null); }
+  };
+  const val = (v, unit) => (v == null ? '–' : fmtUnit(v, unit));
+  return html`<h2 class="section">Did a change help?</h2>
+    <form class="row" style="margin-bottom: 10px" onSubmit=${check}>
+      <label style="margin: 0">Changed at <input type="datetime-local" value=${when} onChange=${e => setWhen(e.target.value)} required /></label>
+      <label style="margin: 0">compare <select value=${win} onChange=${e => setWin(e.target.value)}>
+        ${['5m', '15m', '30m', '1h', '2h'].map(w => html`<option value=${w}>${w}</option>`)}</select> before and after</label>
+      <button>Check</button></form>
+    <${ErrorBox} error=${err} />
+    ${res && html`<div class="panel flush">
+      <div style="padding: 12px 16px"><${Badge} kind=${VERDICT[res.verdict] || 'info'}>${res.verdict}<//>
+        <span class="muted"> ${res.window} before and after ${new Date(res.at).toLocaleString()}</span></div>
+      ${res.signals.length > 0 && html`<table><thead><tr><th>Signal</th><th style="text-align: right">Before</th><th style="text-align: right">After</th><th></th></tr></thead>
+        <tbody>${res.signals.map(sg => html`<tr><td>${sg.name}</td><td class="num">${val(sg.before, sg.unit)}</td><td class="num">${val(sg.after, sg.unit)}</td>
+          <td>${sg.verdict !== 'no change' && html`<${Badge} kind=${VERDICT[sg.verdict]}>${sg.verdict}<//>`} <span class="muted">${sg.why || ''}</span></td></tr>`)}</tbody></table>`}
+      ${res.limits.length > 0 && html`<p class="muted" style="padding: 0 16px">${res.limits.join('. ')}.</p>`}</div>`}`;
+}
+
 function ServiceView({ name, params }) {
   const [range, setRange, win] = useRange(params);
   const [errorsOnly, setErrorsOnly] = useState(params.get('errors') === '1');
@@ -270,6 +305,7 @@ function ServiceView({ name, params }) {
           <td class="num">${o.errors > 0 ? html`<${Badge} kind=${o.errors >= 5 ? 'bad' : 'warn'}>${o.errors.toFixed(1)}%<//>` : '0%'}</td>
           <td class="num">${isFinite(o.avg) ? fmtUnit(o.avg, 'seconds') : '–'}</td>
           <td class="num">${isFinite(o.p95) ? fmtUnit(o.p95, 'seconds') : '–'}</td></tr>`)}</tbody></table></div>
+      <${CheckChange} name=${name} />
       ${(data.calls.length > 0 || data.callers.length > 0) && html`
         <h2 class="section">Depends on</h2>
         <div class="panel flush"><table>

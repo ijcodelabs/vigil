@@ -109,6 +109,12 @@ databases, queues, outside hosts, taken from its client spans) and who
 calls it, and its stored traces: filter to failed ones, slow ones, or one
 operation.
 
+**Did a change help?** on a service's page compares the time before a
+moment you give (a deploy, a configuration change) with the same time after
+it: requests, share of failures, 95th percentile, and a verdict. The same
+answer comes from the API (`GET /api/v1/verify`, see [API](api.md)) for a
+script or an agent that just made the change.
+
 A **trace** is one request as a waterfall: every span as a bar on a common
 time axis, nested under the span that started it, coloured by service,
 red where it failed. Click a span for what it recorded: attributes, the

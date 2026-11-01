@@ -84,6 +84,23 @@ API) and `GET` `POST /api/v1/traces/query` (LogsQL over spans); see
 curl -X PUT -H "Authorization: Bearer $T" --data-binary @rules.yaml https://vigil/api/v1/rules/config
 ```
 
+## Did a change help?
+
+| | |
+|---|---|
+| `GET /api/v1/verify?service=checkout&at=1793550000&window=15m` | compares the `window` (5m to 2h, default 15m) before the moment `at` (Unix seconds) with the same time after it, on the service's requests, share of failed requests and 95th percentile. With `slo=<name>` in place of `service`, on the SLO's share of bad events |
+
+The answer has a `verdict` (`better`, `worse`, `mixed`, `no change`, `not
+enough data`), each signal with its value before and after and why it
+counts as worse or better, and `limits`: what the comparison cannot tell.
+Failures count as worse when their share grew by at least a percentage
+point and at least doubled; latency when the 95th percentile grew by at
+least 50 ms and by half; requests that stop count as worse. With fewer
+than 20 requests on either side, or less than five minutes since the
+change, the verdict is `not enough data`. When less than the window has
+passed, both sides shrink to what has. Viewers and read-only tokens may
+ask. It is advice: nothing acts on it by itself.
+
 ## Evidence grants
 
 A grant lets one run of an AI agent (a Boop Chat workroom investigating an

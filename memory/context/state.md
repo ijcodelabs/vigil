@@ -1213,6 +1213,27 @@ Items 1 and 2 of [gaps.md](gaps.md)'s order.
   on the trial the two real contacts listed as working after the deploy.
 - Not built: delivery counts survive a restart; per-message history.
 
+## Did a change help? (built 2026-11-01, uncommitted to GitHub)
+
+Item 3 of [agentic.md](agentic.md)'s "Then" ("Verification").
+
+- `internal/server/verify.go`, `GET /api/v1/verify` (viewer):
+  `service` or `slo`, `at` (Unix seconds), `window` 5m–2h (15m). Fixed
+  queries at `at` and `at+window` over `[window]`: entry-span requests,
+  failed share, 95th percentile; for an SLO the share of bad events from
+  its recorded minutes (read `slo.ReadOffset` late). Worse/better: failures
+  +1 point and doubled; latency +50 ms and ×1.5; requests that stop are
+  worse; under 20 requests a side or under 5 minutes since: not enough
+  data; a window not yet passed shrinks both sides. Names go in quoted
+  (`strconv.Quote`).
+- Service page: "Did a change help?" form.
+- Verified: unit tests against a stand-in store (each verdict, shrinking,
+  quoting); the form in the browser; on the trial a 1 h comparison of the
+  real `webapi` (no change).
+- Not built: reachable with an evidence grant (a workroom run would need
+  it), markers of the changes themselves (they wait for Boop's work events
+  or the change ledger), a check that load moved too.
+
 ## Next
 
 - Foundations, build order in `direction.md`: step 1 on paper (data

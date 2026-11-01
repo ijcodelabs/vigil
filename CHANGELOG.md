@@ -27,6 +27,10 @@ after. How a release is made: [releasing.md](memory/context/releasing.md).
 - **Service map:** Services → Map draws services by how deep in the calls
   they sit, with databases and outside hosts last; lines and boxes turn
   yellow or red with their share of failures.
+- **Did a change help?** A service's page, and `GET /api/v1/verify`,
+  compare the same time before and after a moment on requests, failures
+  and the 95th percentile (or an SLO's bad events), with a verdict and its
+  limits.
 - **Notification delivery:** Alerts → Contacts & routing → Delivery shows,
   per contact and integration, messages sent and failed since start, the
   last success and the last error (addresses cut to their host); metric
