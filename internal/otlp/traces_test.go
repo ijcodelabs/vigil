@@ -166,20 +166,25 @@ func TestTraces(t *testing.T) {
 		t.Error("the model provider should show as something the assistant depends on")
 	}
 
-	// Sampling keeps whole traces or none, and always what failed or was slow.
+	// Sampling keeps whole traces or none, and always what failed or was
+	// slow, and model calls that report their tokens (what they cost).
 	spans = nil
 	r.Traces = TraceOptions{Sample: 0.2, SlowerThan: 800 * time.Millisecond}
 	send(400)
 	count := map[string]int{}
-	extra := 0
+	extra, pricedKept := 0, 0
 	for _, k := range spans {
 		id := k.span.GetTraceId()
 		count[hex.EncodeToString(id)]++
 		if !keepTrace(id, 0.2) {
 			extra++
 			slow := time.Duration(k.span.GetEndTimeUnixNano()-k.span.GetStartTimeUnixNano()) >= 800*time.Millisecond
-			if k.span.GetStatus().GetCode() != tracepb.Status_STATUS_CODE_ERROR && !slow {
-				t.Fatalf("a span that is neither sampled, failed nor slow was kept: %q", k.span.GetName())
+			priced := attr(k.span.GetAttributes(), "gen_ai.usage.input_tokens") != "" || attr(k.span.GetAttributes(), "gen_ai.usage.output_tokens") != ""
+			if k.span.GetStatus().GetCode() != tracepb.Status_STATUS_CODE_ERROR && !slow && !priced {
+				t.Fatalf("a span that is neither sampled, failed, slow nor a priced model call was kept: %q", k.span.GetName())
+			}
+			if priced {
+				pricedKept++
 			}
 		}
 	}
@@ -195,6 +200,9 @@ func TestTraces(t *testing.T) {
 	}
 	if whole < 40 || whole > 130 {
 		t.Errorf("kept %d of 400 traces at a share of 0.2", whole)
+	}
+	if pricedKept == 0 {
+		t.Error("model calls with tokens of unsampled traces should have been kept")
 	}
 	if extra == 0 {
 		t.Error("failed and slow spans of unsampled traces should have been kept")

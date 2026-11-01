@@ -137,6 +137,28 @@ restarting the server then never counts a minute twice, and up to 30
 minutes the server missed are counted late. Keep anything else (alerts,
 other recordings) in another group.
 
+## Cost of one request, one service, one work item
+
+The same prices go further than the totals:
+
+- **A service** on the Services page shows what its model calls cost in
+  the chosen time, by model, and the Services list gets an **AI cost**
+  column once any service has one. These read `ai_cost_usd_per_minute`.
+- **A trace** (one request, or one action of an agent) says how many model
+  calls it made and what they cost.
+- **A work item** (a ticket, a Boop item, an agent's task) when its spans
+  carry its key as `work_item.key`. Set it as a resource attribute for the
+  process that does the work (`OTEL_RESOURCE_ATTRIBUTES=work_item.key=OPS-42`),
+  or on the spans. A trace that has one shows the item's model calls and
+  cost in the last week.
+
+Traces and work items are read from stored spans: an estimate at your
+prices, not the invoice. Agents store every model call that reports its
+tokens, whatever `otlp.traces.sample` says, so the sampling share does not
+hide spend. The API is `GET /api/v1/costs/spans?trace=<id>` or
+`?work_item=<key>` (`from`, `to` in Unix seconds, at most 31 days; a week
+by default); see [API](api.md).
+
 ## The AI costs dashboard
 
 Comes with the server. At the top, all AI together: what is billed in the

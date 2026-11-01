@@ -135,8 +135,9 @@ Two things happen to every span, and they are separate on purpose:
   one trace in ten. The choice is made from the trace id, so every service
   keeps or drops the *same* traces and a stored trace is complete. A span
   that **failed** is always stored, and so is one slower than
-  `slower_than`; such a span can then appear without the rest of its trace,
-  which the trace page says.
+  `slower_than`, and so is a call to a language model that reports its
+  tokens (what it cost stays visible); such a span can then appear without
+  the rest of its trace, which the trace page says.
 
 Stored spans go to **VictoriaTraces**, a third store next to the ones for
 metrics and logs. The server needs to know where it is:

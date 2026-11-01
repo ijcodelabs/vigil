@@ -31,6 +31,15 @@ async function spans(query, from, to, limit) {
   return parseLines(text);
 }
 const nsToMs = v => Number(v) / 1e6;
+const usd = v => '$' + (v > 0 && v < 0.01 ? v.toFixed(4) : v.toFixed(2));
+// What model calls cost, from the server's estimate over stored spans; null
+// when there is nothing to say (no trace store, no model calls).
+async function spanCost(query) {
+  try {
+    const r = await api('/api/v1/costs/spans?' + query);
+    return r.calls > 0 ? r : null;
+  } catch { return null; }
+}
 // Timestamps carry nanoseconds; Date keeps milliseconds. Sub-millisecond
 // order matters for sibling spans, so keep the fraction.
 function timeMs(iso) {
@@ -56,16 +65,17 @@ export function Services({ route }) {
 // latency over the window.
 async function loadServices(from, to) {
   const w = Math.round(to - from) + 's';
-  const [all, entry, failed, p50, p95] = await Promise.all([
+  const [all, entry, failed, p50, p95, ai] = await Promise.all([
     instant(`sum by (service) (increase(traces_spans_total[${w}]))`, to),
     instant(`sum by (service) (increase(traces_spans_total{${ENTRY}}[${w}]))`, to),
     instant(`sum by (service) (increase(traces_spans_total{${ENTRY},status="error"}[${w}]))`, to),
     instant(`histogram_quantile(0.5, sum by (service, le) (increase(traces_span_duration_seconds_bucket{${ENTRY}}[${w}])))`, to),
     instant(`histogram_quantile(0.95, sum by (service, le) (increase(traces_span_duration_seconds_bucket{${ENTRY}}[${w}])))`, to),
+    instant(`sum by (owner) (sum_over_time(ai_cost_usd_per_minute{source="application"}[${w}]))`, to).catch(() => []),
   ]);
-  const e = by(entry, 'service'), f = by(failed, 'service'), m = by(p50, 'service'), p = by(p95, 'service');
+  const e = by(entry, 'service'), f = by(failed, 'service'), m = by(p50, 'service'), p = by(p95, 'service'), c = by(ai, 'owner');
   return all.map(r => r.metric.service).sort().map(name => ({
-    name, rate: (e[name] || 0) / (to - from), errors: pct(f[name], e[name]), p50: m[name], p95: p[name], entry: e[name] > 0,
+    name, rate: (e[name] || 0) / (to - from), errors: pct(f[name], e[name]), p50: m[name], p95: p[name], entry: e[name] > 0, ai: c[name] || 0,
   }));
 }
 
@@ -88,13 +98,15 @@ function ServiceList({ params }) {
           sets <code>otlp: {enabled: true}</code>. <code>vigil tracegen</code> sends demo traces to try it. <a href="/docs/apm" target="_blank" rel="noopener">How</a></div>`
       : html`<table>
         <thead><tr><th>Service</th><th style="text-align: right">Requests</th><th style="text-align: right">Errors</th>
-          <th style="text-align: right">Median</th><th style="text-align: right">95th percentile</th></tr></thead>
+          <th style="text-align: right">Median</th><th style="text-align: right">95th percentile</th>
+          ${data.some(s => s.ai > 0) && html`<th style="text-align: right" title="Model calls priced with costs.tokens, in the chosen time">AI cost</th>`}</tr></thead>
         <tbody>${data.map(s => html`<tr class="click" onClick=${() => { location.hash = '#/services/' + encodeURIComponent(s.name) + '?' + new URLSearchParams(rangeParams(range)); }}>
           <td><strong>${s.name}</strong>${!s.entry && html` <span class="muted">only calls out</span>`}</td>
           <td class="num">${s.entry ? fmtUnit(s.rate, 'ops/s') : '–'}</td>
           <td class="num">${s.entry ? html`<${Badge} kind=${s.errors >= 5 ? 'bad' : s.errors > 0 ? 'warn' : 'ok'}>${s.errors.toFixed(s.errors < 10 ? 1 : 0)}%<//>` : '–'}</td>
           <td class="num">${isFinite(s.p50) ? fmtUnit(s.p50, 'seconds') : '–'}</td>
           <td class="num">${isFinite(s.p95) ? fmtUnit(s.p95, 'seconds') : '–'}</td>
+          ${data.some(x => x.ai > 0) && html`<td class="num">${s.ai > 0 ? usd(s.ai) : '–'}</td>`}
         </tr>`)}</tbody></table>`}</div>`}
     <p class="muted">Requests are what a service was asked to do: its server and consumer spans. The numbers count every request;
       which traces are stored in full is a separate setting (<code>otlp.traces.sample</code>).</p>`;
@@ -243,7 +255,7 @@ function ServiceView({ name, params }) {
     const w = Math.round(to - from) + 's';
     const step = Math.max(15, Math.ceil((to - from) / 240));
     const rw = Math.max(60, 4 * step) + 's';
-    const [rate, dur, ops, opErr, opP95, opAvg, out, outErr, outAvg, inn] = await Promise.all([
+    const [rate, dur, ops, opErr, opP95, opAvg, out, outErr, outAvg, inn, ai] = await Promise.all([
       matrix(`sum by (status) (rate(traces_spans_total{${sel}}[${rw}]))`, from, to),
       matrix(`label_replace(histogram_quantile(0.5, sum by (le) (rate(traces_span_duration_seconds_bucket{${sel}}[${rw}]))), "q", "median", "", "")
         or label_replace(histogram_quantile(0.95, sum by (le) (rate(traces_span_duration_seconds_bucket{${sel}}[${rw}]))), "q", "95th", "", "")
@@ -256,6 +268,7 @@ function ServiceView({ name, params }) {
       instant(`sum by (peer) (increase(traces_service_calls_total{service=${q(name)},status="error"}[${w}]))`, to),
       instant(`sum by (peer) (increase(traces_service_call_duration_seconds_sum{service=${q(name)}}[${w}])) / sum by (peer) (increase(traces_service_call_duration_seconds_count{service=${q(name)}}[${w}]))`, to),
       instant(`sum by (service) (increase(traces_service_calls_total{peer=${q(name)}}[${w}]))`, to),
+      instant(`sum by (model) (sum_over_time(ai_cost_usd_per_minute{source="application",owner=${q(name)}}[${w}]))`, to).catch(() => []),
     ]);
     const key = r => r.metric.span_name + '\u0000' + r.metric.kind;
     const idx = rows => Object.fromEntries(rows.map(r => [key(r), Number(r.value[1])]));
@@ -267,7 +280,8 @@ function ServiceView({ name, params }) {
     const calls = out.map(r => ({ peer: r.metric.peer, rate: Number(r.value[1]) / (to - from), errors: pct(oe[r.metric.peer], Number(r.value[1])), avg: oa[r.metric.peer] }))
       .filter(c => c.rate > 0).sort((x, y) => y.rate - x.rate);
     const callers = inn.filter(r => Number(r.value[1]) > 0).map(r => ({ service: r.metric.service, rate: Number(r.value[1]) / (to - from) }));
-    return { rate, dur, operations, calls, callers };
+    const aiCost = ai.map(r => ({ model: r.metric.model, usd: Number(r.value[1]) })).filter(r => r.usd > 0).sort((x, y) => y.usd - x.usd);
+    return { rate, dur, operations, calls, callers, aiCost };
   }, [range, name], 30000);
 
   const { data: traces, error: tracesError } = useLoad(async () => {
@@ -293,6 +307,9 @@ function ServiceView({ name, params }) {
         <section class="panel tile" style="grid-column: span 6; height: 250px"><header><h2>Duration</h2></header>
           <div class="tile-body"><${Chart} result=${data.dur} names=${data.dur.series.map(s => s.metric.q)} height=${190} unit="seconds" min=${0} onZoom=${zoom} sync="svc" /></div></section>
       </div>
+      ${data.aiCost.length > 0 && html`<p class="muted">Model calls in this time cost
+        about <strong>${usd(data.aiCost.reduce((a, r) => a + r.usd, 0))}</strong>
+        (${data.aiCost.map((r, i) => html`${i > 0 && ', '}${r.model} ${usd(r.usd)}`)}), at the prices in <code>costs.tokens</code>.</p>`}
       <h2 class="section">Operations</h2>
       <div class="panel flush"><table>
         <thead><tr><th>Operation</th><th>Kind</th><th style="text-align: right">Per second</th><th style="text-align: right">Errors</th>
@@ -336,6 +353,14 @@ function ServiceView({ name, params }) {
 
 // One trace as a waterfall: every span a bar on a shared time axis, nested
 // under the span that started it.
+// WorkItemCost: what the model calls of everything done for one work item
+// (a Boop item, a ticket) cost in the last week, from spans carrying its key.
+function WorkItemCost({ item }) {
+  const { data: cost } = useLoad(() => spanCost('work_item=' + encodeURIComponent(item)), [item]);
+  return html`<div style="margin-top: 6px">Work item <span class="chip">${item}</span>${cost
+    ? html` · ${cost.calls} model calls in the last 7 days, about <strong>${usd(cost.cost_usd)}</strong>` : ''}</div>`;
+}
+
 function TraceView({ id, params }) {
   const [open, setOpen] = useState(null);
   const { data: trace, error } = useLoad(async () => {
@@ -343,6 +368,7 @@ function TraceView({ id, params }) {
     const r = await api('/api/v1/traces/jaeger/api/traces/' + id);
     return (r.data || [])[0] || { spans: [], processes: {} };
   }, [id]);
+  const { data: cost } = useLoad(() => spanCost('trace=' + id), [id]);
 
   const view = useMemo(() => {
     if (!trace || trace.spans.length === 0) return null;
@@ -374,7 +400,8 @@ function TraceView({ id, params }) {
     const t0 = Math.min(...all.map(s => s.start)), t1 = Math.max(...all.map(s => s.start + s.dur));
     const services = [...new Set(all.map(s => s.service))].sort();
     return { order, t0, total: Math.max(t1 - t0, 0.001), services, root: roots.find(r => !r.orphan) || roots[0],
-      errors: all.filter(s => s.failed).length, partial: roots.some(r => r.orphan) };
+      errors: all.filter(s => s.failed).length, partial: roots.some(r => r.orphan),
+      workItem: all.map(s => s.fields['work_item.key'] || s.fields['resource: work_item.key']).find(Boolean) };
   }, [trace]);
 
   const none = /no trace store/.test(error || '');
@@ -390,6 +417,9 @@ function TraceView({ id, params }) {
       <a class="btn" href=${`#/explore/logs?q=${encodeURIComponent(`trace_id:=${q(id)}`)}&from=${Math.floor(view.t0 / 1000) - 60}&to=${Math.ceil((view.t0 + view.total) / 1000) + 60}`}>Logs of this trace</a></div>
     <div class="panel">
       <div><strong>${ms(view.total)}</strong> · ${view.order.length} spans · ${new Date(view.t0).toLocaleString()} · <span class="mono muted">${id}</span></div>
+      ${cost && html`<div style="margin-top: 6px" title=${cost.limits.join(' ')}>${cost.calls} model call${cost.calls === 1 ? '' : 's'},
+        about <strong>${usd(cost.cost_usd)}</strong>${cost.models.some(m => !m.priced) && html` <span class="muted">(some models have no price)</span>`}</div>`}
+      ${view.workItem && html`<${WorkItemCost} item=${view.workItem} />`}
       <div style="margin-top: 6px">${view.services.map(s => html`<span class="chip"><span class="dot" style="background: ${color(s)}"></span>${s}</span>`)}</div>
       ${view.partial && html`<div class="muted" style="margin-top: 6px">Part of this trace is missing: some spans' parents were not stored (not sampled, not sent yet, or sent to a server that does not keep traces).</div>`}
     </div>

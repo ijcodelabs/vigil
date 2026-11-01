@@ -101,6 +101,16 @@ change, the verdict is `not enough data`. When less than the window has
 passed, both sides shrink to what has. Viewers and read-only tokens may
 ask. It is advice: nothing acts on it by itself.
 
+## What model calls cost
+
+| | |
+|---|---|
+| `GET /api/v1/costs/spans?trace=<id>` | the model calls stored in one trace: per model, calls, tokens by kind, `cost_usd` at the prices in `costs.tokens` and whether it had a price; the total; `limits` |
+| `GET /api/v1/costs/spans?work_item=<key>` | the same over every span carrying `work_item.key` (on the span or the resource); `from`, `to` in Unix seconds, a week by default, at most 31 days |
+
+Viewers and read-only tokens may ask. A model without a price counts its
+tokens and no money, and `limits` says so.
+
 ## Evidence grants
 
 A grant lets one run of an AI agent (a Boop Chat workroom investigating an

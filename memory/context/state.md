@@ -1234,6 +1234,35 @@ Item 3 of [agentic.md](agentic.md)'s "Then" ("Verification").
   it), markers of the changes themselves (they wait for Boop's work events
   or the change ledger), a check that load moved too.
 
+## AI cost per service, trace and work item (built 2026-11-01, uncommitted to GitHub)
+
+Item 4 of [agentic.md](agentic.md)'s "Then".
+
+- **Service:** Services list column and a line on the service page from
+  `ai_cost_usd_per_minute{source="application", owner=<service>}`.
+- **Trace / work item:** `internal/server/spancost.go`,
+  `GET /api/v1/costs/spans?trace=|work_item=` (viewer): one LogsQL
+  `stats by (response model, request model)` over the trace store, summing
+  the token fields (newest name first per kind), priced with `tokenPrice`.
+  A work item is `work_item.key` on the span or the resource (the name is
+  ours; Boop's contract v2 would use it). The trace page shows the trace's
+  model calls and, when a span carries a key, the item's last week.
+  `storeQuery` (evidence.go) now runs LogsQL against any store.
+- **Agent:** spans that report tokens are always stored, whatever the
+  sample share (`observeGenAI` returns whether it saw tokens). Needs the
+  agents upgraded; the trial's agents are not.
+- Verified: unit tests (pricing, unpriced model, old token names, query
+  shape, the sampling test); against a real VictoriaTraces in the
+  vigil-test machine with `vigil tracegen` and sample 0: the model span
+  was kept, its cost right to the token, the work-item query accepted;
+  the three views in the browser.
+- Found on the way: port 4318 on the developer's own machine is a real
+  agent; a first tracegen run there sent 33 demo traces to the trial
+  (services frontend, catalog, orders, payments, assistant).
+  Live tests must use another OTLP port. Their 384 metric series were deleted the same
+  day (owner's go); the few demo spans stay in the trace store until it
+  ages them out.
+
 ## Next
 
 - Foundations, build order in `direction.md`: step 1 on paper (data

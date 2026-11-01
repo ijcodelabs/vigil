@@ -270,6 +270,7 @@ func (s *Server) Handler() http.Handler {
 	s.evidenceGrantRoutes(mux)
 	s.deliveryRoutes(mux)
 	s.verifyRoutes(mux)
+	s.spanCostRoutes(mux)
 	mux.Handle("GET /docs/", ui.DocsHandler())
 	mux.Handle("/", ui.Handler())
 	return s.hardened(traced(mux))
