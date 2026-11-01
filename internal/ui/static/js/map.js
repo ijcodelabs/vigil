@@ -3,7 +3,9 @@ import { html, useState, useRef, useEffect, fmtUnit } from './lib.js';
 // A map panel draws nodes in columns (tiers), the links between them, and
 // a card with a node's labels and details on hover. Each query of the
 // panel is nodes, links or details (see Query in dashboards.go); its
-// series come in as rows of {metric, value, q} like a table's.
+// series come in as rows of {metric, value, q} like a table's. A link
+// query may say `as`: the node label both of its ends are nodes under
+// (a service map's links run from service to peer, both services).
 
 const NODE_H = 24, GAP = 6, HEAD = 20, PAD = 8, MAX_NODES = 300;
 const RANK = { '': 0, 'lvl-ok': 1, 'lvl-warn': 2, 'lvl-bad': 3 };
@@ -48,12 +50,15 @@ export function build(panel, rows) {
       n.details.push({ name: q.legend || 'Value', value: r.value, unit: q.unit || panel.unit, level: lv });
       n.level = worse(n.level, lv);
     } else if (q.from) {
-      const a = q.from + '=' + r.metric[q.from], b = q.to + '=' + r.metric[q.to];
+      const a = (q.as || q.from) + '=' + r.metric[q.from], b = (q.as || q.to) + '=' + r.metric[q.to];
       if (!nodes.has(a) || !nodes.has(b) || a === b) continue;
       const k = a + '>' + b;
-      const l = links.get(k) || { a, b, up: false, live: 0 };
+      const l = links.get(k) || { a, b, up: false, live: 0, level: '' };
       if (r.value > 0) l.up = true;
+      l.level = worse(l.level, level(q, r.value));
+      if (q.title) l.title = q.title(r);
       if (q.live && r.value > 0) l.live += r.value;
+      if (q.weight && r.value > 0) l.weight = (l.weight || 0) + r.value;
       links.set(k, l);
     }
   }
@@ -62,7 +67,8 @@ export function build(panel, rows) {
   return { tiers, byTier, nodes, links: [...links.values()] };
 }
 
-export function MapView({ panel, data, height }) {
+// onPick, when given, is called with a node that is clicked.
+export function MapView({ panel, data, height, onPick }) {
   const box = useRef(null);
   const [width, setWidth] = useState(600);
   const [hover, setHover] = useState(null); // {key, x, y}
@@ -113,12 +119,13 @@ export function MapView({ panel, data, height }) {
         const x1 = fwd ? a.x + boxW : a.x, x2 = fwd ? b.x : b.x + boxW;
         const y1 = a.y + NODE_H / 2, y2 = b.y + NODE_H / 2, dx = Math.max(30, Math.abs(x2 - x1) / 2) * (fwd ? 1 : -1);
         const lit = hover && (l.a === hover.key || l.b === hover.key);
-        return html`<path class="map-link ${l.up ? 'up' : 'down'} ${l.live ? 'live' : ''} ${lit ? 'lit' : ''} ${hover && !lit ? 'dim' : ''}"
+        return html`<path class="map-link ${l.up ? 'up' : 'down'} ${l.live ? 'live' : ''} ${l.level} ${lit ? 'lit' : ''} ${hover && !lit ? 'dim' : ''}"
           d="M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}"
-          style=${l.live ? `stroke-width: ${Math.min(5, 1.5 + Math.log2(1 + l.live))}px` : ''}><title>${l.live ? l.live + ' open now' : ''}</title></path>`;
+          style=${l.live || l.weight ? `stroke-width: ${Math.min(5, 1.2 + Math.log2(1 + (l.live || l.weight)))}px` : ''}><title>${l.title || (l.live ? l.live + ' open now' : '')}</title></path>`;
       })}
       ${[...pos.values()].map(({ x, y, n }) => html`<g class="map-node ${n.level} ${hover && hover.key !== n.key && !near.has(n.key) ? 'dim' : ''}"
-          transform="translate(${x},${y})" tabindex="0"
+          transform="translate(${x},${y})" tabindex="0" style=${onPick ? 'cursor: pointer' : ''}
+          onClick=${onPick ? () => onPick(n) : null} onKeyDown=${onPick ? e => { if (e.key === 'Enter') onPick(n); } : null}
           onMouseEnter=${() => setHover({ key: n.key, x: x + boxW + 8, y })} onFocus=${() => setHover({ key: n.key, x: x + boxW + 8, y })}>
         <rect width=${boxW} height=${NODE_H} rx="5" />
         <rect class="map-state" width="4" height=${NODE_H} rx="2" />

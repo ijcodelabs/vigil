@@ -220,6 +220,7 @@ td.lvl-bad { color: var(--bad); background: color-mix(in srgb, var(--bad) 16%, t
 .map-link { fill: none; stroke: var(--muted); stroke-width: 1.2px; transition: opacity .15s; }
 .map-link.down { stroke-dasharray: 3 4; opacity: .5; }
 .map-link.lit { stroke: var(--text); }
+.map-link.lvl-warn { stroke: var(--warn); } .map-link.lvl-bad { stroke: var(--bad); }
 .map-link.live { stroke: var(--accent); stroke-dasharray: 6 5; animation: map-flow 1s linear infinite; }
 @keyframes map-flow { to { stroke-dashoffset: -11; } }
 @media (prefers-reduced-motion: reduce) { .map-link.live { animation: none; } }

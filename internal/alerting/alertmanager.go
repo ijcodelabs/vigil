@@ -81,6 +81,7 @@ type Alertmanager struct {
 	// See silences.go: who is told about silences, and what they were told before.
 	routing        atomic.Pointer[routing]
 	told           told
+	sent           deliveries // how each contact's integrations did (deliveries.go)
 	notifySilences atomic.Bool
 
 	mu         sync.Mutex // serialises Apply

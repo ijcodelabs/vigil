@@ -56,3 +56,13 @@ groups:
         labels: {severity: warning}
         annotations:
           summary: 'vigil''s token for the secret store cannot be renewed and expires in {{ $value | humanizeDuration }}; give it a new one under Settings > Secrets'
+
+      # A contact whose sends fail and none succeed: it is told through the
+      # contacts that still work (Alerts > Contacts & routing shows the error).
+      - alert: NotificationsFailing
+        expr: |
+          increase(vigil_notifications_total{result="failed"}[15m]) > 0
+            unless on (receiver, integration, index) increase(vigil_notifications_total{result="ok"}[15m]) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: 'Notifications to {{ $labels.receiver }} ({{ $labels.integration }}) fail; see Alerts > Contacts & routing'

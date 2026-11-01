@@ -103,6 +103,7 @@ The group **builtin** always runs:
 | `AgentDroppingData` | an agent had to drop data it could not send or was not allowed to |
 | `SecretStoreDown` | the secret store set up under [Secrets](secrets.md) has not answered for five minutes (sealed, down, or vigil's login refused); vigil goes on with the values it read last |
 | `SecretStoreLoginExpiring` | vigil's token for the secret store cannot be renewed and expires within three days |
+| `NotificationsFailing` | a contact's sends (one Telegram, one webhook, …) failed in the last 15 minutes and none succeeded; sent to the contacts that still work |
 
 #### Laptops and other hosts that sleep
 
@@ -247,6 +248,18 @@ receivers:
           {{ .Annotations.summary }}
           {{ end }}
 ```
+
+### Did the message get through?
+
+**Alerts → Contacts & routing → Delivery** lists every way a contact is
+reached (its Telegram, its second webhook, …) with how many messages went
+out and how many failed since the server started, when the last one got
+through, and the last failure with its error. Addresses in the errors are
+cut to their host, so a token in a URL does not show. The same counts are
+the metric `vigil_notifications_total{receiver, integration, index,
+result}`, and the built-in `NotificationsFailing` alert fires when one of
+them only fails. Give important alerts two contacts, so that one can tell
+you when the other stops working.
 
 ### Slack
 

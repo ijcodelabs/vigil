@@ -159,6 +159,7 @@ Counted by the agent from every span it receives; see
 | `vigil_agent_start_time_seconds` | when the agent started; `changes()` of it counts restarts | |
 | `vigil_events_seen_total` | runtime events seen | `type` |
 | `vigil_events_detections_total`, `vigil_events_suppressed_total`, `vigil_events_lost_total` | detections reported, held back by the rate limit, and events lost because the host was too busy | |
+| `vigil_notifications_total` | messages each contact's integration sent (`result="ok"`) or failed to send (`result="failed"`) since the server started; labels `receiver`, `integration`, `index` (written every 30 seconds) | |
 | `vigil_secret_store_up` | 1 while the secret store set up under Secrets answers (written by the server every minute) | |
 | `vigil_secret_store_token_expiry_seconds` | how long vigil's login to the secret store has left; absent for a login that does not expire | `renewable` |
 | `ALERTS` | 1 for each pending or firing alert | `alertname`, `alertstate`, and the alert's labels |

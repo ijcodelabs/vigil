@@ -95,6 +95,14 @@ requests, and median and 95th-percentile duration over the chosen time.
 "Requests" are what a service was asked to do: its *server* and *consumer*
 spans.
 
+**Map** (the second tab) draws the same services by how deep in the
+calls they sit: those nobody else calls on the left, what they call next
+to them, databases and outside hosts on the right. A line is calls, thicker
+for more, yellow or red when over 1% or 5% of them fail; a box is coloured
+by its own share of failed requests. Hover for its numbers, click to open
+it. A call between two services shows when the client span names the other
+one (`peer.service`), or when stored traces show it.
+
 A **service's page** has the same over time, its operations (each route,
 query or message it handles or sends), what it depends on (other services,
 databases, queues, outside hosts, taken from its client spans) and who
@@ -223,4 +231,6 @@ bearer token.
 - Sampling is decided when a span arrives, not after the trace is complete,
   so "store every trace in which anything failed" is not possible; the
   failed span itself is stored.
-- There is no service map drawing yet, only the tables.
+- The map shows a call between two services only if the client span names
+  the other one (`peer.service`) or a stored trace shows it; one known only
+  by its address (`server.address`) appears as an outside host.
