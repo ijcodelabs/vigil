@@ -191,9 +191,11 @@ admins).
 Boop Chat makes an incident item from vigil's alert webhook. To let an
 agent's run in a workroom look at what vigil knows about that incident,
 give Boop Chat an **issuer token** (Users → Read-only tokens → New token →
-It may: only issue evidence grants). That token reads nothing itself. For
-each run, Boop Chat asks for an [evidence grant](api.md#evidence-grants)
-with the alert's labels and hands the grant's token to the run, which then
-reads the incident's masked evidence from `GET /api/v1/evidence`, for 30
-minutes and 20 reads at most. Every grant shows on the Users page, where an
+It may: only issue evidence grants). That token reads nothing itself. When
+someone presses **🔎 Investigate** on an incident, Boop Chat asks for an
+[evidence grant](api.md#evidence-grants) with the alert's labels, for one
+read and five minutes, reads the incident's masked evidence once and gives
+it to a read-only workroom run as a file; the run never gets a token for
+vigil. Its answer goes back to the incident as a proposal. Every grant
+shows on the Users page (purpose "<item key> investigation"), where an
 admin can end it.

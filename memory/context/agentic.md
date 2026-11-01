@@ -1,7 +1,8 @@
 # vigil for agentic companies
 
-Agreed as a direction by the owner 2026-11-01. vigil's part of the first
-slice is built (state.md); Boop's part is not.
+Agreed as a direction by the owner 2026-11-01. The first slice is built
+in both products and ran end to end on 2026-11-01 (state.md; Boop's
+notes in its repository); not pushed.
 Reviewed once with a second model (Codex); its corrections are in.
 Boop's side of the same plan lives in the Boop repository.
 
