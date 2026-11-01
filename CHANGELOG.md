@@ -31,6 +31,13 @@ after. How a release is made: [releasing.md](memory/context/releasing.md).
   compare the same time before and after a moment on requests, failures
   and the 95th percentile (or an SLO's bad events), with a verdict and its
   limits.
+- **AI cost per service, trace and work item:** the Services list and a
+  service's page show what its model calls cost; a trace page shows its
+  model calls and their cost; spans carrying `work_item.key` add up per
+  work item (`GET /api/v1/costs/spans`). Estimates at `costs.tokens`.
+- **Agents keep every model call that reports tokens**, whatever the
+  sample share, so cost per trace and per work item is not lost to
+  sampling.
 - **Notification delivery:** Alerts → Contacts & routing → Delivery shows,
   per contact and integration, messages sent and failed since start, the
   last success and the last error (addresses cut to their host); metric

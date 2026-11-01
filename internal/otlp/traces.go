@@ -114,8 +114,9 @@ func redactValue(v *commonpb.AnyValue, mask func(string) string) {
 }
 
 // observeGenAI counts a call to a language model: one request, and the
-// tokens it used by kind. Called with r.mu held.
-func (r *Receiver) observeGenAI(service, status string, seconds float64, attrs []*commonpb.KeyValue, now time.Time) {
+// tokens it used by kind. It says whether the span reported any tokens.
+// Called with r.mu held.
+func (r *Receiver) observeGenAI(service, status string, seconds float64, attrs []*commonpb.KeyValue, now time.Time) bool {
 	provider := attr(attrs, "gen_ai.provider.name")
 	if provider == "" {
 		provider = attr(attrs, "gen_ai.system")
@@ -125,11 +126,11 @@ func (r *Receiver) observeGenAI(service, status string, seconds float64, attrs [
 		model = attr(attrs, "gen_ai.request.model")
 	}
 	if provider == "" && model == "" {
-		return
+		return false
 	}
 	st := r.trace
 	if len(st.tokens) > 5000 { // model names are few; this many means something writes ids into them
-		return
+		return false
 	}
 	provider, model = truncate(provider, 60), truncate(model, 120)
 	op := attr(attrs, "gen_ai.operation.name")
@@ -144,6 +145,7 @@ func (r *Receiver) observeGenAI(service, status string, seconds float64, attrs [
 			st.series(st.tokens, now, "service", service, "provider", provider, "model", model, "type", t.typ).count += v
 		}
 	}
+	return len(seen) > 0
 }
 
 func attr(attrs []*commonpb.KeyValue, key string) string {
@@ -207,12 +209,13 @@ func (r *Receiver) convertTraces(in *otlpwire.TraceRequest, now time.Time) *otlp
 					status = "error"
 				}
 				r.observe(service, sp.GetName(), kind, status, seconds, sp.GetAttributes(), now, opts.MaxNames)
+				priced := false // a model call that reports its tokens: what it cost is kept with it
 				if !selfReporting[service] {
-					r.observeGenAI(service, status, seconds, sp.GetAttributes(), now)
+					priced = r.observeGenAI(service, status, seconds, sp.GetAttributes(), now)
 				}
 
 				slow := opts.SlowerThan > 0 && seconds >= opts.SlowerThan.Seconds()
-				if keepTrace(sp.GetTraceId(), opts.Sample) || status == "error" || slow {
+				if keepTrace(sp.GetTraceId(), opts.Sample) || status == "error" || slow || priced {
 					if r.Redact != nil {
 						redactSpan(sp, r.Redact)
 					}

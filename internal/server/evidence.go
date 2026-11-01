@@ -348,9 +348,15 @@ func (s *Server) logLines(ctx context.Context, query string, from, to time.Time,
 // logQuery runs a LogsQL query against the log store and returns its rows
 // in the order the store gives them.
 func (s *Server) logQuery(ctx context.Context, query string, from, to time.Time, limit int) ([]map[string]string, error) {
+	return s.storeQuery(ctx, s.logs, query, from, to, limit)
+}
+
+// storeQuery runs a LogsQL query against a store that speaks it: the log
+// store, or the trace store, which keeps spans as rows.
+func (s *Server) storeQuery(ctx context.Context, store *url.URL, query string, from, to time.Time, limit int) ([]map[string]string, error) {
 	form := url.Values{"query": {query}, "start": {from.UTC().Format(time.RFC3339Nano)},
 		"end": {to.UTC().Format(time.RFC3339Nano)}, "limit": {strconv.Itoa(limit)}}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.logs.JoinPath("/select/logsql/query").String(), strings.NewReader(form.Encode()))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, store.JoinPath("/select/logsql/query").String(), strings.NewReader(form.Encode()))
 	if err != nil {
 		return nil, err
 	}
