@@ -1263,6 +1263,18 @@ Item 4 of [agentic.md](agentic.md)'s "Then".
   day (owner's go); the few demo spans stay in the trace store until it
   ages them out.
 
+## First slice, end to end (2026-11-01)
+
+- Evidence grants got `reads` (1–20, column `max_uses`); Boop Chat asks for
+  one read and five minutes.
+- Ran for real on the Mac: a local vigil with a firing ContainerDown, a
+  local Boop Chat with the project connected to it (issuer token), a dev
+  runner with real Codex on a scratch repository. The alert webhook opened
+  the incident, 🔎 Investigate got a grant (1 of 1 reads used, purpose
+  "SHOP-1 investigation"), the read-only run answered from the evidence and
+  the repository, and the answer was accepted onto the incident's
+  timeline. The Boop side is described in Boop's own notes.
+
 ## Next
 
 - Foundations, build order in `direction.md`: step 1 on paper (data
