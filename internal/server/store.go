@@ -105,6 +105,11 @@ func OpenStore(dataDir string) (*Store, error) {
 			_, err = db.Exec(ddl)
 		}
 	}
+	if err == nil { // added later: how many reads a grant allows
+		if _, aerr := db.Exec(`ALTER TABLE evidence_grants ADD COLUMN max_uses INTEGER NOT NULL DEFAULT 20`); aerr != nil && !strings.Contains(aerr.Error(), "duplicate column") {
+			err = aerr
+		}
+	}
 	if err == nil { // added later: what a token may do, "read" or "issue"
 		if _, aerr := db.Exec(`ALTER TABLE api_tokens ADD COLUMN scope TEXT NOT NULL DEFAULT 'read'`); aerr != nil && !strings.Contains(aerr.Error(), "duplicate column") {
 			err = aerr

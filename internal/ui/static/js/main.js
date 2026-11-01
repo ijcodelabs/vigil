@@ -251,7 +251,7 @@ function EvidenceGrants() {
     if (!confirm(`End the grant for “${g.purpose}”? Whatever holds it reads nothing more.`)) return;
     try { await api('/api/v1/evidence-grants/' + g.id, { method: 'DELETE' }); reload(); } catch (err) { alert(err.message); }
   };
-  const live = g => new Date(g.expires) > new Date() && g.uses < 20;
+  const live = g => new Date(g.expires) > new Date() && g.uses < g.max_uses;
   return html`
     <div class="head" style="margin-top: 28px"><h1 style="font-size: 17px">Evidence grants</h1><span class="spacer"></span>
       <a class="btn" href="/docs/api#evidence-grants" target="_blank" rel="noopener">What they are</a></div>
@@ -263,7 +263,7 @@ function EvidenceGrants() {
           <td><strong>${g.purpose}</strong></td>
           <td class="muted">#${g.incident}</td>
           <td><${Badge} kind=${live(g) ? 'ok' : 'off'}>${live(g) ? 'active' : 'ended'}<//></td>
-          <td class="muted">${g.uses} of 20</td>
+          <td class="muted">${g.uses} of ${g.max_uses}</td>
           <td class="muted" title=${new Date(g.created).toLocaleString()}>${new Date(g.created).toLocaleString()} by ${g.issuer}</td>
           <td class="muted">${new Date(g.expires).toLocaleTimeString()}</td>
           <td style="text-align: right">${live(g) && html`<button class="small danger" onClick=${() => revoke(g)}>End</button>`}</td>

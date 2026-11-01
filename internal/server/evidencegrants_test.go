@@ -127,6 +127,20 @@ func TestEvidenceGrants(t *testing.T) {
 		t.Errorf("list: %d %s", code, body)
 	}
 
+	// A grant for one read reads once.
+	_, body = with(issuer.Token, "POST", "/api/v1/evidence-grants", `{"incident":1,"purpose":"one look","reads":1,"ttl_minutes":5}`)
+	var once struct{ Token string }
+	json.Unmarshal([]byte(body), &once)
+	if code, _ := with(once.Token, "GET", "/api/v1/evidence", ""); code != 200 {
+		t.Errorf("first read: %d", code)
+	}
+	if code, _ := with(once.Token, "GET", "/api/v1/evidence", ""); code != 429 {
+		t.Errorf("second read of a one-read grant: %d", code)
+	}
+	if code, _ := with(issuer.Token, "POST", "/api/v1/evidence-grants", `{"incident":1,"purpose":"x","reads":21}`); code != 400 {
+		t.Errorf("21 reads: %d", code)
+	}
+
 	// Revoked, a grant reads nothing.
 	_, body = admin("POST", "/api/v1/evidence-grants", `{"incident":1,"purpose":"by hand"}`)
 	var g2 struct{ ID, Token string }

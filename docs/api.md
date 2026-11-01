@@ -123,8 +123,8 @@ token that can read anything itself.
 
 | | |
 |---|---|
-| `POST /api/v1/evidence-grants` | admin or issuer token. `{"incident": 12, "purpose": "workroom run 7", "ttl_minutes": 30}`, or `"labels": {…}` (one alert's labels as Alertmanager's webhook delivers them) in place of `incident`. `ttl_minutes` 1 to 60, default 30; `purpose` is required (at most 120 characters). Returns the grant's `token` (`vge_…`) once. 404 when no incident has those labels, 409 for an incident resolved more than a day ago |
-| `GET /api/v1/evidence` | with the grant's token: `{"incident": {…}, "bundle": {"items": […], "withheld": […]}, "expires": …}`. At most 20 reads per grant (429 after) |
+| `POST /api/v1/evidence-grants` | admin or issuer token. `{"incident": 12, "purpose": "workroom run 7", "ttl_minutes": 30}`, or `"labels": {…}` (one alert's labels as Alertmanager's webhook delivers them) in place of `incident`. `ttl_minutes` 1 to 60, default 30; `reads` 1 to 20, default 20; `purpose` is required (at most 120 characters). Returns the grant's `token` (`vge_…`) once. 404 when no incident has those labels, 409 for an incident resolved more than a day ago |
+| `GET /api/v1/evidence` | with the grant's token: `{"incident": {…}, "bundle": {"items": […], "withheld": […]}, "expires": …}`. At most as many reads as the grant allows (429 after) |
 | `GET /api/v1/evidence-grants` | grants of the last 30 days with their reads; admin only (Users page) |
 | `DELETE /api/v1/evidence-grants/{id}` | end a grant at once; admin only |
 
