@@ -14,6 +14,19 @@ after. How a release is made: [releasing.md](memory/context/releasing.md).
 
 ## Unreleased
 
+### Added
+
+- **Evidence grants:** a short-lived token that lets one run of an AI agent
+  (a Boop Chat workroom, for instance) read one incident's masked evidence
+  bundle and nothing else, at most 20 times; issued by an admin or by a new
+  kind of token that may only issue grants. Listed and ended on the Users
+  page. See the API docs, "Evidence grants".
+- **The server traces itself:** with the standard `OTEL_EXPORTER_OTLP_*`
+  variables set, `vigil-server` sends a span per API request (method,
+  route and status only) and continues a caller's W3C trace context.
+- **Guides for Python and Go services:** OpenTelemetry set-up with log
+  lines linked to their traces (`docs/apm-python.md`, `docs/apm-go.md`).
+
 ## v0.1.0 (2026-10-31)
 
 The first release. vigil was used from source until now; this is what it

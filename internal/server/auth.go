@@ -46,6 +46,9 @@ type principal struct {
 	// ReadOnly is true for a caller that came with a read-only token: it
 	// sees what a viewer sees and changes nothing.
 	ReadOnly bool `json:"read_only,omitempty"`
+	// Issuer is true for a token that may only issue evidence grants
+	// (evidencegrants.go); it reads nothing itself.
+	Issuer bool `json:"issuer,omitempty"`
 	// session is the id of the session the caller signed in with, if any.
 	session string
 }
@@ -77,7 +80,10 @@ func (s *Server) identify(r *http.Request) (p *principal, viaCookie bool) {
 		return &principal{User: "admin-token", Role: RoleAdmin}, false
 	}
 	if t := bearer(r); strings.HasPrefix(t, readTokenPrefix) {
-		if name, ok := s.readToken(t); ok {
+		if name, scope, ok := s.readToken(t); ok {
+			if scope == scopeIssue {
+				return &principal{User: "token " + name, Issuer: true}, false
+			}
 			return &principal{User: "token " + name, Role: RoleViewer, ReadOnly: true}, false
 		}
 		return nil, false
@@ -120,6 +126,10 @@ func (s *Server) require(role string, asks bool, next http.HandlerFunc) http.Han
 		p, viaCookie := s.identify(r)
 		if p == nil {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if p.Issuer {
+			http.Error(w, "this token only issues evidence grants", http.StatusForbidden)
 			return
 		}
 		if role == RoleAdmin && p.Role != RoleAdmin {

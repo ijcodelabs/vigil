@@ -20,6 +20,7 @@ func Server(ctx context.Context, path string, log *slog.Logger) error {
 		return err
 	}
 	server.Version = version.Version
+	defer setupTracing(ctx, log)()
 	s, err := server.New(cfg, log)
 	if err != nil {
 		return err

@@ -185,3 +185,15 @@ come with their integrations.
 Not built yet: session markers on charts, a request-access link on
 incidents, roles that decide who may see what (until then the map is for
 admins).
+
+## Investigating an incident from Boop Chat
+
+Boop Chat makes an incident item from vigil's alert webhook. To let an
+agent's run in a workroom look at what vigil knows about that incident,
+give Boop Chat an **issuer token** (Users → Read-only tokens → New token →
+It may: only issue evidence grants). That token reads nothing itself. For
+each run, Boop Chat asks for an [evidence grant](api.md#evidence-grants)
+with the alert's labels and hands the grant's token to the run, which then
+reads the incident's masked evidence from `GET /api/v1/evidence`, for 30
+minutes and 20 reads at most. Every grant shows on the Users page, where an
+admin can end it.

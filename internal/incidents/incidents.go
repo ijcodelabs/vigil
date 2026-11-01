@@ -429,6 +429,19 @@ func (t *Tracker) OfResource(ctx context.Context, resource string, since time.Ti
 		resource, since.Unix(), limit)
 }
 
+// ByKey returns the newest incident with that key: the one an alert with
+// these labels belongs to now, or did last.
+func (t *Tracker) ByKey(ctx context.Context, key string) (Incident, error) {
+	list, err := t.list(ctx, `key = ? ORDER BY first_seen DESC LIMIT 1`, key)
+	if err == nil && len(list) == 0 {
+		err = ErrNotFound
+	}
+	if err != nil {
+		return Incident{}, err
+	}
+	return list[0], nil
+}
+
 // Get returns one incident and its history.
 func (t *Tracker) Get(ctx context.Context, id int64) (Incident, []Event, error) {
 	list, err := t.list(ctx, `id = ?`, id)

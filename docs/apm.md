@@ -41,6 +41,9 @@ opentelemetry-instrument python app.py
 node --require @opentelemetry/auto-instrumentations-node/register app.js
 ```
 
+Step by step, with log lines linked to traces: [Python](apm-python.md),
+[Go](apm-go.md).
+
 In a container, the agent's endpoint has to be reachable from it: let the
 agent listen on an address the containers can reach (`listen: 0.0.0.0:4318`
 on a host you firewall, or the Docker bridge address) and use that instead

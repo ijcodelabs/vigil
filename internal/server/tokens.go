@@ -18,11 +18,18 @@ import (
 
 const readTokenPrefix = "vgr_"
 
+// What a token may do: read like a viewer, or only issue evidence grants.
+const (
+	scopeRead  = "read"
+	scopeIssue = "issue"
+)
+
 // APIToken is a read-only token as the list shows it. The token itself is
 // shown once, when it is made.
 type APIToken struct {
 	ID       string     `json:"id"`
 	Name     string     `json:"name"`
+	Scope    string     `json:"scope"`
 	Author   string     `json:"author"`
 	Created  time.Time  `json:"created"`
 	Expires  *time.Time `json:"expires,omitempty"`   // absent: does not expire
@@ -33,12 +40,13 @@ type APIToken struct {
 // a dashboard's hundred queries are one write a minute and not a hundred.
 var tokenUse sync.Map // id -> unix time
 
-// readToken looks a token up and returns the name it was given.
-func (s *Server) readToken(token string) (string, bool) {
-	id, name, expires, err := s.store.ReadToken(hashToken(token))
+// readToken looks a token up and returns the name it was given and its
+// scope.
+func (s *Server) readToken(token string) (string, string, bool) {
+	id, name, scope, expires, err := s.store.ReadToken(hashToken(token))
 	now := time.Now().Unix()
 	if err != nil || (expires != 0 && expires < now) {
-		return "", false
+		return "", "", false
 	}
 	if last, _ := tokenUse.Load(id); last == nil || now-last.(int64) >= 60 {
 		tokenUse.Store(id, now)
@@ -46,7 +54,7 @@ func (s *Server) readToken(token string) (string, bool) {
 			s.log.Warn("noting the use of a token failed", "token", name, "err", err)
 		}
 	}
-	return name, true
+	return name, scope, true
 }
 
 func (s *Server) tokenRoutes(mux *http.ServeMux) {
@@ -62,6 +70,7 @@ func (s *Server) tokenRoutes(mux *http.ServeMux) {
 		var in struct {
 			Name      string `json:"name"`
 			ValidDays int    `json:"valid_days"` // 0: does not expire
+			Scope     string `json:"scope"`      // read (the default) or issue
 		}
 		if !readJSON(w, r, &in) {
 			return
@@ -71,7 +80,14 @@ func (s *Server) tokenRoutes(mux *http.ServeMux) {
 			http.Error(w, "give the token a name; valid_days is 0 (no end) to 3650", http.StatusBadRequest)
 			return
 		}
-		t := APIToken{ID: randomToken()[:12], Name: in.Name, Author: author(r), Created: time.Now().UTC().Truncate(time.Second)}
+		if in.Scope == "" {
+			in.Scope = scopeRead
+		}
+		if in.Scope != scopeRead && in.Scope != scopeIssue {
+			http.Error(w, "scope is read or issue", http.StatusBadRequest)
+			return
+		}
+		t := APIToken{ID: randomToken()[:12], Name: in.Name, Scope: in.Scope, Author: author(r), Created: time.Now().UTC().Truncate(time.Second)}
 		if in.ValidDays > 0 {
 			exp := t.Created.AddDate(0, 0, in.ValidDays)
 			t.Expires = &exp
@@ -81,7 +97,7 @@ func (s *Server) tokenRoutes(mux *http.ServeMux) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, map[string]any{"id": t.ID, "name": t.Name, "token": secret, "expires": t.Expires})
+		writeJSON(w, map[string]any{"id": t.ID, "name": t.Name, "scope": t.Scope, "token": secret, "expires": t.Expires})
 	}))
 	mux.HandleFunc("DELETE /api/v1/tokens/{id}", s.admin(func(w http.ResponseWriter, r *http.Request) {
 		if err := s.store.DeleteAPIToken(r.PathValue("id")); err != nil {
@@ -98,13 +114,13 @@ func (s *Store) CreateAPIToken(t APIToken, tokenHash string) error {
 	if t.Expires != nil {
 		exp = t.Expires.Unix()
 	}
-	_, err := s.db.Exec(`INSERT INTO api_tokens (id, name, token_hash, expires, author, created) VALUES (?, ?, ?, ?, ?, ?)`,
-		t.ID, t.Name, tokenHash, exp, t.Author, t.Created.Unix())
+	_, err := s.db.Exec(`INSERT INTO api_tokens (id, name, scope, token_hash, expires, author, created) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		t.ID, t.Name, t.Scope, tokenHash, exp, t.Author, t.Created.Unix())
 	return err
 }
 
 func (s *Store) APITokens() ([]APIToken, error) {
-	rows, err := s.db.Query(`SELECT id, name, expires, author, created, last_used FROM api_tokens ORDER BY created DESC`)
+	rows, err := s.db.Query(`SELECT id, name, scope, expires, author, created, last_used FROM api_tokens ORDER BY created DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +129,7 @@ func (s *Store) APITokens() ([]APIToken, error) {
 	for rows.Next() {
 		var t APIToken
 		var exp, created, used int64
-		if err := rows.Scan(&t.ID, &t.Name, &exp, &t.Author, &created, &used); err != nil {
+		if err := rows.Scan(&t.ID, &t.Name, &t.Scope, &exp, &t.Author, &created, &used); err != nil {
 			return nil, err
 		}
 		t.Created = time.Unix(created, 0).UTC()
@@ -132,9 +148,9 @@ func (s *Store) APITokens() ([]APIToken, error) {
 
 // ReadToken finds a token by its hash. A token that does not exist is an
 // error like any other: the caller is not let in.
-func (s *Store) ReadToken(tokenHash string) (id, name string, expires int64, err error) {
-	err = s.db.QueryRow(`SELECT id, name, expires FROM api_tokens WHERE token_hash = ?`, tokenHash).Scan(&id, &name, &expires)
-	return id, name, expires, err
+func (s *Store) ReadToken(tokenHash string) (id, name, scope string, expires int64, err error) {
+	err = s.db.QueryRow(`SELECT id, name, scope, expires FROM api_tokens WHERE token_hash = ?`, tokenHash).Scan(&id, &name, &scope, &expires)
+	return id, name, scope, expires, err
 }
 
 func (s *Store) TouchToken(id string, at int64) error {

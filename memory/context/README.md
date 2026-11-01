@@ -11,6 +11,8 @@ delete what stops being true.
 | [decisions.md](decisions.md) | Design decisions and the reasons behind them |
 | [direction.md](direction.md) | Where the project is meant to go beyond the current plan |
 | [slo.md](slo.md) | Spec for SLOs, error budgets, burn-rate alerts and SLA reports (steps 1–5 built) |
+| [agentic.md](agentic.md) | vigil's part of the plan for companies run by agents, with people watching and delegating |
+| [gaps.md](gaps.md) | Gaps against other observability products, and what goes into vigil or Boop (proposed) |
 | [releasing.md](releasing.md) | How a version is tagged, built, signed and published |
 | [testing.md](testing.md) | How to run it against real stores and a real kernel, and known pitfalls |
 

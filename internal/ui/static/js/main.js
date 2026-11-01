@@ -173,6 +173,7 @@ function Users({ me, onAccountsChanged }) {
       </tr>`)}</tbody></table>` : html`<div class="empty">No user accounts.</div>`}</div>
     <p class="muted">Admins can change rules, contacts, silences, agents and users. Viewers can look at everything except contact settings.</p>
     <${Tokens} />
+    <${EvidenceGrants} />
     ${edit && html`<${Dialog} title=${edit.isNew ? 'Add user' : 'Edit ' + edit.name} onClose=${() => setEdit(null)}><form onSubmit=${save}>
       ${edit.isNew && html`<div class="field"><label>User name</label><input name="name" required autofocus pattern="[A-Za-z0-9._@\\-]{1,64}" /></div>`}
       <div class="field"><label>${edit.isNew ? 'Password (at least 10 characters)' : 'New password (leave empty to keep the current one)'}</label>
@@ -196,7 +197,7 @@ function Tokens() {
     e.preventDefault();
     const f = new FormData(e.target);
     try {
-      setIssued(await api('/api/v1/tokens', { method: 'POST', body: { name: f.get('name').trim(), valid_days: Number(f.get('valid')) } }));
+      setIssued(await api('/api/v1/tokens', { method: 'POST', body: { name: f.get('name').trim(), valid_days: Number(f.get('valid')), scope: f.get('scope') } }));
       setFormError(null); reload();
     } catch (err) { setFormError(err.message); }
   };
@@ -213,16 +214,17 @@ function Tokens() {
     <${ErrorBox} error=${error} />
     <div class="panel flush">${!list ? html`<div class="empty">Loading…</div>` : list.length === 0
       ? html`<div class="empty">No tokens. A token lets Grafana or a script read what a viewer can see, and change nothing.</div>`
-      : html`<table><thead><tr><th>Name</th><th>State</th><th>Last used</th><th>Expires</th><th>Created</th><th></th></tr></thead>
+      : html`<table><thead><tr><th>Name</th><th>May</th><th>State</th><th>Last used</th><th>Expires</th><th>Created</th><th></th></tr></thead>
         <tbody>${list.map(t => html`<tr>
           <td><strong>${t.name}</strong></td>
+          <td class="muted">${t.scope === 'issue' ? 'issue evidence grants' : 'read'}</td>
           <td><${Badge} kind=${expired(t) ? 'off' : 'ok'}>${expired(t) ? 'expired' : 'active'}<//></td>
           <td class="muted" title=${t.last_used ? new Date(t.last_used).toLocaleString() : ''}>${t.last_used ? new Date(t.last_used).toLocaleString() : 'never'}</td>
           <td class="muted">${t.expires ? new Date(t.expires).toLocaleDateString() : 'never'}</td>
           <td class="muted" title=${new Date(t.created).toLocaleString()}>${new Date(t.created).toLocaleDateString()} by ${t.author}</td>
           <td style="text-align: right"><button class="small danger" onClick=${() => revoke(t)}>Revoke</button></td>
         </tr>`)}</tbody></table>`}</div>
-    ${dialog && html`<${Dialog} title="New read-only token" onClose=${close}>${issued ? html`
+    ${dialog && html`<${Dialog} title="New token" onClose=${close}>${issued ? html`
       <p>This is the token. It is shown only this once.</p>
       <div class="secret">${issued.token}</div>
       <p class="muted">A tool sends it as the header <code>Authorization: Bearer ${'<token>'}</code>.
@@ -231,11 +233,41 @@ function Tokens() {
         <button class="primary" onClick=${close}>Done</button></div>`
       : html`<form onSubmit=${create}>
         <div class="field"><label>Name (what will use it)</label><input name="name" required maxlength="100" placeholder="e.g. grafana" /></div>
+        <div class="field"><label>It may</label><select name="scope">
+          <option value="read">read what a viewer sees</option>
+          <option value="issue">only issue evidence grants (for Boop Chat)</option></select></div>
         <div class="field"><label>Valid for</label><select name="valid">
           <option value="0">until revoked</option><option value="30">30 days</option><option value="90">90 days</option><option value="365">1 year</option></select></div>
         <${ErrorBox} error=${formError} />
         <div class="actions"><button type="button" onClick=${close}>Cancel</button><button class="primary">Create</button></div>
       </form>`}<//>`}`;
+}
+
+// Evidence grants: one incident's evidence for one run of an agent, short
+// and counted. Admins see every grant and can end one.
+function EvidenceGrants() {
+  const { data: list, error, reload } = useLoad(() => api('/api/v1/evidence-grants'), [], 30000);
+  const revoke = async g => {
+    if (!confirm(`End the grant for “${g.purpose}”? Whatever holds it reads nothing more.`)) return;
+    try { await api('/api/v1/evidence-grants/' + g.id, { method: 'DELETE' }); reload(); } catch (err) { alert(err.message); }
+  };
+  const live = g => new Date(g.expires) > new Date() && g.uses < 20;
+  return html`
+    <div class="head" style="margin-top: 28px"><h1 style="font-size: 17px">Evidence grants</h1><span class="spacer"></span>
+      <a class="btn" href="/docs/api#evidence-grants" target="_blank" rel="noopener">What they are</a></div>
+    <${ErrorBox} error=${error} />
+    <div class="panel flush">${!list ? html`<div class="empty">Loading…</div>` : list.length === 0
+      ? html`<div class="empty">No grants in the last 30 days. A grant lets one run of an agent read one incident's evidence for a short time.</div>`
+      : html`<table><thead><tr><th>For</th><th>Incident</th><th>State</th><th>Reads</th><th>Issued</th><th>Expires</th><th></th></tr></thead>
+        <tbody>${list.map(g => html`<tr>
+          <td><strong>${g.purpose}</strong></td>
+          <td class="muted">#${g.incident}</td>
+          <td><${Badge} kind=${live(g) ? 'ok' : 'off'}>${live(g) ? 'active' : 'ended'}<//></td>
+          <td class="muted">${g.uses} of 20</td>
+          <td class="muted" title=${new Date(g.created).toLocaleString()}>${new Date(g.created).toLocaleString()} by ${g.issuer}</td>
+          <td class="muted">${new Date(g.expires).toLocaleTimeString()}</td>
+          <td style="text-align: right">${live(g) && html`<button class="small danger" onClick=${() => revoke(g)}>End</button>`}</td>
+        </tr>`)}</tbody></table>`}</div>`;
 }
 
 render(html`<${App} />`, document.getElementById('app'));

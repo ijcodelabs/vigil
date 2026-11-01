@@ -267,9 +267,10 @@ func (s *Server) Handler() http.Handler {
 	s.sloReportRoutes(mux)
 	s.sloTemplateRoutes(mux)
 	s.tokenRoutes(mux)
+	s.evidenceGrantRoutes(mux)
 	mux.Handle("GET /docs/", ui.DocsHandler())
 	mux.Handle("/", ui.Handler())
-	return s.hardened(mux)
+	return s.hardened(traced(mux))
 }
 
 var logQueryOps = map[string]bool{"query": true, "tail": true, "hits": true, "stats_query": true,
