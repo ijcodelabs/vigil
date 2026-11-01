@@ -94,6 +94,7 @@ type recording struct {
 	inner    notify.Integration
 	receiver string
 	told     *told
+	sent     *deliveries
 }
 
 func (r *recording) Notify(ctx context.Context, alerts ...*types.Alert) (bool, error) {
@@ -101,6 +102,7 @@ func (r *recording) Notify(ctx context.Context, alerts ...*types.Alert) (bool, e
 	if err == nil {
 		r.told.record(r.receiver, alerts)
 	}
+	r.sent.record(r.receiver, r.inner.Name(), r.inner.Index(), err, time.Now())
 	return retry, err
 }
 
@@ -109,7 +111,7 @@ func (r *recording) SendResolved() bool { return r.inner.SendResolved() }
 func (a *Alertmanager) recordDeliveries(receiver string, in []notify.Integration) []notify.Integration {
 	out := make([]notify.Integration, len(in))
 	for i := range in {
-		r := &recording{inner: in[i], receiver: receiver, told: &a.told}
+		r := &recording{inner: in[i], receiver: receiver, told: &a.told, sent: &a.sent}
 		out[i] = notify.NewIntegration(r, r, in[i].Name(), in[i].Index(), receiver)
 	}
 	return out

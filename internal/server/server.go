@@ -268,6 +268,7 @@ func (s *Server) Handler() http.Handler {
 	s.sloTemplateRoutes(mux)
 	s.tokenRoutes(mux)
 	s.evidenceGrantRoutes(mux)
+	s.deliveryRoutes(mux)
 	mux.Handle("GET /docs/", ui.DocsHandler())
 	mux.Handle("/", ui.Handler())
 	return s.hardened(traced(mux))
@@ -388,6 +389,7 @@ func (s *Server) Run(ctx context.Context) error {
 	go s.sloReportLoop(ctx)
 	go s.spendLoop(ctx)
 	go s.vaultLoop(ctx)
+	go s.deliveryLoop(ctx)
 	go func() { // rollouts move on by themselves
 		t := time.NewTicker(10 * time.Second)
 		defer t.Stop()

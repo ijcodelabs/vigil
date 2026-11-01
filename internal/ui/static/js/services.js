@@ -1,6 +1,7 @@
 import { html, useState, useEffect, useMemo, api, useLoad, setParams, Badge, ErrorBox, fmtNum, fmtUnit } from './lib.js';
 import { Chart, useRange, rangeParams, COLORS, parseLines } from './explore.js';
 import { TimeRange } from './timerange.js';
+import { MapView } from './map.js';
 
 // Services: what applications instrumented with OpenTelemetry report.
 // The numbers come from metrics the agents count from every span; the
@@ -51,29 +52,36 @@ export function Services({ route }) {
   return html`<${ServiceList} params=${route.params} />`;
 }
 
+// loadServices gives each service's request rate, share of errors and
+// latency over the window.
+async function loadServices(from, to) {
+  const w = Math.round(to - from) + 's';
+  const [all, entry, failed, p50, p95] = await Promise.all([
+    instant(`sum by (service) (increase(traces_spans_total[${w}]))`, to),
+    instant(`sum by (service) (increase(traces_spans_total{${ENTRY}}[${w}]))`, to),
+    instant(`sum by (service) (increase(traces_spans_total{${ENTRY},status="error"}[${w}]))`, to),
+    instant(`histogram_quantile(0.5, sum by (service, le) (increase(traces_span_duration_seconds_bucket{${ENTRY}}[${w}])))`, to),
+    instant(`histogram_quantile(0.95, sum by (service, le) (increase(traces_span_duration_seconds_bucket{${ENTRY}}[${w}])))`, to),
+  ]);
+  const e = by(entry, 'service'), f = by(failed, 'service'), m = by(p50, 'service'), p = by(p95, 'service');
+  return all.map(r => r.metric.service).sort().map(name => ({
+    name, rate: (e[name] || 0) / (to - from), errors: pct(f[name], e[name]), p50: m[name], p95: p[name], entry: e[name] > 0,
+  }));
+}
+
 function ServiceList({ params }) {
   const [range, setRange, win] = useRange(params);
-  useEffect(() => { setParams(['services'], rangeParams(range)); }, [range]);
-  const { data, error } = useLoad(async () => {
-    const [from, to] = win();
-    const w = Math.round(to - from) + 's';
-    const [all, entry, failed, p50, p95] = await Promise.all([
-      instant(`sum by (service) (increase(traces_spans_total[${w}]))`, to),
-      instant(`sum by (service) (increase(traces_spans_total{${ENTRY}}[${w}]))`, to),
-      instant(`sum by (service) (increase(traces_spans_total{${ENTRY},status="error"}[${w}]))`, to),
-      instant(`histogram_quantile(0.5, sum by (service, le) (increase(traces_span_duration_seconds_bucket{${ENTRY}}[${w}])))`, to),
-      instant(`histogram_quantile(0.95, sum by (service, le) (increase(traces_span_duration_seconds_bucket{${ENTRY}}[${w}])))`, to),
-    ]);
-    const e = by(entry, 'service'), f = by(failed, 'service'), m = by(p50, 'service'), p = by(p95, 'service');
-    return all.map(r => r.metric.service).sort().map(name => ({
-      name, rate: (e[name] || 0) / (to - from), errors: pct(f[name], e[name]), p50: m[name], p95: p[name], entry: e[name] > 0,
-    }));
-  }, [range], 30000);
+  const [view, setView] = useState(params.get('view') === 'map' ? 'map' : 'table');
+  useEffect(() => { setParams(['services'], { ...rangeParams(range), ...(view === 'map' ? { view } : {}) }); }, [range, view]);
+  const { data, error } = useLoad(() => { const [from, to] = win(); return loadServices(from, to); }, [range], 30000);
   return html`
     <div class="head"><h1>Services</h1><span class="spacer"></span>
       <${RangePicker} range=${range} setRange=${setRange} />
       <a class="btn" href="/docs/apm" target="_blank" rel="noopener">Help</a></div>
+    <nav class="tabs">${[['table', 'Table'], ['map', 'Map']].map(([v, label]) => html`
+      <a href="#" class=${view === v ? 'on' : ''} onClick=${e => { e.preventDefault(); setView(v); }}>${label}</a>`)}</nav>
     <${ErrorBox} error=${error} />
+    ${view === 'map' && data && data.length > 0 ? html`<${ServiceMap} services=${data} range=${range} win=${win} />` : html`
     <div class="panel flush">${!data ? html`<div class="empty">Loading…</div>` : data.length === 0
       ? html`<div class="empty">No traces in this time range. Applications instrumented with OpenTelemetry send them to the agent on their host
           (<code>OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318</code>, protocol <code>http/protobuf</code>), once a profile
@@ -87,9 +95,104 @@ function ServiceList({ params }) {
           <td class="num">${s.entry ? html`<${Badge} kind=${s.errors >= 5 ? 'bad' : s.errors > 0 ? 'warn' : 'ok'}>${s.errors.toFixed(s.errors < 10 ? 1 : 0)}%<//>` : '–'}</td>
           <td class="num">${isFinite(s.p50) ? fmtUnit(s.p50, 'seconds') : '–'}</td>
           <td class="num">${isFinite(s.p95) ? fmtUnit(s.p95, 'seconds') : '–'}</td>
-        </tr>`)}</tbody></table>`}</div>
+        </tr>`)}</tbody></table>`}</div>`}
     <p class="muted">Requests are what a service was asked to do: its server and consumer spans. The numbers count every request;
       which traces are stored in full is a separate setting (<code>otlp.traces.sample</code>).</p>`;
+}
+
+// mapModel lays services out by how deep in the calls they sit: services
+// nobody else calls first, then what they call, and so on; what services
+// call that is not itself a service (a database, an outside API) last.
+// Edges come from the agents' call counts (every call); calls between two
+// services that only stored traces show (the client span named no peer)
+// are added from the trace store's dependencies.
+export function mapModel(services, calls, failed, deps) {
+  const names = new Set(services.map(s => s.name));
+  const edges = new Map();
+  const edge = (from, to) => {
+    const k = from + '\u0000' + to;
+    if (!edges.has(k)) edges.set(k, { from, to, calls: 0, errors: 0, sampled: false });
+    return edges.get(k);
+  };
+  for (const r of calls) if (r.metric.peer && r.metric.service !== r.metric.peer) edge(r.metric.service, r.metric.peer).calls += Number(r.value[1]);
+  for (const r of failed) if (r.metric.peer && r.metric.service !== r.metric.peer) edge(r.metric.service, r.metric.peer).errors += Number(r.value[1]);
+  for (const d of deps || []) {
+    if (!d.parent || !d.child || d.parent === d.child || edges.has(d.parent + '\u0000' + d.child)) continue;
+    const e = edge(d.parent, d.child);
+    e.calls = Number(d.callCount) || 0;
+    e.sampled = true;
+  }
+  const list = [...edges.values()].filter(e => e.calls > 0);
+  const depth = new Map();
+  const called = new Set(list.filter(e => names.has(e.from) && names.has(e.to)).map(e => e.to));
+  let front = [...names].filter(n => !called.has(n));
+  if (!front.length) front = [...names]; // every service is called by another: a cycle
+  front.forEach(n => depth.set(n, 0));
+  while (front.length) {
+    const next = [];
+    for (const e of list) {
+      if (front.includes(e.from) && names.has(e.to) && !depth.has(e.to)) { depth.set(e.to, depth.get(e.from) + 1); next.push(e.to); }
+    }
+    front = next;
+  }
+  for (const n of names) if (!depth.has(n)) depth.set(n, 0);
+  const tierName = d => (d === 0 ? 'Entry' : d === 1 ? 'Called by them' : `${d} calls deep`);
+  const tiers = [...new Set([...depth.values()])].sort((a, b) => a - b).map(tierName);
+  const outside = [...new Set(list.map(e => e.to).filter(n => !names.has(n)))];
+  if (outside.length) tiers.push('Databases and outside');
+  return { names, depth, tierName, tiers, outside, edges: list };
+}
+
+function ServiceMap({ services, range, win }) {
+  const { data, error } = useLoad(async () => {
+    const [from, to] = win();
+    const w = Math.round(to - from) + 's';
+    const [calls, failed, deps] = await Promise.all([
+      instant(`sum by (service, peer) (increase(traces_service_calls_total[${w}]))`, to),
+      instant(`sum by (service, peer) (increase(traces_service_calls_total{status="error"}[${w}]))`, to),
+      api(`/api/v1/traces/jaeger/api/dependencies?endTs=${Math.round(to * 1000)}&lookback=${Math.round((to - from) * 1000)}`)
+        .then(r => r.data).catch(() => null), // no trace store: the counts alone
+    ]);
+    return { m: mapModel(services, calls, failed, deps), span: to - from };
+  }, [range, services], 30000);
+  if (error) return html`<${ErrorBox} error=${error} />`;
+  if (!data) return html`<div class="panel"><div class="empty">Loading…</div></div>`;
+  const { m, span } = data;
+  const byName = Object.fromEntries(services.map(s => [s.name, s]));
+  const queries = m.tiers.map(t => ({ node: 'service', tier: t, warn: 1, crit: 5 }));
+  queries.push(
+    { of: 'service', legend: 'Requests', unit: 'ops/s' },
+    { of: 'service', legend: 'Errors', unit: 'percent', warn: 1, crit: 5 },
+    { of: 'service', legend: '95th percentile', unit: 'seconds' },
+    { from: 'service', to: 'peer', as: 'service', weight: true,
+      title: r => `${r.metric.service} → ${r.metric.peer}: ${fmtUnit(r.calls / span, 'ops/s')}, ${r.errorPct.toFixed(1)}% failed${r.sampled ? ' (from stored traces)' : ''}` },
+    { from: 'service', to: 'peer', as: 'service', warn: 1, crit: 5 });
+  const at = name => queries.findIndex(q => q.tier === name);
+  const rows = [];
+  // The map takes its columns in the order nodes first appear.
+  const ordered = [...services].sort((x, y) => m.depth.get(x.name) - m.depth.get(y.name));
+  for (const s of ordered) {
+    const tier = at(m.tierName(m.depth.get(s.name)));
+    rows.push({ q: tier, metric: { service: s.name }, value: s.entry ? s.errors : null });
+    if (s.entry) {
+      rows.push({ q: m.tiers.length, metric: { service: s.name }, value: s.rate });
+      rows.push({ q: m.tiers.length + 1, metric: { service: s.name }, value: s.errors });
+    }
+    if (isFinite(s.p95)) rows.push({ q: m.tiers.length + 2, metric: { service: s.name }, value: s.p95 });
+  }
+  for (const n of m.outside) rows.push({ q: at('Databases and outside'), metric: { service: n }, value: null });
+  for (const e of m.edges) {
+    const errorPct = pct(e.errors, e.calls);
+    rows.push({ q: m.tiers.length + 3, metric: { service: e.from, peer: e.to }, value: e.calls / span * 60, calls: e.calls, errorPct, sampled: e.sampled });
+    rows.push({ q: m.tiers.length + 4, metric: { service: e.from, peer: e.to }, value: errorPct });
+  }
+  const panel = { title: 'Service map', queries, columns: [] };
+  const height = 60 + 30 * Math.max(...m.tiers.map((_, i) => rows.filter(r => r.q === i).length), 1);
+  const open = n => { if (m.names.has(n.id)) location.hash = '#/services/' + encodeURIComponent(n.id) + '?' + new URLSearchParams(rangeParams(range)); };
+  return html`<div class="panel flush"><${MapView} panel=${panel} data=${{ values: rows }} height=${height} onPick=${open} /></div>
+    <p class="muted">Lines are calls, thicker for more; red and yellow ones fail often (over 5% and 1%). A box is red or yellow by its
+      own share of failed requests. Click a service to open it. Calls show between two services when the client span names the
+      other one (<code>peer.service</code>) or when stored traces show it.</p>`;
 }
 
 function ServiceView({ name, params }) {

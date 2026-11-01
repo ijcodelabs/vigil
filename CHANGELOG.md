@@ -24,6 +24,13 @@ after. How a release is made: [releasing.md](memory/context/releasing.md).
 - **The server traces itself:** with the standard `OTEL_EXPORTER_OTLP_*`
   variables set, `vigil-server` sends a span per API request (method,
   route and status only) and continues a caller's W3C trace context.
+- **Service map:** Services → Map draws services by how deep in the calls
+  they sit, with databases and outside hosts last; lines and boxes turn
+  yellow or red with their share of failures.
+- **Notification delivery:** Alerts → Contacts & routing → Delivery shows,
+  per contact and integration, messages sent and failed since start, the
+  last success and the last error (addresses cut to their host); metric
+  `vigil_notifications_total` and built-in alert `NotificationsFailing`.
 - **Guides for Python and Go services:** OpenTelemetry set-up with log
   lines linked to their traces (`docs/apm-python.md`, `docs/apm-go.md`).
 

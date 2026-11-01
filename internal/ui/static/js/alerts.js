@@ -159,6 +159,30 @@ function SilenceForm({ labels, onClose }) {
   </form><//>`;
 }
 
+// Deliveries: whether each contact's integrations got their messages
+// through since the server started, with the last error.
+function Deliveries() {
+  const { data, error } = useLoad(() => api('/api/v1/alerting/deliveries'), [], 30000);
+  const when = t => (t ? html`<span title=${new Date(t).toLocaleString()}>${ago(t)}</span>` : html`<span class="muted">never</span>`);
+  const state = d => (d.last_failure && (!d.last_ok || new Date(d.last_failure) > new Date(d.last_ok)) ? 'failing' : 'ok');
+  return html`<div class="panel flush"><h2 style="padding: 14px 16px 0">Delivery</h2>
+    <${ErrorBox} error=${error} />
+    ${!data ? html`<div class="empty">Loading…</div>` : data.length === 0
+      ? html`<div class="empty">Nothing sent since the server started.</div>`
+      : html`<table><thead><tr><th>Contact</th><th>Through</th><th>State</th><th style="text-align: right">Sent</th>
+          <th style="text-align: right">Failed</th><th>Last sent</th><th>Last failure</th></tr></thead>
+        <tbody>${data.map(d => html`<tr>
+          <td><strong>${d.receiver}</strong></td>
+          <td>${d.integration}${d.index > 0 ? html` <span class="muted">#${d.index + 1}</span>` : ''}</td>
+          <td><${Badge} kind=${state(d) === 'ok' ? 'ok' : 'bad'}>${state(d) === 'ok' ? 'working' : 'failing'}<//></td>
+          <td class="num">${fmtNum(d.sent)}</td><td class="num">${fmtNum(d.failed)}</td>
+          <td>${when(d.last_ok)}</td>
+          <td>${d.last_failure ? html`${when(d.last_failure)}<div class="muted mono" style="font-size: 12px; white-space: normal">${d.last_error}</div>` : html`<span class="muted">none</span>`}</td>
+        </tr>`)}</tbody></table>`}
+    <p class="muted" style="padding: 0 16px">Counted since the server last started. A contact that keeps failing
+      raises <code>NotificationsFailing</code>, sent to the contacts that work.</p></div>`;
+}
+
 function Contacts() {
   const { data: receivers, error, reload } = useLoad(() => api(AM + '/receivers'));
   const [editing, setEditing] = useState(false);
@@ -173,6 +197,7 @@ function Contacts() {
       ${receivers && receivers.length === 1 && receivers[0].name === 'none' && html`
         <p class="muted" style="margin-bottom: 0">Only the placeholder contact exists, so no notifications are sent yet.</p>`}
     </div>
+    <${Deliveries} />
     ${editing && html`<${YamlEditor} title="Contacts & routing"
       help="Routes, receivers (email, Slack, webhook, PagerDuty, …), inhibit rules and time intervals. Passwords and webhook URLs in here are stored on the server as written."
       load=${() => api('/api/v1/alerting/config')} save=${text => api('/api/v1/alerting/config', { method: 'PUT', body: text })}

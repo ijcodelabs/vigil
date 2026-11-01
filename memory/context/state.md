@@ -1185,6 +1185,34 @@ The first slice of [agentic.md](agentic.md).
 - Not built: spans for the server's outgoing calls (stores, AI provider),
   trace ids in the server's own log lines.
 
+## Service map and notification delivery (built 2026-11-01, uncommitted to GitHub)
+
+Items 1 and 2 of [gaps.md](gaps.md)'s order.
+
+- **Service map** (`services.js` `mapModel`, `ServiceMap`; Services → Map):
+  nodes from the Services list, edges from
+  `traces_service_calls_total{service, peer}` (every call) plus the trace
+  store's Jaeger dependencies for service pairs the counts lack (stored
+  traces only). Columns by call depth (BFS from services nobody calls;
+  every service called by another counts as a cycle and starts at 0),
+  peers that are not services last. Drawn by the Map panel, which gained
+  `as` (a link's ends are nodes under one label), `weight` (thickness),
+  link colours from warn/crit, a `title` per link and `onPick`.
+- Seen on the trial: VictoriaTraces' dependencies answer is empty, so
+  service-to-service edges there need `peer.service` on client spans; the
+  trial's one traced service calls PostgreSQL and Redis.
+- **Delivery** (`alerting/deliveries.go`): the existing `recording`
+  wrapper counts every send per receiver, integration and index, with the
+  last error (URLs cut to their host, then the redact rules). API
+  `GET /api/v1/alerting/deliveries` (admin), Alerts → Contacts & routing →
+  Delivery, metric `vigil_notifications_total{…, result}` every 30 s,
+  built-in rule `NotificationsFailing`. Alertmanager itself already
+  writes `<redacted>` for receiver URLs in its errors.
+- Verified: unit tests (a working and a 4xx webhook, error cleaning);
+  both views in the browser against stand-in stores and a dead webhook;
+  on the trial the two real contacts listed as working after the deploy.
+- Not built: delivery counts survive a restart; per-message history.
+
 ## Next
 
 - Foundations, build order in `direction.md`: step 1 on paper (data
