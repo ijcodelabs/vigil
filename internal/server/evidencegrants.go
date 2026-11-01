@@ -43,6 +43,7 @@ type EvidenceGrant struct {
 	Created  time.Time  `json:"created"`
 	Expires  time.Time  `json:"expires"`
 	Uses     int        `json:"uses"`
+	MaxUses  int        `json:"max_uses"`
 	LastUsed *time.Time `json:"last_used,omitempty"`
 }
 
@@ -81,6 +82,7 @@ func (s *Server) handleIssueGrant(w http.ResponseWriter, r *http.Request) {
 		Incident   int64             `json:"incident"`
 		Labels     map[string]string `json:"labels"`
 		TTLMinutes int               `json:"ttl_minutes"`
+		Reads      int               `json:"reads"` // 1 to 20; 0: 20
 		Purpose    string            `json:"purpose"`
 	}
 	if !readJSON(w, r, &in) {
@@ -101,6 +103,12 @@ func (s *Server) handleIssueGrant(w http.ResponseWriter, r *http.Request) {
 	case ttl < time.Minute || ttl > grantTTLMax:
 		http.Error(w, "ttl_minutes is 1 to 60", http.StatusBadRequest)
 		return
+	case in.Reads < 0 || in.Reads > grantUsesMax:
+		http.Error(w, "reads is 1 to 20", http.StatusBadRequest)
+		return
+	}
+	if in.Reads == 0 {
+		in.Reads = grantUsesMax
 	}
 	ctx := r.Context()
 	var in2 incidents.Incident
@@ -123,14 +131,14 @@ func (s *Server) handleIssueGrant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	g := EvidenceGrant{ID: randomToken()[:12], Incident: in2.ID, Purpose: in.Purpose, Issuer: caller(r).User,
-		Created: now, Expires: now.Add(ttl)}
+		Created: now, Expires: now.Add(ttl), MaxUses: in.Reads}
 	secret := evidenceTokenPrefix + randomToken()
 	if err := s.store.CreateEvidenceGrant(g, hashToken(secret)); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	s.log.Info("evidence grant issued", "grant", g.ID, "incident", g.Incident, "by", g.Issuer, "purpose", g.Purpose, "expires", g.Expires)
-	writeJSON(w, map[string]any{"id": g.ID, "incident": g.Incident, "token": secret, "expires": g.Expires})
+	writeJSON(w, map[string]any{"id": g.ID, "incident": g.Incident, "token": secret, "expires": g.Expires, "reads": g.MaxUses})
 }
 
 func (s *Server) handleListGrants(w http.ResponseWriter, _ *http.Request) {
@@ -160,7 +168,7 @@ func (s *Server) handleGrantEvidence(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now()
-	g, err := s.store.UseEvidenceGrant(hashToken(tok), now, grantUsesMax)
+	g, err := s.store.UseEvidenceGrant(hashToken(tok), now)
 	switch {
 	case errors.Is(err, errGrantSpent):
 		http.Error(w, "this grant has been used up", http.StatusTooManyRequests)
@@ -188,16 +196,16 @@ func (s *Server) handleGrantEvidence(w http.ResponseWriter, r *http.Request) {
 var errGrantSpent = errors.New("grant used up")
 
 func (s *Store) CreateEvidenceGrant(g EvidenceGrant, tokenHash string) error {
-	_, err := s.db.Exec(`INSERT INTO evidence_grants (id, token_hash, incident, purpose, issuer, created, expires) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		g.ID, tokenHash, g.Incident, g.Purpose, g.Issuer, g.Created.Unix(), g.Expires.Unix())
+	_, err := s.db.Exec(`INSERT INTO evidence_grants (id, token_hash, incident, purpose, issuer, created, expires, max_uses) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		g.ID, tokenHash, g.Incident, g.Purpose, g.Issuer, g.Created.Unix(), g.Expires.Unix(), g.MaxUses)
 	return err
 }
 
 // UseEvidenceGrant counts one use of a grant and returns it, or
-// errGrantSpent once it has been used max times.
-func (s *Store) UseEvidenceGrant(tokenHash string, now time.Time, max int) (EvidenceGrant, error) {
-	res, err := s.db.Exec(`UPDATE evidence_grants SET uses = uses + 1, last_used = ? WHERE token_hash = ? AND uses < ?`,
-		now.Unix(), tokenHash, max)
+// errGrantSpent once it has been used as often as it allows.
+func (s *Store) UseEvidenceGrant(tokenHash string, now time.Time) (EvidenceGrant, error) {
+	res, err := s.db.Exec(`UPDATE evidence_grants SET uses = uses + 1, last_used = ? WHERE token_hash = ? AND uses < max_uses`,
+		now.Unix(), tokenHash)
 	if err != nil {
 		return EvidenceGrant{}, err
 	}
@@ -233,7 +241,7 @@ func (s *Store) DeleteEvidenceGrant(id string) error {
 }
 
 func (s *Store) grants(where string, args ...any) ([]EvidenceGrant, error) {
-	rows, err := s.db.Query(`SELECT id, incident, purpose, issuer, created, expires, uses, last_used FROM evidence_grants WHERE `+where, args...)
+	rows, err := s.db.Query(`SELECT id, incident, purpose, issuer, created, expires, uses, max_uses, last_used FROM evidence_grants WHERE `+where, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -242,7 +250,7 @@ func (s *Store) grants(where string, args ...any) ([]EvidenceGrant, error) {
 	for rows.Next() {
 		var g EvidenceGrant
 		var created, expires, used int64
-		if err := rows.Scan(&g.ID, &g.Incident, &g.Purpose, &g.Issuer, &created, &expires, &g.Uses, &used); err != nil {
+		if err := rows.Scan(&g.ID, &g.Incident, &g.Purpose, &g.Issuer, &created, &expires, &g.Uses, &g.MaxUses, &used); err != nil {
 			return nil, err
 		}
 		g.Created, g.Expires = time.Unix(created, 0).UTC(), time.Unix(expires, 0).UTC()
