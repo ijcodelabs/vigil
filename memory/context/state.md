@@ -1340,8 +1340,9 @@ Design and review in `identity.md`.
   `_CERT_FILE`, `_KEY_FILE`) likewise. Python 3.13's strict verification
   wants an Authority Key Identifier in the leaf: vigil's certificates have
   one (Go sets it from the CA's Subject Key Identifier).
-- Not built: a `vigil` command and a UI for
-  identities, the trust bundle for CA rotation, agents' own certificates.
+- `vigil identity list|approve|revoke|delete` (internal/cli/opscli) and
+  Fleet → Identities (admins; approve, edit, approve again, revoke, delete).
+- Not built: the trust bundle for CA rotation, agents' own certificates.
 - Verified: unit tests (pki, server API, agent keeper against a fake
   server, receiver over real TLS with current/old/unknown epochs, token
   mismatch, revoke on an open connection; Chat emitter with a renewed
