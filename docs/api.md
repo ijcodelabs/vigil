@@ -187,6 +187,20 @@ See [Service level objectives](slo.md).
 
 `vigil apply -f DIR` uses these.
 
+### Identities
+
+Names that may hold a certificate from the server's authority (APM,
+"Client certificates from the server"). Admin, except the two agent calls.
+
+| | |
+|---|---|
+| `GET /api/v1/identities` | every name: kind, agents, epoch, revoked, when a certificate was last issued |
+| `PUT /api/v1/identities/{name}` | approve (or approve again after a revocation, at the new epoch): `{"kind": "client"\|"endpoint", "agents": "<regexp of agent ids>", "names": [...]}`; `names` (host names and addresses) only for an endpoint |
+| `POST /api/v1/identities/{name}/revoke` | a new epoch: every certificate for it is refused, none is issued |
+| `DELETE /api/v1/identities/{name}` | forget it |
+| `POST /api/v1/identity/sign` | an agent, with its own token: `{"name", "csr"}` (PEM, ECDSA P-256) → `{"cert", "ca", "kind", "epoch", "not_after"}` |
+| `GET /api/v1/identity/state` | an agent: the current epoch of every client name, and the authority's certificate |
+
 ## Dashboards, captures, users
 
 | | |

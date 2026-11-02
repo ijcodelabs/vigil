@@ -16,6 +16,13 @@ after. How a release is made: [releasing.md](memory/context/releasing.md).
 
 ### Added
 
+- **Client certificates for the OTLP endpoint:** the server's authority
+  signs short-lived (7-day) certificates for names an admin approves;
+  agents renew them for programs on their host (`identity.clients` in the
+  agent's own file) and for their OTLP endpoint (`otlp.tls.from_server`),
+  which can require them (`otlp.tls.client_certs`). Revoking a name refuses
+  every certificate issued for it at the next request. See APM, "Client
+  certificates from the server".
 - **Evidence grants:** a short-lived token that lets one run of an AI agent
   (a Boop Chat workroom, for instance) read one incident's masked evidence
   bundle and nothing else, at most 20 times; issued by an admin or by a new

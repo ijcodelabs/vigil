@@ -317,6 +317,15 @@ type OTLP struct {
 	TLS struct {
 		CertFile string `yaml:"cert_file"`
 		KeyFile  string `yaml:"key_file"`
+		// FromServer names an endpoint identity approved on the server: the
+		// agent gets the endpoint's certificate from the server's authority
+		// and renews it, instead of reading files.
+		FromServer string `yaml:"from_server"`
+		// ClientCerts: "required" or "optional" checks senders' client
+		// certificates against the server's authority; the certificate's
+		// client name is the emitter, and a revoked one (an old epoch) is
+		// refused. Empty: no client certificates.
+		ClientCerts string `yaml:"client_certs"`
 	} `yaml:"tls"`
 	// Traces: every span is counted into request, error and duration
 	// metrics; the spans themselves are stored for the traces that are kept.
@@ -414,12 +423,32 @@ type Agent struct {
 	// RemoteConfig lets the server replace the Collection below with one
 	// managed centrally. Default true.
 	RemoteConfig *bool `yaml:"remote_config"`
-	Collection   `yaml:",inline"`
+	// Identity: client certificates this agent keeps for programs on its
+	// host. Only in the agent's own file: where credentials are written,
+	// and for whom, is the host's decision, never the server's.
+	Identity struct {
+		Clients []IdentityClient `yaml:"clients"`
+	} `yaml:"identity"`
+	Collection `yaml:",inline"`
 
 	// LocalLabels are the labels written in the agent's own file. They
 	// identify the host (env, role, ...): the server selects profiles by
 	// them, and they stay on the data whatever the managed config says.
 	LocalLabels map[string]string `yaml:"-"`
+}
+
+// IdentityClient is a client certificate the agent gets from the server
+// for a program on this host and renews: the name must be approved for this
+// agent on the server.
+type IdentityClient struct {
+	Name     string `yaml:"name"`
+	CertFile string `yaml:"cert_file"`
+	KeyFile  string `yaml:"key_file"`
+	CAFile   string `yaml:"ca_file"` // the server's authority, for the program to trust the endpoint
+	// Owner and Group (numeric ids) the files are given, for a program that
+	// runs as another user (a container's 10001); -1 or absent: unchanged.
+	Owner *int `yaml:"owner"`
+	Group *int `yaml:"group"`
 }
 
 var itemNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
@@ -432,6 +461,17 @@ func Off(enabled *bool) bool { return enabled != nil && !*enabled }
 func (c *Collection) Check() error {
 	if (c.OTLP.TLS.CertFile == "") != (c.OTLP.TLS.KeyFile == "") {
 		return fmt.Errorf("otlp.tls needs both cert_file and key_file")
+	}
+	if c.OTLP.TLS.FromServer != "" && c.OTLP.TLS.CertFile != "" {
+		return fmt.Errorf("otlp.tls: from_server or cert_file and key_file, not both")
+	}
+	switch c.OTLP.TLS.ClientCerts {
+	case "", "required", "optional":
+	default:
+		return fmt.Errorf("otlp.tls.client_certs is required or optional, not %q", c.OTLP.TLS.ClientCerts)
+	}
+	if c.OTLP.TLS.ClientCerts != "" && c.OTLP.TLS.CertFile == "" && c.OTLP.TLS.FromServer == "" {
+		return fmt.Errorf("otlp.tls.client_certs needs the endpoint on TLS (cert_file or from_server)")
 	}
 	if v := c.OTLP.Traces.Sample; v != nil && (*v < 0 || *v > 1) {
 		return fmt.Errorf("otlp.traces.sample is a share between 0 and 1, not %v", *v)
@@ -757,10 +797,22 @@ func LoadAgent(path string) (*Agent, error) {
 		t := true
 		c.RemoteConfig = &t
 	}
+	seen := map[string]bool{}
+	for _, cl := range c.Identity.Clients {
+		switch {
+		case !clientNameRe.MatchString(cl.Name) || seen[cl.Name]:
+			return nil, fmt.Errorf("%s: identity.clients: %q is not a client name (lower-case letters, digits, ._-) or is listed twice", path, cl.Name)
+		case !filepath.IsAbs(cl.CertFile) || !filepath.IsAbs(cl.KeyFile) || (cl.CAFile != "" && !filepath.IsAbs(cl.CAFile)):
+			return nil, fmt.Errorf("%s: identity.clients %s: cert_file, key_file (and ca_file) are absolute paths", path, cl.Name)
+		}
+		seen[cl.Name] = true
+	}
 	c.LocalLabels = maps.Clone(c.Labels)
 	c.defaults()
 	return c, nil
 }
+
+var clientNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,62}$`)
 
 // Costs is the server's price list. Prices are in one currency of your
 // choosing; nothing converts.

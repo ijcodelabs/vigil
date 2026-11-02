@@ -1,6 +1,8 @@
 package otlp
 
 import (
+	"github.com/ijcodelabs/vigil/internal/pki"
+
 	"bufio"
 	"bytes"
 	"context"
@@ -130,14 +132,56 @@ func validEmitter(name string) bool {
 
 type emitterKey struct{}
 
-// requireToken lets through only requests with a token from the file, and
-// puts the emitter's name into the request's context.
-func requireToken(t *tokenFile, next http.Handler) http.Handler {
+// authenticate lets a request in by its client certificate, its bearer
+// token, or both, and puts the emitter's name into its context:
+//
+//   - a verified client certificate names its client and epoch; only the
+//     epoch the server says is current counts, so a revoked client (whose
+//     epoch went up) is refused at its next request, also on a connection
+//     that was open before;
+//   - a token names its emitter, as before;
+//   - with both, they must name the same emitter.
+//
+// Without either, the request is refused, unless certificates are optional
+// and there are no tokens (then anyone on the endpoint may send, as without
+// tokens before).
+func (r *Receiver) authenticate(t *tokenFile, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		name, ok := t.emitter(req, time.Now())
-		if !ok {
+		certName := ""
+		if req.TLS != nil && len(req.TLS.VerifiedChains) > 0 && r.ClientCerts != "" {
+			name, epoch, err := pki.ClientOf(req.TLS.VerifiedChains[0][0])
+			var current map[string]int
+			if r.Epochs != nil {
+				current = r.Epochs()
+			}
+			if err != nil || current[name] != epoch || !validEmitter(name) {
+				http.Error(w, "this client certificate is not, or no longer, accepted", http.StatusForbidden)
+				return
+			}
+			certName = name
+		}
+		tokenName, tokenOK := "", false
+		if t != nil && req.Header.Get("Authorization") != "" {
+			if tokenName, tokenOK = t.emitter(req, time.Now()); !tokenOK {
+				w.Header().Set("WWW-Authenticate", `Bearer realm="vigil-otlp"`)
+				http.Error(w, "a valid bearer token is required", http.StatusUnauthorized)
+				return
+			}
+		}
+		name := certName
+		switch {
+		case certName != "" && tokenOK && tokenName != certName:
+			http.Error(w, "the token and the client certificate name different emitters", http.StatusForbidden)
+			return
+		case certName == "" && tokenOK:
+			name = tokenName
+		case certName == "" && (t != nil || r.ClientCerts == "required"):
 			w.Header().Set("WWW-Authenticate", `Bearer realm="vigil-otlp"`)
-			http.Error(w, "a valid bearer token is required", http.StatusUnauthorized)
+			http.Error(w, "a client certificate or a valid bearer token is required", http.StatusUnauthorized)
+			return
+		}
+		if name == "" {
+			next.ServeHTTP(w, req)
 			return
 		}
 		next.ServeHTTP(w, req.WithContext(context.WithValue(req.Context(), emitterKey{}, name)))

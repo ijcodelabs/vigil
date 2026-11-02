@@ -8,6 +8,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -55,8 +56,17 @@ type Receiver struct {
 	TokensFile string
 	// CertFile and KeyFile, if set, serve the endpoint over TLS.
 	CertFile, KeyFile string
-	Metrics           func([]model.Sample)
-	Logs              func([]model.LogEntry) error
+	// GetCertificate, if set, serves the endpoint over TLS with a
+	// certificate from the server's authority (renewed by the agent).
+	GetCertificate func(*tls.ClientHelloInfo) (*tls.Certificate, error)
+	// ClientCerts "required" or "optional" checks senders' client
+	// certificates against ClientCAs; a certificate's client name, at the
+	// epoch Epochs says is current, is the emitter.
+	ClientCerts string
+	ClientCAs   func() *x509.CertPool
+	Epochs      func() map[string]int
+	Metrics     func([]model.Sample)
+	Logs        func([]model.LogEntry) error
 	// Spans receives the spans that are kept, as an OTLP trace request
 	// (protobuf); nil switches traces off. The metrics counted from all
 	// spans go to Metrics.
@@ -98,25 +108,49 @@ const repeatFor = time.Hour
 // Run serves until ctx is cancelled.
 func (r *Receiver) Run(ctx context.Context) error {
 	var handler http.Handler = r.Handler()
+	var tokens *tokenFile
 	if r.TokensFile != "" {
-		tokens, err := newTokenFile(r.TokensFile)
-		if err != nil {
+		var err error
+		if tokens, err = newTokenFile(r.TokensFile); err != nil {
 			// Started anyway: nobody gets in until the file is readable.
 			r.Log.Error("OTLP tokens not readable, every request is refused until they are", "err", err)
 		}
-		handler = requireToken(tokens, handler)
+	}
+	if tokens != nil || r.ClientCerts != "" {
+		handler = r.authenticate(tokens, handler)
 	}
 	ln, err := net.Listen("tcp", r.Listen)
 	if err != nil {
 		return fmt.Errorf("OTLP endpoint: %w", err)
 	}
+	getCert := r.GetCertificate
 	if r.CertFile != "" {
 		kp := &keyPair{cert: r.CertFile, key: r.KeyFile}
 		if _, err := kp.get(nil); err != nil {
 			ln.Close()
 			return err
 		}
-		ln = tls.NewListener(ln, &tls.Config{GetCertificate: kp.get, MinVersion: tls.VersionTLS12})
+		getCert = kp.get
+	}
+	if getCert != nil {
+		base := &tls.Config{GetCertificate: getCert, MinVersion: tls.VersionTLS12}
+		if r.ClientCerts != "" {
+			auth := tls.VerifyClientCertIfGiven
+			if r.ClientCerts == "required" {
+				auth = tls.RequireAndVerifyClientCert
+			}
+			// The authority comes from the server and can change: read for
+			// every connection. Go checks client authentication usage itself.
+			base.GetConfigForClient = func(*tls.ClientHelloInfo) (*tls.Config, error) {
+				c := base.Clone()
+				c.GetConfigForClient, c.ClientAuth, c.ClientCAs = nil, auth, r.ClientCAs()
+				if c.ClientCAs == nil {
+					c.ClientCAs = x509.NewCertPool() // not known yet: no client certificate verifies
+				}
+				return c, nil
+			}
+		}
+		ln = tls.NewListener(ln, base)
 	} else if r.TokensFile != "" && !loopback(ln.Addr()) {
 		r.Log.Warn("OTLP tokens travel in clear: set otlp.tls for an endpoint that is not on loopback", "addr", ln.Addr().String())
 	}
