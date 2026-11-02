@@ -14,6 +14,8 @@ after. How a release is made: [releasing.md](memory/context/releasing.md).
 
 ## Unreleased
 
+## v0.2.0 (2026-11-02)
+
 ### Added
 
 - **Fleet → Identities** and `vigil identity list|approve|revoke|delete`:
@@ -93,6 +95,25 @@ after. How a release is made: [releasing.md](memory/context/releasing.md).
   Prometheus client 1.25, Alertmanager 0.34.2, SQLite 1.61 and other
   dependencies updated. The compose example runs VictoriaMetrics v1.155.0
   and VictoriaTraces v0.12.1.
+
+### Upgrade notes
+
+1. **If you use the `boop` integration, upgrade the agents first, then
+   the server.** Its configuration now carries `otlp.logs.drop_attributes`,
+   which v0.1.0 agents do not know: they refuse the whole managed
+   configuration and keep their old one until upgraded. This once goes
+   against the usual order (server first). From v0.2.0 on, agents skip a
+   setting they do not know and say so on the Fleet page, so it does not
+   happen again.
+2. **Boop Core and the `boop` integration go together:** the integration
+   reads Boop Core's metrics as `boop_core_*`. With a Boop Core from before
+   that rename (it still sends `aps_*`), Boop's alerts and dashboards see
+   nothing until Boop Core is upgraded too.
+3. **Client certificates are off until you set them up.** They need the
+   server's own authority (`tls: {self_signed: true}`); nothing changes for
+   an existing installation that does not approve any names. The server
+   adds its new tables itself at start.
+4. Built with Go 1.27.3; building from source still needs Go 1.26 or newer.
 
 ## v0.1.0 (2026-10-31)
 

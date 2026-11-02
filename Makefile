@@ -32,7 +32,7 @@ size: linux
 # one per binary and architecture with the licence, the README and the
 # unit file, plus SHA256SUMS. `vigil` is also built for macOS, where the
 # operator tools (`vigil apply`) are often run.
-#   make release VERSION=v0.1.0
+#   make release VERSION=v0.2.0
 SHA256 := $(shell command -v sha256sum >/dev/null 2>&1 && echo sha256sum || echo shasum -a 256)
 .PHONY: release release-notes
 release: linux
