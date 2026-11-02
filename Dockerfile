@@ -2,7 +2,7 @@
 # a multi-arch build (docker buildx --platform linux/amd64,linux/arm64)
 # needs no emulation. Without buildx, TARGETOS and TARGETARCH are empty and
 # Go builds for the machine it runs on.
-FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
+FROM --platform=$BUILDPLATFORM docker.io/library/golang:1.26.10-alpine@sha256:a2012b4a1d1f9f7e9f44e0d39b805a901e856b1dd80b4e6ee4338db547050308 AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download

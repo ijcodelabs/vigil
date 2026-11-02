@@ -59,5 +59,5 @@ release-notes:
 CONTAINER ?= podman
 .PHONY: bpf
 bpf:
-	$(CONTAINER) run --rm -v $(CURDIR):/src -w /src docker.io/library/golang:1.26 sh -c \
+	$(CONTAINER) run --rm -v $(CURDIR):/src -w /src docker.io/library/golang:1.26.10@sha256:670bb5aa5349ae03b8516764718486f4f16399134bdc9acd0c46a23f043ab05c sh -c \
 		'apt-get update -qq && apt-get install -y -qq clang llvm libbpf-dev >/dev/null && go generate ./internal/events/'

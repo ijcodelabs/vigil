@@ -77,6 +77,18 @@ after. How a release is made: [releasing.md](memory/context/releasing.md).
   `boop_core_*`, same labels); alerts and dashboards keep their names.
   Upgrade Boop Core with it: older Cores still send `aps_*`.
 
+### Security
+
+- **Pinned build inputs:** every GitHub Action is pinned to a commit and
+  every container image (the build image, `deploy/docker-compose.yml`, the
+  examples in the docs) to a digest, so a moved tag cannot change what
+  vigil is built from; CI refuses an unpinned one, runs `govulncheck`, and
+  Dependabot proposes updates weekly. The vendored UI libraries are recorded
+  with their checksums (`internal/ui/VENDOR.md`).
+- `golang.org/x/net` 0.62.0 (fixes GO-2026-6860 and GO-2026-6866, in code
+  vigil does not call), with `x/crypto`, `x/sys`, `x/sync`, `x/text` and
+  `x/tools` moving up one minor version each.
+
 ## v0.1.0 (2026-10-31)
 
 The first release. vigil was used from source until now; this is what it

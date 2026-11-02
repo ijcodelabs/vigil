@@ -149,7 +149,7 @@ create these three files.
 `Dockerfile`:
 
 ```dockerfile
-FROM alpine:3.22
+FROM docker.io/library/alpine:3.22@sha256:2e0b81d60597f449baa56dc25d355367869d2dca4cd57e866f1e2b52af3eb55f
 COPY vigil-server /vigil-server
 ENTRYPOINT ["/vigil-server"]
 ```
@@ -172,17 +172,17 @@ services:
     depends_on: [victoriametrics, victorialogs, victoriatraces]
     restart: unless-stopped
   victoriametrics:
-    image: docker.io/victoriametrics/victoria-metrics:v1.153.0
+    image: docker.io/victoriametrics/victoria-metrics:v1.153.0@sha256:5eff7af5341e401471002f58d106d399e614a62f3d240f2dbc21901e49eed5dd
     command: ["-storageDataPath=/storage", "-retentionPeriod=30d"]
     volumes: ["vm:/storage"]
     restart: unless-stopped
   victorialogs:
-    image: docker.io/victoriametrics/victoria-logs:v1.53.0
+    image: docker.io/victoriametrics/victoria-logs:v1.53.0@sha256:251121fa882af99b95ba0c230a4a2f412ea602d2698c64a96c58dc9842bb755d
     command: ["-storageDataPath=/vlogs", "-retentionPeriod=14d"]
     volumes: ["vlogs:/vlogs"]
     restart: unless-stopped
   victoriatraces:
-    image: docker.io/victoriametrics/victoria-traces:v0.12.0
+    image: docker.io/victoriametrics/victoria-traces:v0.12.0@sha256:80919fcc85cc6dd87f598d20ccf42d0ab1120de8f25d4dcf08c5ea2515a496ba
     command: ["-storageDataPath=/vtraces", "-retentionPeriod=7d"]
     volumes: ["vtraces:/vtraces"]
     restart: unless-stopped
