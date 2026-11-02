@@ -1332,7 +1332,11 @@ Design and review in `identity.md`.
 - Boop Chat's emitter: `--otlp-ca-file/--otlp-cert-file/--otlp-key-file`,
   rebuilt when a file's size or time changes, old client kept while new
   files do not load.
-- Not built: Jump and Core emitters, a `vigil` command and a UI for
+- Boop Jump's gateway and agent (same flags) and Core (`BOOP_OTLP_CA_FILE`,
+  `_CERT_FILE`, `_KEY_FILE`) likewise. Python 3.13's strict verification
+  wants an Authority Key Identifier in the leaf: vigil's certificates have
+  one (Go sets it from the CA's Subject Key Identifier).
+- Not built: a `vigil` command and a UI for
   identities, the trust bundle for CA rotation, agents' own certificates.
 - Verified: unit tests (pki, server API, agent keeper against a fake
   server, receiver over real TLS with current/old/unknown epochs, token
