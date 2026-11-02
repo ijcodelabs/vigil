@@ -49,7 +49,7 @@ On the host whose vigil agent will scrape Boop, put the two tokens in files
 the agent can read:
 
 ```bash
-echo -n "$APS_METRICS_TOKEN"   | sudo tee /etc/vigil/boop-metrics-token >/dev/null
+echo -n "$BOOP_METRICS_TOKEN"   | sudo tee /etc/vigil/boop-metrics-token >/dev/null
 echo -n "bxp_…"                | sudo tee /etc/vigil/boop-export-token  >/dev/null   # boop admin jump export-token
 sudo chmod 600 /etc/vigil/boop-*-token
 ```
@@ -89,7 +89,7 @@ agent's OpenTelemetry endpoint, each with its own token. On that vigil
 agent:
 
 ```bash
-# one line per emitter: the name is its service.instance.id (Boop: APS_OTLP_INSTANCE, default "boop"; a gateway: its --id)
+# one line per emitter: the name is its service.instance.id (Boop: BOOP_OTLP_INSTANCE, default "boop"; a gateway: its --id)
 sudo tee /etc/vigil/otlp-tokens >/dev/null <<'EOF'
 boop       <a long random token>
 gw-euw1    <another one>
