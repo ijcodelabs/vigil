@@ -65,6 +65,10 @@ type Receiver struct {
 	Log    *slog.Logger
 	// DropLabels are metric labels (as stored) left out of every point.
 	DropLabels map[string]bool
+	// DropAttributes are log record attributes (as stored) left out of
+	// every log line: what a sender must not be kept for, such as a
+	// person's pseudonym.
+	DropAttributes map[string]bool
 	// Redact, if set, masks secrets in the attributes and events of the
 	// spans that are passed on. Log entries are masked by the caller.
 	Redact func(string) string
@@ -169,7 +173,7 @@ func (r *Receiver) Handler() http.Handler {
 		if !read(w, req, in) {
 			return
 		}
-		if entries := convertLogs(in, emitterOf(req)); len(entries) > 0 {
+		if entries := convertLogs(in, emitterOf(req), r.DropAttributes); len(entries) > 0 {
 			if err := r.Logs(entries); err != nil {
 				http.Error(w, "could not queue the logs", http.StatusServiceUnavailable) // the SDK retries
 				return
@@ -542,7 +546,7 @@ var severities = []string{"", "trace", "debug", "info", "warn", "error", "fatal"
 // emitter, when the request came with a token, becomes a stream label; an
 // attribute of the same name is kept as attr_emitter, like any other
 // attribute named after a stream label.
-func convertLogs(in *otlpwire.LogsRequest, emitter string) []model.LogEntry {
+func convertLogs(in *otlpwire.LogsRequest, emitter string, drop map[string]bool) []model.LogEntry {
 	now := time.Now()
 	var out []model.LogEntry
 	for _, rl := range in.GetResourceLogs() {
@@ -564,6 +568,9 @@ func convertLogs(in *otlpwire.LogsRequest, emitter string) []model.LogEntry {
 				for _, kv := range rec.GetAttributes() {
 					if v := anyString(kv.Value); v != "" {
 						k := sanitize(kv.Key)
+						if drop[k] {
+							continue
+						}
 						if _, taken := stream[k]; taken {
 							// The log store keeps one value per name, and the
 							// stream label would win: Claude Code's

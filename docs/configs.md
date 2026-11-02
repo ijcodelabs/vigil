@@ -339,7 +339,17 @@ otlp:
 ```
 
 It is a map so that profiles add to it; `false` keeps a label that
-another profile dropped. Points that differ only in a dropped label are
+another profile dropped.
+
+Log records the same way, by attribute name as stored: what a sender must
+not be kept for (the `boop` integration drops Boop's person pseudonyms
+this way):
+
+```yaml
+otlp:
+  logs:
+    drop_attributes: {actor_ref: true, approver_ref: true}
+``` Points that differ only in a dropped label are
 added up when they are sent as differences (delta temporality, as Claude
 Code sends them). Two running totals that differ only in a dropped label
 cannot be added up and overwrite each other, so drop only labels that

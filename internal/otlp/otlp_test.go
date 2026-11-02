@@ -14,6 +14,8 @@ import (
 	colmetrics "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
 	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
 	logspb "go.opentelemetry.io/proto/otlp/logs/v1"
+
+	"github.com/ijcodelabs/vigil/internal/otlpwire"
 	metricspb "go.opentelemetry.io/proto/otlp/metrics/v1"
 	resourcepb "go.opentelemetry.io/proto/otlp/resource/v1"
 	"google.golang.org/protobuf/proto"
@@ -140,5 +142,23 @@ func TestLogs(t *testing.T) {
 	}
 	if got[1].Fields["level"] != "warn" || got[1].Time != 1_700_000_001_000_000_000 {
 		t.Errorf("second entry: %+v", got[1])
+	}
+}
+
+// Attributes named in DropAttributes never reach the log line.
+func TestDropLogAttributes(t *testing.T) {
+	val := func(s string) *commonpb.AnyValue {
+		return &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: s}}
+	}
+	in := &otlpwire.LogsRequest{ResourceLogs: []*logspb.ResourceLogs{{ScopeLogs: []*logspb.ScopeLogs{{
+		Scope: &commonpb.InstrumentationScope{Name: "boop.audit"},
+		LogRecords: []*logspb.LogRecord{{Body: val("boop.grant.started"), Attributes: []*commonpb.KeyValue{
+			str("event_name", "boop.grant.started"), str("actor_ref", "ff5647e96289343ba9394d958f4dfec5"), str("approver.ref", "aa")}}}}}}}}
+	out := convertLogs(in, "boop", map[string]bool{"actor_ref": true, "approver_ref": true})
+	if len(out) != 1 || out[0].Fields["event_name"] != "boop.grant.started" || out[0].Fields["actor_ref"] != "" || out[0].Fields["approver_ref"] != "" {
+		t.Fatalf("%+v", out)
+	}
+	if all := convertLogs(in, "boop", nil); all[0].Fields["actor_ref"] == "" {
+		t.Error("without the setting nothing is dropped")
 	}
 }

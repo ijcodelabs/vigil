@@ -101,6 +101,19 @@ change, the verdict is `not enough data`. When less than the window has
 passed, both sides shrink to what has. Viewers and read-only tokens may
 ask. It is advice: nothing acts on it by itself.
 
+## Markers
+
+| | |
+|---|---|
+| `GET /api/v1/markers?service=<name>` | what happened to the work of a service in `from`..`to` (Unix seconds, an hour by default, at most 31 days): Boop Chat's item, investigation and run events whose `item_service` is that service, and vigil's own profile changes; oldest first, at most 500 (`more` says when there were more) |
+| `…?work_item=<KEY>` | the events of one Boop item |
+| `…?incident=<id>` | the events of the Boop item whose investigation read this vigil incident's evidence (`work_item` says which) |
+
+Each marker has `time`, `kind` (`item`, `investigation`, `task`, `config`),
+`title` (made by vigil from the event's bounded fields), `work_item` and
+`service`. Answers are kept 20 seconds, so the charts of one page share one
+query. Viewers and read-only tokens may ask.
+
 ## What model calls cost
 
 | | |

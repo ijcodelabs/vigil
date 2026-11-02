@@ -84,14 +84,16 @@ address. Detection finds them by process name (`jump-gateway`,
 
 ### Audit events
 
-Boop, the gateway and the agent send their events to a vigil agent's
-OpenTelemetry endpoint, each with its own token. On that vigil agent:
+Boop, the gateway, the agent and Boop Chat send their events to a vigil
+agent's OpenTelemetry endpoint, each with its own token. On that vigil
+agent:
 
 ```bash
 # one line per emitter: the name is its service.instance.id (Boop: APS_OTLP_INSTANCE, default "boop"; a gateway: its --id)
 sudo tee /etc/vigil/otlp-tokens >/dev/null <<'EOF'
-boop     <a long random token>
-gw-euw1  <another one>
+boop       <a long random token>
+gw-euw1    <another one>
+boop-chat  <a third one>
 EOF
 sudo chmod 600 /etc/vigil/otlp-tokens
 ```
@@ -106,14 +108,34 @@ config:
 integrations:
   boop:
     event_agents: "boop-host"            # vigil agent ids, a regular expression
-    emitters: "boop|gw-euw1"             # names from the tokens file
+    emitters: "boop|gw-euw1|boop-chat"   # names from the tokens file
     tenant_ref: <the tenant_ref, 32 hex characters>
 ```
 
-Point Boop at it with `APS_OTLP_LOGS_URL=http://127.0.0.1:4318/v1/logs` and
-`APS_OTLP_TOKEN_FILE`, the gateway and agent with `--otlp-logs-url` and
-`--otlp-token-file`. Boop requires `https` unless the endpoint is on
-loopback. More on tokens and TLS in [Services and traces](apm.md#tokens-and-tls).
+Point Boop at it with `BOOP_OTLP_LOGS_URL=http://127.0.0.1:4318/v1/logs` and
+`BOOP_OTLP_TOKEN_FILE`, the gateway, the agent and Boop Chat with
+`--otlp-logs-url` and `--otlp-token-file`. They require `https` unless the
+endpoint is on loopback.
+
+vigil keeps no person ids. Set `BOOP_OTLP_PEOPLE=off` on Boop and
+`--otlp-people=off` on the gateway and the agent, so that their events
+leave out the person pseudonyms (`actor_ref`, `approver_ref`); Boop Chat's
+events never carry them. The `boop` integration drops those two fields on
+arrival anyway (`otlp.logs.drop_attributes`), and the SSH logins
+integration masks the pseudonym inside a Boop Jump certificate's Key ID
+(`boop-jump:v1:masked:…`).
+
+### Boop Chat's work on the charts
+
+Boop Chat's events say what happened to its items and workroom runs: an
+incident opened or moved, an investigation started, proposed, accepted, a
+run started or ended. vigil draws those of a service's items as **markers**
+on the service's charts and on the SLO page of an SLO with that service
+(the item's service field: the alert's `service` or `job` label). Hover a
+marker for what it was; click it to open "Did a change help?" at its time.
+An incident whose evidence an investigation read shows its Boop item and
+that item's events ("In Boop: SHOP-12"). Boop is the record; these are its
+events as received. API: `GET /api/v1/markers`, see [API](api.md). More on tokens and TLS in [Services and traces](apm.md#tokens-and-tls).
 
 ### SSH logins that did not come through Boop Jump
 

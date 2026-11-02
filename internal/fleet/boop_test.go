@@ -11,6 +11,7 @@ import (
 
 	"github.com/ijcodelabs/vigil/internal/config"
 	"github.com/ijcodelabs/vigil/internal/logs"
+	"github.com/ijcodelabs/vigil/internal/redact"
 )
 
 // The tenant CA of the contract's test data.
@@ -115,6 +116,12 @@ func TestBoopShadowAccess(t *testing.T) {
 		t.Fatalf("CA in the rule: %s", ca)
 	}
 
+	red, err := redact.New(c.Redact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	personRe := regexp.MustCompile(`boop-jump:v1:[0-9a-f]{32}:`)
+
 	f, err := os.Open("testdata/boop/sshd-journal.jsonl")
 	if err != nil {
 		t.Fatal(err)
@@ -138,6 +145,15 @@ func TestBoopShadowAccess(t *testing.T) {
 		fields := map[string]string{}
 		if templated {
 			_, _, _, fields, _ = tm.Process(l.Message)
+		}
+		// The agent masks the line and its fields before sending, with the
+		// integration's own rules: no person pseudonym survives.
+		msg := red.String(l.Message)
+		for k, v := range fields {
+			fields[k] = red.String(v)
+		}
+		if personRe.MatchString(msg) || personRe.MatchString(fields["ssh_key_id"]) {
+			t.Errorf("%s: a Key ID person part was kept: %s", l.Expect, msg)
 		}
 		got := "ignore"
 		if unitRe.MatchString(l.Unit) && msgRe.MatchString(l.Message) {
