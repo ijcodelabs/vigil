@@ -1,7 +1,10 @@
 # Releasing
 
-How a version of vigil is made. Set up 2026-10-30 and first used for
-`v0.1.0-rc.1` the same day: archives, checksums, attestations and the
+How a version of vigil is made. Set up 2026-10-30, first used for
+`v0.1.0-rc.1` the same day and for `v0.1.0` on 2026-10-31. Since then
+releases are immutable once published, and a tag ruleset ("release tags")
+lets only repository admins create, move or delete `v*` tags. For
+`v0.1.0-rc.1`: archives, checksums, attestations and the
 images all worked. The ghcr.io packages were public from their first push
 (they belong to the account that owns the public repository and are
 linked to it), so nothing has to be switched on there.
@@ -76,8 +79,5 @@ is never replaced; the fix becomes the next patch release.
 
 ## Not done yet
 
-- On GitHub: a tag ruleset so that only the owner can create `v*` tags,
-  and immutable releases, so a published version cannot be changed. Both
-  are repository settings.
 - Packages (`.deb`, `.rpm`) only if someone needs them; `nfpm` would add
   them without changing the rest.
