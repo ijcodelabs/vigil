@@ -850,7 +850,7 @@ Steps 2 and 3 of the Foundations build order in direction.md.
 
 ## Toolchain and version in the interface (2026-10-26)
 
-- `go.mod` pins `toolchain go1.26.10`, and `x/net` and the OpenTelemetry
+- `go.mod` pins the toolchain (go1.26.10 then; go1.27.3 since 2026-11-02), and `x/net` and the OpenTelemetry
   trace exporters moved to their current releases. `govulncheck ./...`
   reports nothing our code calls; run it before each release. CI takes the
   toolchain from `go.mod`. A local Go newer than the pin is used as it is

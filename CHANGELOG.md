@@ -88,6 +88,11 @@ after. How a release is made: [releasing.md](memory/context/releasing.md).
 - `golang.org/x/net` 0.62.0 (fixes GO-2026-6860 and GO-2026-6866, in code
   vigil does not call), with `x/crypto`, `x/sys`, `x/sync`, `x/text` and
   `x/tools` moving up one minor version each.
+- Built with **Go 1.27.3** (the build image and the toolchain; building
+  from source still needs Go 1.26 or newer); OpenTelemetry 1.47,
+  Prometheus client 1.25, Alertmanager 0.34.2, SQLite 1.61 and other
+  dependencies updated. The compose example runs VictoriaMetrics v1.155.0
+  and VictoriaTraces v0.12.1.
 
 ## v0.1.0 (2026-10-31)
 

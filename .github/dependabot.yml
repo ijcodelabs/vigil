@@ -11,11 +11,21 @@ updates:
     groups:
       go-modules: {patterns: ["*"]}
     open-pull-requests-limit: 5
+    ignore:
+      # 0.33 adds 1.4 MB to vigil-agent (over its size budget); taken when
+      # that is looked at (which part of it the agent pulls in).
+      - dependency-name: cel.dev/cel-go
+        update-types: [version-update:semver-minor, version-update:semver-major]
   - package-ecosystem: github-actions
     directory: /
     schedule: {interval: weekly, day: monday}
     groups:
       actions: {patterns: ["*"]}
+    ignore:
+      # v4 installs cosign v3, which writes the new bundle format: taken
+      # together with checking docs/install.md's verification commands.
+      - dependency-name: sigstore/cosign-installer
+        update-types: [version-update:semver-major]
   - package-ecosystem: docker
     directory: /
     schedule: {interval: weekly, day: monday}
