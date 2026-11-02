@@ -183,7 +183,7 @@ func (r *Receiver) Run(ctx context.Context) error {
 		}
 	}()
 	r.Log.Info("OTLP endpoint on", "addr", ln.Addr().String(), "traces", r.Spans != nil,
-		"tls", r.CertFile != "", "tokens", r.TokensFile != "")
+		"tls", getCert != nil, "client_certs", r.ClientCerts, "tokens", r.TokensFile != "")
 	if err := srv.Serve(ln); !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
