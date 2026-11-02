@@ -286,7 +286,8 @@ func (s *Server) handleIdentitySign(w http.ResponseWriter, r *http.Request) {
 // handleIdentityState tells an agent's OTLP endpoint which clients are
 // current, at which epoch; a name that is not listed is not let in.
 func (s *Server) handleIdentityState(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.ownAgent(w, r); !ok {
+	agent, ok := s.ownAgent(w, r)
+	if !ok {
 		return
 	}
 	list, err := s.identities("")
@@ -294,15 +295,23 @@ func (s *Server) handleIdentityState(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	epochs := map[string]int{}
+	// Endpoints: the approved names of those this agent may hold, so it
+	// renews a certificate whose names an admin changed.
+	epochs, endpoints := map[string]int{}, map[string][]string{}
 	for _, id := range list {
-		if id.Kind == identityClient && !id.Revoked {
+		switch {
+		case id.Revoked:
+		case id.Kind == identityClient:
 			epochs[id.Name] = id.Epoch
+		case id.Kind == identityEndpoint:
+			if re, err := regexp.Compile("^(?:" + id.Agents + ")$"); err == nil && re.MatchString(agent) {
+				endpoints[id.Name] = id.Names
+			}
 		}
 	}
 	ca := ""
 	if s.ca != nil {
 		ca = string(s.ca.CAPEM())
 	}
-	writeJSON(w, map[string]any{"epochs": epochs, "ca": ca})
+	writeJSON(w, map[string]any{"epochs": epochs, "endpoints": endpoints, "ca": ca})
 }

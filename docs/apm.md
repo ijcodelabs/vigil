@@ -96,7 +96,8 @@ their life; nobody copies a key or a certificate around.
    ```
 
 2. The endpoint's agent takes its certificate from the server and checks
-   the senders':
+   the senders'. When an admin changes the endpoint's names, the agent gets a
+   certificate with the new ones within a minute:
 
    ```yaml
    config:

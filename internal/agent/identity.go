@@ -10,6 +10,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -44,6 +46,7 @@ type identity struct {
 	mu      sync.Mutex
 	serving *tls.Certificate
 	epochs  map[string]int
+	names   []string // the endpoint's approved names, from the last state
 	pool    *x509.CertPool
 	stateAt time.Time
 	failing bool
@@ -79,7 +82,9 @@ func (id *identity) loadSaved() {
 
 type identityState struct {
 	Epochs map[string]int `json:"epochs"`
-	CA     string         `json:"ca"`
+	// Endpoints: the approved names of the endpoints this agent may hold.
+	Endpoints map[string][]string `json:"endpoints,omitempty"`
+	CA        string              `json:"ca"`
 }
 
 func (id *identity) setState(st identityState) {
@@ -89,6 +94,9 @@ func (id *identity) setState(st identityState) {
 	}
 	id.mu.Lock()
 	id.epochs, id.pool, id.stateAt = st.Epochs, pool, time.Now()
+	if names, ok := st.Endpoints[id.endpoint]; ok {
+		id.names = names
+	}
 	id.mu.Unlock()
 }
 
@@ -127,7 +135,7 @@ func (id *identity) run(ctx context.Context, checkClients bool) {
 	defer t.Stop()
 	for {
 		ok := true
-		if checkClients || len(id.clients) > 0 {
+		if checkClients || len(id.clients) > 0 || id.endpoint != "" {
 			if err := id.pullState(ctx); err != nil {
 				ok = false
 				id.warn("identity state", err)
@@ -237,9 +245,10 @@ func due(certPEM []byte, want int, now time.Time) bool {
 
 func (id *identity) renewEndpoint(ctx context.Context) error {
 	id.mu.Lock()
-	cur := id.serving
+	cur, names := id.serving, id.names
 	id.mu.Unlock()
-	if cur != nil && !due(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cur.Certificate[0]}), 0, time.Now()) {
+	if cur != nil && !due(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cur.Certificate[0]}), 0, time.Now()) &&
+		(names == nil || namesMatch(cur.Certificate[0], names)) {
 		return nil
 	}
 	keyPEM, s, err := id.sign(ctx, id.endpoint)
@@ -262,6 +271,30 @@ func (id *identity) renewEndpoint(ctx context.Context) error {
 	id.mu.Unlock()
 	id.a.log.Info("endpoint certificate renewed", "identity", id.endpoint)
 	return nil
+}
+
+// namesMatch says whether a serving certificate is for exactly these host
+// names and addresses (an admin may have changed them).
+func namesMatch(der []byte, names []string) bool {
+	c, err := x509.ParseCertificate(der)
+	if err != nil {
+		return false
+	}
+	have := map[string]bool{}
+	for _, n := range c.DNSNames {
+		have[n] = true
+	}
+	for _, ip := range c.IPAddresses {
+		have[ip.String()] = true
+	}
+	want := map[string]bool{}
+	for _, n := range names {
+		if ip := net.ParseIP(n); ip != nil {
+			n = ip.String()
+		}
+		want[n] = true
+	}
+	return maps.Equal(have, want)
 }
 
 func (id *identity) renewClient(ctx context.Context, c config.IdentityClient) error {
