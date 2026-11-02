@@ -1,0 +1,26 @@
+# Keeps the pinned versions current: pins without updates become the old,
+# vulnerable versions. Dependabot only opens pull requests; CI checks each
+# one (tests, govulncheck, every action and image still pinned) and a person
+# merges it. Actions stay pinned to commits and images to digests: Dependabot
+# updates the hash together with its version comment.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule: {interval: weekly, day: monday}
+    groups:
+      go-modules: {patterns: ["*"]}
+    open-pull-requests-limit: 5
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: {interval: weekly, day: monday}
+    groups:
+      actions: {patterns: ["*"]}
+  - package-ecosystem: docker
+    directory: /
+    schedule: {interval: weekly, day: monday}
+  - package-ecosystem: docker-compose
+    directory: /deploy
+    schedule: {interval: weekly, day: monday}
+    groups:
+      victoria: {patterns: ["victoriametrics/*"]}

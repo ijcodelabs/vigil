@@ -103,3 +103,22 @@ anywhere inside a skipped block: a new setting there can replace an old
 one (`tls.from_server` for `cert_file`), and skipping it could run the
 agent with less protection than the config it has now; those refuse as
 before. The agent's own file stays strict, so typos there are still caught.
+
+**Build inputs are pinned to content, updated by a bot, checked by CI
+(2026-11-02).** Go modules were already locked (`go.mod` versions,
+`go.sum` checksums, the toolchain line). What was not: GitHub Actions by
+tag (`@v5`) and container images by tag; a tag can be moved to other code,
+and the release workflow signs releases and pushes images with what those
+actions run. Now actions are pinned to a commit with the version as a
+comment, images to a digest with the tag in front
+(`name:tag@sha256:…`); `scripts/check-pins.sh` in CI refuses anything
+else. Pins without updates become the old, vulnerable versions, so
+Dependabot opens weekly grouped PRs (gomod, actions, Dockerfile, the
+compose example); images inside `run:` commands, the Makefile and the docs
+(gitleaks, golang for `make bpf`, the install guide) are not seen by it and
+are updated by hand, still pinned. `govulncheck` at a fixed version runs on
+every PR and fails only on a vulnerability in code vigil calls (a module
+vulnerability in code never called is not a reason to block a PR, and
+often has no fix). The vendored UI files are the unchanged npm files,
+listed with checksums in `internal/ui/VENDOR.md` and held there by a test.
+
