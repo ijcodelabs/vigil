@@ -90,3 +90,16 @@ together.
 job that finished; a removed container is gone on purpose. A container
 stopped by hand usually ends with 137 or 143 and does alert, which was
 accepted: it is down, and a silence covers planned work.
+
+**An older agent skips unknown settings from the server, except guarded
+ones (2026-11-02).** Refusing a whole managed config over one setting a
+newer server added left the agent on its old config, taking no change at
+all, until it was upgraded (seen on the trial: `otlp.logs.drop_attributes`
+from the boop integration). Now the unknown settings are skipped, the rest
+applied and the skipped paths reported (`config_skipped`, kept in memory
+on the server, shown on Fleet). Not for keys matching tls, token, auth,
+identity, cert, key, redact, drop, secret or password, at the setting or
+anywhere inside a skipped block: a new setting there can replace an old
+one (`tls.from_server` for `cert_file`), and skipping it could run the
+agent with less protection than the config it has now; those refuse as
+before. The agent's own file stays strict, so typos there are still caught.

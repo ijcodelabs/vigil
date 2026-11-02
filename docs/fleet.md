@@ -100,6 +100,18 @@ first**. A common layout:
 Agents pick a change up within about 30 seconds, without restarting, and
 keep the last configuration on disk in case the server is unreachable.
 
+**Agents older than the server.** A profile or an integration may use a
+setting that an older agent does not know yet. Such an agent skips that
+setting, applies the rest, and the Fleet page shows it in yellow
+("skipped: otlp.logs"); upgrading the agent makes it go away. Except for
+settings about TLS, tokens, certificates, keys, identities, redaction and
+dropping data: a new one there may replace an older setting, and skipping
+it could leave the agent less protected than the configuration it runs
+now. Then the agent refuses the whole configuration, keeps the one it has,
+and the page shows the error with "upgrade the agent". So when a change
+needs a new agent for something like that, upgrade the agents first, then
+change the profile.
+
 ### Rolling a change out in steps
 
 By default a saved profile reaches all its agents within half a minute. For

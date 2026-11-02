@@ -85,7 +85,9 @@ function Agents({ admin }) {
             ${(a.limited || []).length > 0 && html`<div style="margin-top: 4px"><a href="/docs/install#limits" target="_blank" rel="noopener"
               title="This agent sends more than the server's limits allow; the server takes only that much, the agent queues and then drops the rest">
               <${Badge} kind="bad">over limit: ${a.limited.join(', ')}<//></a></div>`}
-            ${a.config_error && html`<div class="error">${a.config_error}</div>`}</td>
+            ${a.config_error && html`<div class="error">${a.config_error}</div>`}
+            ${(a.config_skipped || []).length > 0 && html`<div style="margin-top: 4px" title="Settings from a newer server that this agent version does not know: skipped, the rest applied. Upgrade the agent to use them.">
+              <${Badge} kind="warn">skipped: ${a.config_skipped.join(', ')}<//></div>`}</td>
           <td style="text-align: right; white-space: nowrap">
             <button class="small" onClick=${() => setDialog({ kind: 'config', agent: a })}>Config</button>${' '}
             ${admin && html`<button class="small" onClick=${() => setDialog({ kind: 'agent', agent: a })}>Manage</button>`}</td>

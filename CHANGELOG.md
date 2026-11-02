@@ -63,6 +63,12 @@ after. How a release is made: [releasing.md](memory/context/releasing.md).
 
 ### Changed
 
+- **Agents older than the server** skip settings of a managed configuration
+  they do not know, apply the rest and say so on the Fleet page
+  ("skipped: …"), instead of refusing all of it and taking no change until
+  upgraded. Settings about TLS, tokens, certificates, keys, identities,
+  redaction or dropping data still refuse the whole configuration. See
+  Fleet, "Agents older than the server".
 - **Boop integration:** follows Boop Core's renamed metrics (`aps_*` →
   `boop_core_*`, same labels); alerts and dashboards keep their names.
   Upgrade Boop Core with it: older Cores still send `aps_*`.
