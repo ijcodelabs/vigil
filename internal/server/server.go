@@ -137,6 +137,9 @@ func New(cfg *config.Server, log *slog.Logger) (*Server, error) {
 	if err == nil {
 		err = initViews(st.db)
 	}
+	if err == nil {
+		err = initIdentities(st.db)
+	}
 	if err != nil {
 		st.Close()
 		return nil, fmt.Errorf("store: %w", err)
@@ -273,6 +276,7 @@ func (s *Server) Handler() http.Handler {
 	s.verifyRoutes(mux)
 	s.spanCostRoutes(mux)
 	s.markerRoutes(mux)
+	s.identityRoutes(mux)
 	mux.Handle("GET /docs/", ui.DocsHandler())
 	mux.Handle("/", ui.Handler())
 	return s.hardened(traced(mux))

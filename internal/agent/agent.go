@@ -158,6 +158,9 @@ func splitCapture(item []byte) (map[string]string, []byte) {
 // agent starts with it even when the server is unreachable.
 func (a *Agent) Run(ctx context.Context) {
 	go a.connect(ctx)
+	if cl := a.cfg.Identity.Clients; len(cl) > 0 {
+		go newIdentity(a, "", cl).run(ctx, false)
+	}
 	for _, s := range []*shipper{a.metrics, a.logs, a.events, a.captures, a.traces} {
 		go a.sendLoop(ctx, s)
 	}
@@ -417,6 +420,7 @@ func (a *Agent) collect(ctx context.Context, col *config.Collection) {
 		rcv := &otlp.Receiver{Listen: col.OTLP.Listen, Log: a.log, DropLabels: col.OTLP.Metrics.DropLabels,
 			DropAttributes: col.OTLP.Logs.DropAttributes,
 			TokensFile:     col.OTLP.TokensFile, CertFile: col.OTLP.TLS.CertFile, KeyFile: col.OTLP.TLS.KeyFile,
+			ClientCerts: col.OTLP.TLS.ClientCerts,
 			Metrics: func(batch []model.Sample) {
 				for i := range batch {
 					for k, v := range col.Labels {
@@ -456,6 +460,16 @@ func (a *Agent) collect(ctx context.Context, col *config.Collection) {
 				zw.Close()
 				return a.enqueue(a.traces, buf.Bytes())
 			}
+		}
+		// Certificates from the server's authority: the endpoint's own, and
+		// which clients are current (memory/context/identity.md).
+		if tl := col.OTLP.TLS; tl.FromServer != "" || tl.ClientCerts != "" {
+			id := newIdentity(a, tl.FromServer, nil)
+			if tl.FromServer != "" {
+				rcv.GetCertificate = id.GetCertificate
+			}
+			rcv.ClientCAs, rcv.Epochs = id.ClientCAs, id.Epochs
+			wg.Go(func() { id.run(ctx, tl.ClientCerts != "") })
 		}
 		wg.Go(func() {
 			if err := rcv.Run(ctx); err != nil {

@@ -1303,6 +1303,42 @@ Step 1 of agentic.md's "Then". Boop's side is in Boop's notes
   drop setting): no actor_ref stored, markers by service and by incident,
   drawn on `orders`, a click ran the check.
 
+## Client certificates for OTLP senders (first build, 2026-11-02)
+
+Design and review in `identity.md`.
+- `internal/pki/sign.go`: signs from a CSR (signature checked, P-256 only,
+  everything else in it ignored); client certificates carry exactly one URI
+  SAN `vigil://client/<name>?epoch=<n>`, ClientAuth only; serving
+  certificates ServerAuth for the approved names; 7 days, NotBefore 5 min
+  back.
+- Server (`internal/server/identity.go`): tables `identities` and
+  `identity_certs`; admin `GET/PUT/DELETE /api/v1/identities[/{name}]`,
+  `POST …/revoke` (epoch + 1, revoked); agents with their own per-agent
+  token: `POST /api/v1/identity/sign`, `GET /api/v1/identity/state`
+  (current epochs of client names, the CA). The shared ingest token is
+  refused there.
+- Agent (`internal/agent/identity.go`): one keeper for `identity.clients`
+  (agent's own file only, outside the inline Collection, absolute paths)
+  for as long as the agent runs, one per collection config for the OTLP
+  endpoint (`otlp.tls.from_server`, `client_certs`). Every minute: state,
+  then renew what is missing, past half-life or at an old epoch. Atomic
+  writes, no symlinks, directory must exist; the spool keeps the endpoint's
+  certificate and the last state, so a restart without the server keeps
+  working.
+- OTLP endpoint (`internal/otlp`): `authenticate` replaces `requireToken`;
+  certificate name = emitter, epoch checked per request (a revoked
+  keep-alive connection stops at its next request), token and certificate
+  must agree.
+- Boop Chat's emitter: `--otlp-ca-file/--otlp-cert-file/--otlp-key-file`,
+  rebuilt when a file's size or time changes, old client kept while new
+  files do not load.
+- Not built: Jump and Core emitters, a `vigil` command and a UI for
+  identities, the trust bundle for CA rotation, agents' own certificates.
+- Verified: unit tests (pki, server API, agent keeper against a fake
+  server, receiver over real TLS with current/old/unknown epochs, token
+  mismatch, revoke on an open connection; Chat emitter with a renewed
+  certificate).
+
 ## Next
 
 - Foundations, build order in `direction.md`: step 1 on paper (data

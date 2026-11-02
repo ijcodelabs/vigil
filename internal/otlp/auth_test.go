@@ -77,7 +77,7 @@ func TestTokens(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := requireToken(tokens, r.Handler())
+	h := r.authenticate(tokens, r.Handler())
 
 	for _, tok := range []string{"", "wrong-test-token-xxxxx", gatewayToken + "x"} {
 		if c := withToken(t, h, "/v1/logs", tok, boopEvent()); c != http.StatusUnauthorized {
@@ -153,7 +153,7 @@ func TestTokenFileErrors(t *testing.T) {
 	if err == nil {
 		t.Error("missing file: no error")
 	}
-	h := requireToken(tf, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	h := (&Receiver{}).authenticate(tf, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
 	if c := withToken(t, h, "/v1/logs", boopToken, boopEvent()); c != http.StatusUnauthorized {
 		t.Errorf("missing file let a request in: %d", c)
 	}

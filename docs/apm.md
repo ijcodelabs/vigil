@@ -78,6 +78,64 @@ before, and with none from before nobody gets in. Senders set
 `OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer%20<token>"` (the space URL-encoded). Spans are not
 labelled with the emitter.
 
+### Client certificates from the server
+
+Instead of tokens, or with them, the endpoint can ask senders for a client
+certificate from the server's own authority (the server needs
+`tls.self_signed: true`). Certificates live 7 days and are renewed at half
+their life; nobody copies a key or a certificate around.
+
+1. An admin approves names once, on the server: which agents may hold
+   them, and for the endpoint the names it is reached by.
+
+   ```bash
+   curl -X PUT -H "Authorization: Bearer $ADMIN" https://vigil.example.com/api/v1/identities/boop-chat \
+     -d '{"kind": "client", "agents": "boop-host"}'
+   curl -X PUT -H "Authorization: Bearer $ADMIN" https://vigil.example.com/api/v1/identities/gateway \
+     -d '{"kind": "endpoint", "agents": "boop-host", "names": ["192.0.2.10"]}'
+   ```
+
+2. The endpoint's agent takes its certificate from the server and checks
+   the senders':
+
+   ```yaml
+   config:
+     otlp:
+       enabled: true
+       listen: 0.0.0.0:4318
+       tls:
+         from_server: gateway      # instead of cert_file and key_file
+         client_certs: required    # or optional: a certificate or a token
+   ```
+
+3. On the sender's host, the agent's **own file** (never a profile) says
+   where the sender's files go; the agent writes them, renews them, and
+   writes the server's authority for the sender to trust the endpoint:
+
+   ```yaml
+   identity:
+     clients:
+       - name: boop-chat
+         cert_file: /srv/boop/otlp/chat.pem
+         key_file: /srv/boop/otlp/chat.key
+         ca_file: /srv/boop/otlp/ca.pem
+         group: 10001              # numeric; the key is then 0640
+   ```
+
+   The directory must exist; files are replaced whole and never written
+   through a symbolic link. The sender reads them again when they change
+   (Boop's emitters do: `--otlp-ca-file`, `--otlp-cert-file`,
+   `--otlp-key-file`).
+
+A certificate's name is the sender's `emitter`, as a token's is. A request
+with both must name the same emitter. **Revoking** a name
+(`POST /api/v1/identities/{name}/revoke`) moves it to a new epoch: every
+certificate ever issued for it is refused at its next request, and none is
+issued until the name is approved again (`PUT`), at the new epoch. An
+endpoint learns the current epochs from the server every minute; while the
+server is unreachable it keeps the last ones it got, so a stolen certificate
+works until it expires, at most 7 days. Hosts need correct clocks (NTP).
+
 To see the pages before instrumenting anything:
 
 ```bash
