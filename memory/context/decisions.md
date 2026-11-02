@@ -116,7 +116,8 @@ else. Pins without updates become the old, vulnerable versions, so
 Dependabot opens weekly grouped PRs (gomod, actions, Dockerfile, the
 compose example); images inside `run:` commands, the Makefile and the docs
 (gitleaks, golang for `make bpf`, the install guide) are not seen by it and
-are updated by hand, still pinned. `govulncheck` at a fixed version runs on
+are updated by hand, still pinned. `govulncheck` at a fixed version (`go run …@vX`, moved by hand with each Go
+minor: v1.1.4 crashed on Go 1.27) runs on
 every PR and fails only on a vulnerability in code vigil calls (a module
 vulnerability in code never called is not a reason to block a PR, and
 often has no fix). The vendored UI files are the unchanged npm files,
