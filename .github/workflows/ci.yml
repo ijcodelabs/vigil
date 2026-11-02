@@ -67,8 +67,11 @@ jobs:
           go-version-file: go.mod
       # Fails only for a vulnerability in code vigil calls; the version is
       # fixed and the module is checked against the Go checksum database.
+      # Dependabot does not see this line: move it with each Go minor (an
+      # old govulncheck cannot parse a newer Go's code; v1.1.4 crashed on
+      # Go 1.27).
       - name: govulncheck
-        run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
       - name: Actions and images pinned
         run: scripts/check-pins.sh
 
