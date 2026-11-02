@@ -1,7 +1,8 @@
 # Boop observability contract v1: test data
 
 Copied from Boop Jump's repository (`testdata/o11y/v1/`, contract
-`docs/observability.md`, at commit 3bd30d9), which publishes them for
+`docs/observability.md`, at commit 3bd30d9; `metrics-boop.txt` at 18cd975, when Boop Core's
+metrics went from `aps_*` to `boop_core_*`), which publishes them for
 consumers' tests. `contract-metrics.txt` lists every metric name the
 contract defines, existing or new; the integrations `boop`,
 `boop_jump_gateway` and `boop_jump_agent` may use only those.

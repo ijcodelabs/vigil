@@ -61,6 +61,12 @@ after. How a release is made: [releasing.md](memory/context/releasing.md).
 - **Guides for Python and Go services:** OpenTelemetry set-up with log
   lines linked to their traces (`docs/apm-python.md`, `docs/apm-go.md`).
 
+### Changed
+
+- **Boop integration:** follows Boop Core's renamed metrics (`aps_*` →
+  `boop_core_*`, same labels); alerts and dashboards keep their names.
+  Upgrade Boop Core with it: older Cores still send `aps_*`.
+
 ## v0.1.0 (2026-10-31)
 
 The first release. vigil was used from source until now; this is what it
