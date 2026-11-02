@@ -27,6 +27,7 @@ type fakeSigner struct {
 	// epoch of the client; signs counts signing requests.
 	epoch int
 	signs int
+	names []string // the endpoint's approved names
 }
 
 func (f *fakeSigner) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -38,7 +39,8 @@ func (f *fakeSigner) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer f.mu.Unlock()
 	switch r.URL.Path {
 	case "/api/v1/identity/state":
-		json.NewEncoder(w).Encode(map[string]any{"epochs": map[string]int{"boop-chat": f.epoch}, "ca": string(f.ca.CAPEM())})
+		json.NewEncoder(w).Encode(map[string]any{"epochs": map[string]int{"boop-chat": f.epoch},
+			"endpoints": map[string][]string{"gateway": f.names}, "ca": string(f.ca.CAPEM())})
 	case "/api/v1/identity/sign":
 		var in struct{ Name, CSR string }
 		json.NewDecoder(r.Body).Decode(&in)
@@ -46,7 +48,7 @@ func (f *fakeSigner) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		var c []byte
 		var err error
 		if in.Name == "gateway" {
-			c, err = f.ca.SignServing([]byte(in.CSR), []string{"127.0.0.1"}, time.Now())
+			c, err = f.ca.SignServing([]byte(in.CSR), f.names, time.Now())
 		} else {
 			c, err = f.ca.SignClient([]byte(in.CSR), in.Name, f.epoch, time.Now())
 		}
@@ -73,7 +75,7 @@ func TestIdentityRenews(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := &fakeSigner{ca: ca, epoch: 1}
+	f := &fakeSigner{ca: ca, epoch: 1, names: []string{"127.0.0.1"}}
 	srv := httptest.NewServer(f)
 	defer srv.Close()
 	a := testAgent(t, srv.URL)
@@ -126,6 +128,19 @@ func TestIdentityRenews(t *testing.T) {
 	b, _ := os.ReadFile(slot.CertFile)
 	if due(b, 2, time.Now()) {
 		t.Error("the renewed certificate is not at epoch 2")
+	}
+	// An admin adds a name to the endpoint: renewed with both.
+	f.names = []string{"127.0.0.1", "gateway.internal"}
+	step()
+	if f.signs != 4 {
+		t.Errorf("changed names: %d signings", f.signs)
+	}
+	if c, _ := id.GetCertificate(nil); !namesMatch(c.Certificate[0], f.names) {
+		t.Error("the endpoint certificate does not have the new names")
+	}
+	step()
+	if f.signs != 4 {
+		t.Errorf("renewed again with the same names: %d", f.signs)
 	}
 
 	// A restart while the server is away keeps the endpoint and the state.

@@ -109,6 +109,12 @@ func TestIdentities(t *testing.T) {
 	if code, _ := admin("PUT", "/api/v1/identities/gw-otlp", `{"kind":"endpoint","agents":"gw-1","names":["192.0.2.54"]}`); code != 200 {
 		t.Fatalf("endpoint: %d", code)
 	}
+	if _, body := asAgent("gw-1", tok.Token, "GET", "/api/v1/identity/state", ""); !strings.Contains(body, `"endpoints":{"gw-otlp":["192.0.2.54"]}`) {
+		t.Errorf("own endpoint's names not in the state: %s", body)
+	}
+	if _, body := asAgent("web-1", other.Token, "GET", "/api/v1/identity/state", ""); strings.Contains(body, "gw-otlp") {
+		t.Errorf("another agent's endpoint is in the state: %s", body)
+	}
 	code, body = asAgent("gw-1", tok.Token, "POST", "/api/v1/identity/sign", signReq("gw-otlp"))
 	json.Unmarshal([]byte(body), &signed)
 	b, _ = pem.Decode([]byte(signed.Cert))

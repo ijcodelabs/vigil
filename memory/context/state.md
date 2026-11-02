@@ -1332,6 +1332,10 @@ Design and review in `identity.md`.
 - Boop Chat's emitter: `--otlp-ca-file/--otlp-cert-file/--otlp-key-file`,
   rebuilt when a file's size or time changes, old client kept while new
   files do not load.
+- An endpoint's certificate is also renewed when its approved names change:
+  `/api/v1/identity/state` lists the names of the endpoints the asking agent
+  may hold (only those), and the keeper compares them with the
+  certificate's DNS names and addresses.
 - Boop Jump's gateway and agent (same flags) and Core (`BOOP_OTLP_CA_FILE`,
   `_CERT_FILE`, `_KEY_FILE`) likewise. Python 3.13's strict verification
   wants an Authority Key Identifier in the leaf: vigil's certificates have

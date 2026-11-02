@@ -199,7 +199,7 @@ Names that may hold a certificate from the server's authority (APM,
 | `POST /api/v1/identities/{name}/revoke` | a new epoch: every certificate for it is refused, none is issued |
 | `DELETE /api/v1/identities/{name}` | forget it |
 | `POST /api/v1/identity/sign` | an agent, with its own token: `{"name", "csr"}` (PEM, ECDSA P-256) → `{"cert", "ca", "kind", "epoch", "not_after"}` |
-| `GET /api/v1/identity/state` | an agent: the current epoch of every client name, and the authority's certificate |
+| `GET /api/v1/identity/state` | an agent: the current epoch of every client name, the approved names of the endpoints it may hold, and the authority's certificate |
 
 ## Dashboards, captures, users
 
