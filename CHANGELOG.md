@@ -16,6 +16,10 @@ after. How a release is made: [releasing.md](memory/context/releasing.md).
 
 ### Added
 
+- **Fleet → Identities** and `vigil identity list|approve|revoke|delete`:
+  manage the names that may hold a certificate from the server's authority
+  without calling the API by hand. An endpoint's certificate is renewed as
+  soon as its approved names change.
 - **Client certificates for the OTLP endpoint:** the server's authority
   signs short-lived (7-day) certificates for names an admin approves;
   agents renew them for programs on their host (`identity.clients` in the

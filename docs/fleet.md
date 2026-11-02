@@ -349,6 +349,10 @@ fingerprint: `-ca-pin sha256:…` or `VIGIL_CA_PIN`.
 
 ## Tokens and forgetting agents
 
+- **Identities** (admins) lists the names that may hold a certificate from
+  the server's authority: programs that send to an agent's OTLP endpoint,
+  and endpoints that serve one. Approve, edit, revoke or delete them there
+  or with `vigil identity`; see [APM](apm.md#client-certificates-from-the-server).
 - **Enrolment** creates a token many hosts can use to get a token of their
   own; see [Install](install.md#many-hosts-at-once). Revoking it stops new
   hosts from joining and leaves enrolled ones alone.

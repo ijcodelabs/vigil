@@ -24,6 +24,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, `usage:
   vigil apply -f DIR -server URL [-prune] [-dry-run] [-immediate]   make the server's profiles match a directory
   vigil tracegen [-endpoint http://127.0.0.1:4318] [-rate 2]   send demo traces to an agent's OTLP endpoint
+  vigil identity list|approve|revoke|delete [NAME]   names that may hold a certificate (vigil identity help)
   vigil version
 
 still here for one release, moved to their own binaries:
@@ -65,6 +66,8 @@ func main() {
 		err = opscli.Apply(os.Args[2:])
 	case "tracegen":
 		err = opscli.Tracegen(ctx, os.Args[2:])
+	case "identity":
+		err = opscli.Identity(os.Args[2:])
 	case "agent":
 		fs.Parse(os.Args[2:])
 		err = agentcli.Agent(ctx, *cfgPath, log)

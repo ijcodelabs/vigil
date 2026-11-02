@@ -41,12 +41,13 @@ config:
 const STATE = { 'in sync': 'ok', pending: 'warn', error: 'bad' };
 
 export function Fleet({ route, admin }) {
-  const tab = ['profiles', 'integrations', 'enrolment'].includes(route.parts[1]) && (admin || route.parts[1] !== 'enrolment') ? route.parts[1] : 'agents';
-  const View = { agents: Agents, profiles: Profiles, integrations: Integrations, enrolment: Enrolment }[tab];
+  const adminOnly = ['enrolment', 'identities'];
+  const tab = ['profiles', 'integrations', ...adminOnly].includes(route.parts[1]) && (admin || !adminOnly.includes(route.parts[1])) ? route.parts[1] : 'agents';
+  const View = { agents: Agents, profiles: Profiles, integrations: Integrations, enrolment: Enrolment, identities: Identities }[tab];
   return html`
     <div class="head"><h1>Fleet</h1><span class="spacer"></span>
       <a class="btn" href="/docs/fleet" target="_blank" rel="noopener">Help</a></div>
-    <${Tabs} base="fleet" current=${tab} tabs=${[['agents', 'Agents'], ['profiles', 'Profiles'], ['integrations', 'Integrations'], ...(admin ? [['enrolment', 'Enrolment']] : [])]} />
+    <${Tabs} base="fleet" current=${tab} tabs=${[['agents', 'Agents'], ['profiles', 'Profiles'], ['integrations', 'Integrations'], ...(admin ? [['enrolment', 'Enrolment'], ['identities', 'Identities']] : [])]} />
     <${View} admin=${admin} />`;
 }
 
@@ -584,3 +585,88 @@ function NewEnrolToken({ info, onClose }) {
     </form>`}
   <//>`;
 }
+
+// Identities: names that may hold a certificate from the server's authority
+// (APM, "Client certificates from the server"). Revoking moves a name to a
+// new epoch: every certificate issued for it is refused at its next request.
+function Identities() {
+  const { data: list, error, reload } = useLoad(() => api('/api/v1/identities'), [], 15000);
+  const { data: info } = useLoad(serverInfo);
+  const [dialog, setDialog] = useState(null);
+  const [failed, setFailed] = useState(null);
+  const act = async (id, what) => {
+    const ask = what === 'revoke'
+      ? `Revoke "${id.name}"? Every certificate issued for it is refused at its next request, and none is issued until you approve it again.`
+      : `Delete "${id.name}"? Certificates issued for it stop working the same way; the name can be approved again later.`;
+    if (!confirm(ask)) return;
+    try {
+      await api('/api/v1/identities/' + encodeURIComponent(id.name) + (what === 'revoke' ? '/revoke' : ''), { method: what === 'revoke' ? 'POST' : 'DELETE' });
+      reload();
+    } catch (e) { setFailed(e.message); }
+  };
+  return html`
+    <div class="row" style="margin-bottom: 14px">
+      <span class="muted">Programs that send to an agent's OTLP endpoint with a client certificate, and endpoints that serve one. Agents get and renew the certificates; you only decide which names, and which agents may hold them.</span>
+      <span class="spacer"></span>
+      <button class="primary" onClick=${() => setDialog({})}>Approve a name</button>
+    </div>
+    <${ErrorBox} error=${error || failed} />
+    ${info && !info.ca_pin && html`<div class="error" role="status">This server has no certificate authority of its own, so it cannot sign certificates. Set <code>tls: {self_signed: true}</code> in its config.</div>`}
+    <div class="panel flush">${!list ? html`<div class="empty">Loading…</div>` : list.length === 0
+      ? html`<div class="empty">No names yet. Approve one for a program on a host whose agent should keep its certificate.</div>`
+      : html`<table>
+        <thead><tr><th>Name</th><th>Kind</th><th>Agents that may hold it</th><th>State</th><th>Last issued</th><th></th></tr></thead>
+        <tbody>${list.map(id => html`<tr>
+          <td><strong>${id.name}</strong>${id.names?.length > 0 && html`<div class="muted" style="font-size: 12px">${id.names.join(', ')}</div>`}</td>
+          <td>${id.kind === 'endpoint' ? 'endpoint' : 'client'}</td>
+          <td><code>${id.agents}</code></td>
+          <td><${Badge} kind=${id.revoked ? 'bad' : 'ok'}>${id.revoked ? 'revoked' : 'approved'}<//>
+            <div class="muted" style="font-size: 12px" title="Certificates carry the epoch; only the current one is accepted">epoch ${id.epoch}</div></td>
+          <td title=${id.last_issued ? new Date(id.last_issued).toLocaleString() : ''}>${id.last_issued ? ago(id.last_issued) : html`<span class="muted">never</span>`}</td>
+          <td style="text-align: right; white-space: nowrap">
+            <button class="small" onClick=${() => setDialog(id)}>${id.revoked ? 'Approve again' : 'Edit'}</button>${' '}
+            ${!id.revoked && html`<button class="small danger" onClick=${() => act(id, 'revoke')}>Revoke</button>`}${' '}
+            <button class="small" onClick=${() => act(id, 'delete')}>Delete</button></td>
+        </tr>`)}</tbody></table>`}</div>
+    <p class="muted">Certificates live 7 days and are renewed at half their life. An endpoint learns about a revocation within a minute
+      and keeps the last list it got while the server is away. <a href="/docs/apm#client-certificates-from-the-server" target="_blank" rel="noopener">How it works</a>,
+      or from a terminal: <code>vigil identity list</code>.</p>
+    ${dialog && html`<${ApproveIdentity} initial=${dialog} onClose=${() => { setDialog(null); reload(); }} />`}`;
+}
+
+function ApproveIdentity({ initial, onClose }) {
+  const [kind, setKind] = useState(initial.kind || 'client');
+  const [error, setError] = useState(null);
+  const editing = !!initial.name;
+  const submit = async e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const name = editing ? initial.name : f.get('name').trim();
+    const body = { kind, agents: f.get('agents').trim() };
+    if (kind === 'endpoint') body.names = f.get('names').split(',').map(s => s.trim()).filter(Boolean);
+    try {
+      await api('/api/v1/identities/' + encodeURIComponent(name), { method: 'PUT', body: JSON.stringify(body) });
+      onClose();
+    } catch (err) { setError(err.message); }
+  };
+  return html`<${Dialog} title=${editing ? (initial.revoked ? `Approve ${initial.name} again` : `Edit ${initial.name}`) : 'Approve a name'} onClose=${onClose}>
+    <form onSubmit=${submit}>
+      ${!editing && html`<div class="field"><label>Name (it becomes the sender's emitter)</label>
+        <input name="name" required autofocus pattern="[a-z0-9][a-z0-9._\-]{0,62}" placeholder="e.g. boop-chat" /></div>`}
+      <div class="field"><label>Kind</label>
+        <select value=${kind} onChange=${e => setKind(e.target.value)} disabled=${editing}>
+          <option value="client">client: a program that sends</option>
+          <option value="endpoint">endpoint: an agent's OTLP endpoint (its serving certificate)</option></select></div>
+      <div class="field"><label>Agents that may hold it (a regular expression of agent ids)</label>
+        <input name="agents" required value=${initial.agents || ''} placeholder="e.g. web-01 or gw-.*" /></div>
+      ${kind === 'endpoint' && html`<div class="field"><label>Host names and addresses it is reached by (comma-separated)</label>
+        <input name="names" required value=${(initial.names || []).join(', ')} placeholder="e.g. 192.0.2.10, otlp.internal" /></div>`}
+      ${kind === 'client' && html`<p class="muted">On the host, the agent's own file says where the certificate goes
+        (<code>identity.clients</code>); the server never decides paths.</p>`}
+      ${initial.revoked && html`<p class="muted">It comes back at a new epoch: certificates from before the revocation stay refused.</p>`}
+      <${ErrorBox} error=${error} />
+      <div class="actions"><button type="button" onClick=${onClose}>Cancel</button><button class="primary">${editing ? 'Save' : 'Approve'}</button></div>
+    </form>
+  <//>`;
+}
+

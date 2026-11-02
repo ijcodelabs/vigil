@@ -86,13 +86,14 @@ certificate from the server's own authority (the server needs
 their life; nobody copies a key or a certificate around.
 
 1. An admin approves names once, on the server: which agents may hold
-   them, and for the endpoint the names it is reached by.
+   them, and for the endpoint the names it is reached by. In **Fleet →
+   Identities**, or from a terminal (with `VIGIL_SERVER`,
+   `VIGIL_ADMIN_TOKEN` and `VIGIL_CA_PIN` set, as for `vigil apply`):
 
    ```bash
-   curl -X PUT -H "Authorization: Bearer $ADMIN" https://vigil.example.com/api/v1/identities/boop-chat \
-     -d '{"kind": "client", "agents": "boop-host"}'
-   curl -X PUT -H "Authorization: Bearer $ADMIN" https://vigil.example.com/api/v1/identities/gateway \
-     -d '{"kind": "endpoint", "agents": "boop-host", "names": ["192.0.2.10"]}'
+   vigil identity approve boop-chat -agents boop-host
+   vigil identity approve gateway -agents boop-host -endpoint -names 192.0.2.10
+   vigil identity list
    ```
 
 2. The endpoint's agent takes its certificate from the server and checks
@@ -129,7 +130,7 @@ their life; nobody copies a key or a certificate around.
 
 A certificate's name is the sender's `emitter`, as a token's is. A request
 with both must name the same emitter. **Revoking** a name
-(`POST /api/v1/identities/{name}/revoke`) moves it to a new epoch: every
+(Fleet → Identities → Revoke, or `vigil identity revoke NAME`) moves it to a new epoch: every
 certificate ever issued for it is refused at its next request, and none is
 issued until the name is approved again (`PUT`), at the new epoch. An
 endpoint learns the current epochs from the server every minute; while the
