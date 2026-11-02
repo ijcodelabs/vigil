@@ -316,3 +316,7 @@ table.kv td { border: none; padding: 2px 14px 2px 0; vertical-align: top; } tabl
   th, td { border-color: #ccc !important; color: #000 !important; }
   .badge { border: 1px solid #888; background: none !important; color: #000 !important; }
 }
+.chart .markers { position: absolute; inset: 0; pointer-events: none; }
+.chart .marker-flag { position: absolute; top: -2px; width: 9px; height: 9px; margin-left: -4px; padding: 0; border: 0;
+  border-radius: 2px; transform: rotate(45deg); cursor: pointer; pointer-events: auto; opacity: .85; }
+.chart .marker-flag:hover { opacity: 1; }

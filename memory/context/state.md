@@ -1275,6 +1275,34 @@ Item 4 of [agentic.md](agentic.md)'s "Then".
   the repository, and the answer was accepted onto the incident's
   timeline. The Boop side is described in Boop's own notes.
 
+## Work events from Boop on the charts (built 2026-11-02, uncommitted to GitHub)
+
+Step 1 of agentic.md's "Then". Boop's side is in Boop's notes
+(design-work-events-2026-11-02).
+
+- `otlp.logs.drop_attributes` (config `OTLP.Logs`, `Receiver.DropAttributes`,
+  checked in `convertLogs` by stored name). The `boop` integration drops
+  `actor_ref` and `approver_ref`; the `sshd` integration's redaction rule
+  `boop_jump_person` masks the Key ID's person part (`boop-jump:v1:masked:`),
+  and the shadow-access rule accepts that form. Checked in
+  `TestBoopShadowAccess` with the integration's own redaction.
+- `GET /api/v1/markers` (`markers.go`): `service` (Boop's `item_service`),
+  `work_item`, or `incident` (the item whose `boop.investigation.started`
+  carries that `vigil_incident`). One LogsQL query of the marker events,
+  newest 500, titles made from bounded fields, vigil's profile versions
+  added for a service; cached 20 s per query and 20-second range bucket.
+- UI: `Chart` takes `markers` and `onMarker` (lines and flags in uPlot's
+  draw hook); the service page draws them on both charts, lists them, and a
+  click runs "Did a change help?" at the marker's time; the SLO page draws
+  those of its service; an incident shows "In Boop: KEY" with its events.
+- Found live: a log's `service` stream label is the resource's
+  `service.name`, so an attribute named `service` is stored as
+  `attr_service`; the contract uses `item_service` / `item_source`.
+- Verified: unit tests; live with real VictoriaLogs and `vigil tracegen`
+  (Chat-shaped events from the contract's fixture through an agent with the
+  drop setting): no actor_ref stored, markers by service and by incident,
+  drawn on `orders`, a click ran the check.
+
 ## Next
 
 - Foundations, build order in `direction.md`: step 1 on paper (data

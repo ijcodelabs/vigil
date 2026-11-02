@@ -182,6 +182,14 @@ function SLOView({ name, admin }) {
 
   // The counts in buckets across the window: budget left as it went, the
   // bad share and the number of events.
+  // Changes to the SLO's service's work in its window (Boop's items and runs, vigil's profiles).
+  const { data: marks } = useLoad(async () => {
+    if (!st || !slo?.service) return null;
+    try {
+      return await api(`/api/v1/markers?service=${encodeURIComponent(slo.service)}&from=${Math.floor(Date.parse(st.from) / 1000)}&to=${Math.ceil(Date.parse(st.to) / 1000)}`);
+    } catch { return null; }
+  }, [st?.from, slo?.service], 60000);
+  const markers = marks?.markers || [];
   const { data: charts, error: chartError } = useLoad(async () => {
     if (!st) return null;
     const from = Date.parse(st.from) / 1000, to = Date.parse(st.to) / 1000;
@@ -300,13 +308,13 @@ function SLOView({ name, admin }) {
     ${charts && html`<div class="grid">
       <section class="panel tile" style="grid-column: span 12; height: 260px"><header><h2>Error budget left</h2>
         <span class="muted" style="font-size: 12px">over the window; the straight line spends it evenly</span></header>
-        <div class="tile-body"><${Chart} result=${charts.left} names=${['budget left', 'spent evenly']} height=${200} unit="ratio" sync="slo" /></div></section>
+        <div class="tile-body"><${Chart} result=${charts.left} names=${['budget left', 'spent evenly']} height=${200} unit="ratio" sync="slo" markers=${markers} /></div></section>
       <section class="panel tile" style="grid-column: span 6; height: 250px"><header><h2>Bad share</h2>
         <span class="muted" style="font-size: 12px">per ${charts.step / 3600} h</span></header>
-        <div class="tile-body"><${Chart} result=${charts.bad} names=${['bad', 'allowed']} height=${190} unit="ratio" min=${0} sync="slo" /></div></section>
+        <div class="tile-body"><${Chart} result=${charts.bad} names=${['bad', 'allowed']} height=${190} unit="ratio" min=${0} sync="slo" markers=${markers} /></div></section>
       <section class="panel tile" style="grid-column: span 6; height: 250px"><header><h2>Events</h2>
         <span class="muted" style="font-size: 12px">per ${charts.step / 3600} h</span></header>
-        <div class="tile-body"><${Chart} result=${charts.events} names=${['all', 'bad']} height=${190} min=${0} fill sync="slo" /></div></section>
+        <div class="tile-body"><${Chart} result=${charts.events} names=${['all', 'bad']} height=${190} min=${0} fill sync="slo" markers=${markers} /></div></section>
     </div>`}
 
     ${ops && ops.length > 0 && html`<h2 class="section">Where the budget goes, last 24 hours</h2>

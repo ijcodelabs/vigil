@@ -415,7 +415,8 @@ func (a *Agent) collect(ctx context.Context, col *config.Collection) {
 	}
 	if col.OTLP.Enabled {
 		rcv := &otlp.Receiver{Listen: col.OTLP.Listen, Log: a.log, DropLabels: col.OTLP.Metrics.DropLabels,
-			TokensFile: col.OTLP.TokensFile, CertFile: col.OTLP.TLS.CertFile, KeyFile: col.OTLP.TLS.KeyFile,
+			DropAttributes: col.OTLP.Logs.DropAttributes,
+			TokensFile:     col.OTLP.TokensFile, CertFile: col.OTLP.TLS.CertFile, KeyFile: col.OTLP.TLS.KeyFile,
 			Metrics: func(batch []model.Sample) {
 				for i := range batch {
 					for k, v := range col.Labels {

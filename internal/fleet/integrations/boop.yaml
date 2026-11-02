@@ -34,6 +34,12 @@ params:
     default: ""
     description: 'Fingerprint of the tenant''s SSH user CA as sshd logs it, SHA256:… (ssh-keygen -lf ca.pub). A certificate login counts as a Boop Jump login only with this CA.'
 config:
+  # Boop's events name people by pseudonyms (actor_ref, approver_ref); vigil
+  # keeps none. Boop's emitters should run with BOOP_OTLP_PEOPLE=off for
+  # vigil; this drops them anyway, whatever an emitter sends.
+  otlp:
+    logs:
+      drop_attributes: {actor_ref: true, approver_ref: true}
   scrape:
     static:
       - job: boop
@@ -164,7 +170,7 @@ rules:
       # counts as not Jump: it fails closed. Best effort; what this cannot
       # see is in the docs.
       - alert: SshLoginNotThroughBoopJump
-        expr: '_time:5m unit:~"^sshd?(@.+)?[.]service$" _msg:~"^Accepted " agent:~"^(${guarded_agents})$" !(ssh_key_type:~"-CERT$" ssh_key_id:~"^boop-jump:v1:[0-9a-f]{32}:[0-9a-f-]{36}:[0-9a-f-]{36}$" ssh_ca_fp:="${tenant_ca}") | stats by (agent, ssh_user, ssh_from, ssh_method) count() as logins'
+        expr: '_time:5m unit:~"^sshd?(@.+)?[.]service$" _msg:~"^Accepted " agent:~"^(${guarded_agents})$" !(ssh_key_type:~"-CERT$" ssh_key_id:~"^boop-jump:v1:(?:[0-9a-f]{32}|masked):[0-9a-f-]{36}:[0-9a-f-]{36}$" ssh_ca_fp:="${tenant_ca}") | stats by (agent, ssh_user, ssh_from, ssh_method) count() as logins'
         labels: {severity: critical}
         annotations:
           summary: 'SSH login to {{ $labels.agent }} as {{ $labels.ssh_user }} from {{ $labels.ssh_from }} ({{ $labels.ssh_method }}) did not come through Boop Jump'

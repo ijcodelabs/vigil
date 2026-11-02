@@ -258,7 +258,10 @@ function MetricBrowser({ win, onClose, onPick }) {
 // series in the Prometheus matrix shape; names, if given, label them.
 // Options: height, unit, min (bottom of the y axis), fill, legend (false
 // hides it), sync (charts sharing a key share their cursor).
-export function Chart({ result, onZoom, names, height = 300, unit = '', min, fill, legend, sync }) {
+// markers: [{time, kind, title}] drawn as vertical lines with a flag to
+// hover (its title) and click (onMarker).
+const MARKER_COLOR = { item: '--accent', investigation: '--warn', task: '--muted', config: '--ok' };
+export function Chart({ result, onZoom, names, height = 300, unit = '', min, fill, legend, sync, markers, onMarker }) {
   const el = useRef(null);
   useEffect(() => {
     const { series, from, to, step } = result;
@@ -295,6 +298,33 @@ export function Chart({ result, onZoom, names, height = 300, unit = '', min, fil
       legend: { show: legend ?? series.length <= 12 },
       cursor: { drag: { x: true, y: false, setScale: false }, ...(sync ? { sync: { key: sync } } : {}) },
       hooks: {
+        draw: [u => {
+          if (!markers || !markers.length) return;
+          const ctx = u.ctx, top = u.bbox.top, bottom = u.bbox.top + u.bbox.height;
+          let layer = u.over.querySelector('.markers');
+          if (!layer) { layer = document.createElement('div'); layer.className = 'markers'; u.over.appendChild(layer); }
+          layer.replaceChildren();
+          ctx.save();
+          ctx.setLineDash([3, 3]);
+          ctx.lineWidth = 1;
+          for (const m of markers) {
+            const t = new Date(m.time).getTime() / 1000;
+            if (t < u.scales.x.min || t > u.scales.x.max) continue;
+            const color = css.getPropertyValue(MARKER_COLOR[m.kind] || '--muted');
+            const x = u.valToPos(t, 'x', true);
+            ctx.strokeStyle = color;
+            ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke();
+            const flag = document.createElement('button');
+            flag.className = 'marker-flag';
+            flag.style.left = u.valToPos(t, 'x') + 'px';
+            flag.style.background = color;
+            flag.title = `${new Date(m.time).toLocaleString()} · ${m.title}`;
+            flag.setAttribute('aria-label', m.title);
+            if (onMarker) flag.onclick = e => { e.stopPropagation(); onMarker(m); };
+            layer.appendChild(flag);
+          }
+          ctx.restore();
+        }],
         setSelect: [u => {
           if (u.select.width < 4) return;
           const a = u.posToVal(u.select.left, 'x'), b = u.posToVal(u.select.left + u.select.width, 'x');
@@ -308,7 +338,7 @@ export function Chart({ result, onZoom, names, height = 300, unit = '', min, fil
     const retheme = () => plot.redraw(false);
     addEventListener('themechange', retheme);
     return () => { ro.disconnect(); removeEventListener('themechange', retheme); plot.destroy(); };
-  }, [result, height, unit, min, fill]);
+  }, [result, height, unit, min, fill, markers]);
   return html`<div class="chart" ref=${el}></div>`;
 }
 

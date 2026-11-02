@@ -103,8 +103,9 @@ type Server struct {
 	comingState   atomic.Pointer[comingState] // forecasts.go
 	spendState    atomic.Pointer[Spend]
 	// ai explains incidents (explain.go); nil when no provider is set up.
-	ai    ai.Provider
-	views viewState // views.go: turns in flight
+	ai      ai.Provider
+	views   viewState   // views.go: turns in flight
+	markers markerCache // markers.go
 }
 
 func New(cfg *config.Server, log *slog.Logger) (*Server, error) {
@@ -271,6 +272,7 @@ func (s *Server) Handler() http.Handler {
 	s.deliveryRoutes(mux)
 	s.verifyRoutes(mux)
 	s.spanCostRoutes(mux)
+	s.markerRoutes(mux)
 	mux.Handle("GET /docs/", ui.DocsHandler())
 	mux.Handle("/", ui.Handler())
 	return s.hardened(traced(mux))

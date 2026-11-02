@@ -31,6 +31,15 @@ after. How a release is made: [releasing.md](memory/context/releasing.md).
   compare the same time before and after a moment on requests, failures
   and the 95th percentile (or an SLO's bad events), with a verdict and its
   limits.
+- **Markers of Boop's work on charts:** Boop Chat's item, investigation and
+  workroom-run events (observability contract v1) are drawn on a service's
+  charts and its SLO's charts; click one to check whether the change helped.
+  An incident an investigation read shows its Boop item's events.
+  `GET /api/v1/markers`.
+- **`otlp.logs.drop_attributes`:** leave attributes out of incoming log
+  records; the `boop` integration drops Boop's person pseudonyms with it.
+- **SSH logins:** the person pseudonym inside a Boop Jump certificate's Key
+  ID is masked before it is sent (`boop-jump:v1:masked:…`).
 - **AI cost per service, trace and work item:** the Services list and a
   service's page show what its model calls cost; a trace page shows its
   model calls and their cost; spans carrying `work_item.key` add up per

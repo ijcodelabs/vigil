@@ -40,7 +40,7 @@ func TestClaudeCodeEvents(t *testing.T) {
 			records += len(sl.GetLogRecords())
 		}
 	}
-	entries := convertLogs(&otlpwire.LogsRequest{ResourceLogs: in.ResourceLogs}, "")
+	entries := convertLogs(&otlpwire.LogsRequest{ResourceLogs: in.ResourceLogs}, "", nil)
 	// Claude Code puts the event name in the body, so none is skipped.
 	if len(entries) != records {
 		t.Fatalf("%d of %d events kept", len(entries), records)

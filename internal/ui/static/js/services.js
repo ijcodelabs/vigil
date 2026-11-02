@@ -1,4 +1,4 @@
-import { html, useState, useEffect, useMemo, api, useLoad, setParams, Badge, ErrorBox, fmtNum, fmtUnit } from './lib.js';
+import { html, useState, useEffect, useMemo, useRef, api, useLoad, setParams, Badge, ErrorBox, fmtNum, fmtUnit } from './lib.js';
 import { Chart, useRange, rangeParams, COLORS, parseLines } from './explore.js';
 import { TimeRange } from './timerange.js';
 import { MapView } from './map.js';
@@ -211,12 +211,27 @@ function ServiceMap({ services, range, win }) {
 // after a moment (a deploy, a config change): the same time before and
 // after, on requests, failures and the 95th percentile.
 const VERDICT = { better: 'ok', worse: 'bad', mixed: 'warn', 'no change': 'info', 'not enough data': 'off' };
-function CheckChange({ name }) {
+function CheckChange({ name, at }) {
   const local = d => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
   const [when, setWhen] = useState(local(new Date(Date.now() - 30 * 60000)));
   const [win, setWin] = useState('15m');
   const [res, setRes] = useState(null);
   const [err, setErr] = useState(null);
+  const box = useRef(null);
+  // A marker that was clicked: check at its time.
+  useEffect(() => {
+    if (!at) return;
+    setWhen(local(new Date(at.time)));
+    box.current?.scrollIntoView({ block: 'nearest' });
+    run(new Date(at.time));
+  }, [at]);
+  const run = async d => {
+    setErr(null);
+    try {
+      const t = Math.floor(d.getTime() / 1000);
+      setRes(await api(`/api/v1/verify?service=${encodeURIComponent(name)}&at=${t}&window=${win}`));
+    } catch (x) { setErr(x.message); setRes(null); }
+  };
   const check = async e => {
     e.preventDefault();
     setErr(null);
@@ -226,7 +241,8 @@ function CheckChange({ name }) {
     } catch (x) { setErr(x.message); setRes(null); }
   };
   const val = (v, unit) => (v == null ? '–' : fmtUnit(v, unit));
-  return html`<h2 class="section">Did a change help?</h2>
+  return html`<h2 class="section" ref=${box}>Did a change help?</h2>
+    ${at && html`<p class="muted">At: ${at.title}</p>`}
     <form class="row" style="margin-bottom: 10px" onSubmit=${check}>
       <label style="margin: 0">Changed at <input type="datetime-local" value=${when} onChange=${e => setWhen(e.target.value)} required /></label>
       <label style="margin: 0">compare <select value=${win} onChange=${e => setWin(e.target.value)}>
@@ -294,6 +310,16 @@ function ServiceView({ name, params }) {
     return rows.sort((x, y) => (x._time < y._time ? 1 : -1));
   }, [range, name, errorsOnly, minMs, op], 30000);
 
+  // What Boop did to this service's work, and vigil's own changes, in the range.
+  const { data: marks } = useLoad(async () => {
+    const [from, to] = win();
+    try {
+      const r = await api(`/api/v1/markers?service=${encodeURIComponent(name)}&from=${Math.floor(from)}&to=${Math.ceil(to)}`);
+      return r;
+    } catch { return { markers: [] }; } // a name Boop could not send (not its pattern): no markers
+  }, [range, name], 30000);
+  const markers = marks?.markers || [];
+  const [checkAt, setCheckAt] = useState(null);
   const zoom = (a, b) => setRange({ from: a, to: b });
   const svc = n => html`<a href=${'#/services/' + encodeURIComponent(n) + '?' + new URLSearchParams(rangeParams(range))}>${n}</a>`;
   return html`
@@ -303,9 +329,11 @@ function ServiceView({ name, params }) {
     ${data && html`
       <div class="grid">
         <section class="panel tile" style="grid-column: span 6; height: 250px"><header><h2>Requests per second</h2></header>
-          <div class="tile-body"><${Chart} result=${data.rate} names=${data.rate.series.map(s => s.metric.status)} height=${190} unit="ops/s" min=${0} fill onZoom=${zoom} sync="svc" /></div></section>
+          <div class="tile-body"><${Chart} result=${data.rate} names=${data.rate.series.map(s => s.metric.status)} height=${190} unit="ops/s" min=${0} fill onZoom=${zoom} sync="svc"
+            markers=${markers} onMarker=${setCheckAt} /></div></section>
         <section class="panel tile" style="grid-column: span 6; height: 250px"><header><h2>Duration</h2></header>
-          <div class="tile-body"><${Chart} result=${data.dur} names=${data.dur.series.map(s => s.metric.q)} height=${190} unit="seconds" min=${0} onZoom=${zoom} sync="svc" /></div></section>
+          <div class="tile-body"><${Chart} result=${data.dur} names=${data.dur.series.map(s => s.metric.q)} height=${190} unit="seconds" min=${0} onZoom=${zoom} sync="svc"
+            markers=${markers} onMarker=${setCheckAt} /></div></section>
       </div>
       ${data.aiCost.length > 0 && html`<p class="muted">Model calls in this time cost
         about <strong>${usd(data.aiCost.reduce((a, r) => a + r.usd, 0))}</strong>
@@ -322,7 +350,9 @@ function ServiceView({ name, params }) {
           <td class="num">${o.errors > 0 ? html`<${Badge} kind=${o.errors >= 5 ? 'bad' : 'warn'}>${o.errors.toFixed(1)}%<//>` : '0%'}</td>
           <td class="num">${isFinite(o.avg) ? fmtUnit(o.avg, 'seconds') : '–'}</td>
           <td class="num">${isFinite(o.p95) ? fmtUnit(o.p95, 'seconds') : '–'}</td></tr>`)}</tbody></table></div>
-      <${CheckChange} name=${name} />
+      ${markers.length > 0 && html`<details class="marker-list"><summary>${markers.length} change${markers.length === 1 ? '' : 's'} in this range${marks.more ? ' (more not shown)' : ''}: items, investigations, workroom runs, profiles</summary>
+        <ul>${markers.slice().reverse().map(m => html`<li><a href="#" onClick=${e => { e.preventDefault(); setCheckAt(m); }}>${new Date(m.time).toLocaleString()}</a> · ${m.title}</li>`)}</ul></details>`}
+      <${CheckChange} name=${name} at=${checkAt} />
       ${(data.calls.length > 0 || data.callers.length > 0) && html`
         <h2 class="section">Depends on</h2>
         <div class="panel flush"><table>

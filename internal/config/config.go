@@ -337,6 +337,12 @@ type OTLP struct {
 		// what tools that put a session id on every point send.
 		DropLabels map[string]bool `yaml:"drop_labels"`
 	} `yaml:"metrics"`
+	Logs struct {
+		// DropAttributes leaves attributes out of every log record, by name
+		// as stored (actor.ref is actor_ref). A map so that profiles and
+		// integrations add to it; false keeps one another profile dropped.
+		DropAttributes map[string]bool `yaml:"drop_attributes"`
+	} `yaml:"logs"`
 }
 
 // Redact masks secrets in what the agent sends: the message and fields of

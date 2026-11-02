@@ -68,6 +68,7 @@ function History({ id, onClose, admin, ai, explain }) {
     ${inc && html`
       <p class="muted">${inc.resource} · ${inc.state} · first seen ${new Date(inc.first_seen).toLocaleString()}</p>
       <${Explanations} id=${id} admin=${admin} ai=${ai} start=${explain} />
+      <${BoopWork} id=${id} since=${inc.first_seen} />
       <details style="margin-top: 10px"><summary class="muted" style="cursor: pointer">History (${data.events.length})</summary>
         <div class="panel flush" style="margin-top: 6px"><table><tbody>${data.events.map(e => html`<tr>
           <td style="white-space: nowrap">${new Date(e.time).toLocaleString()}</td><td>${e.type}</td><td class="muted">${e.detail}</td></tr>`)}</tbody></table></div></details>
@@ -75,6 +76,20 @@ function History({ id, onClose, admin, ai, explain }) {
         <pre class="secret" style="user-select: text">${JSON.stringify({ labels: inc.labels, annotations: inc.annotations }, null, 2)}</pre></details>`}
     <div class="actions"><span class="spacer"></span><button onClick=${onClose}>Close</button></div>
   <//>`;
+}
+
+// BoopWork: the Boop item an investigation of this incident belongs to, and
+// what happened to it, from Boop's events. Shown only when that exact link
+// exists; Boop is the record, this is its events as received.
+function BoopWork({ id, since }) {
+  const { data } = useLoad(async () => {
+    const from = Math.floor(new Date(since).getTime() / 1000) - 3600;
+    try { return await api(`/api/v1/markers?incident=${id}&from=${from}&to=${Math.ceil(Date.now() / 1000)}`); } catch { return null; }
+  }, [id], 30000);
+  if (!data || !data.work_item || !data.markers.length) return null;
+  return html`<details open style="margin-top: 10px"><summary class="muted" style="cursor: pointer">In Boop: ${data.work_item} (${data.markers.length})</summary>
+    <div class="panel flush" style="margin-top: 6px"><table><tbody>${data.markers.map(m => html`<tr>
+      <td style="white-space: nowrap">${new Date(m.time).toLocaleString()}</td><td>${m.title}</td></tr>`)}</tbody></table></div></details>`;
 }
 
 // Explanations: the latest one, or a preview of what would be sent and a
