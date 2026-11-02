@@ -117,9 +117,11 @@ Point Boop at it with `BOOP_OTLP_LOGS_URL=http://127.0.0.1:4318/v1/logs` and
 `--otlp-logs-url` and `--otlp-token-file`. They require `https` unless the
 endpoint is on loopback.
 
-Boop Chat can use a client certificate instead of a token (`--otlp-ca-file`,
-`--otlp-cert-file`, `--otlp-key-file`), kept and renewed by the vigil agent
-on its host: see APM, "Client certificates from the server".
+Boop's emitters can use a client certificate instead of a token, kept and
+renewed by the vigil agent on their host: `BOOP_OTLP_CA_FILE`,
+`BOOP_OTLP_CERT_FILE` and `BOOP_OTLP_KEY_FILE` on Boop, `--otlp-ca-file`,
+`--otlp-cert-file` and `--otlp-key-file` on the gateway, the agent and Boop
+Chat. See APM, "Client certificates from the server".
 
 vigil keeps no person ids. Set `BOOP_OTLP_PEOPLE=off` on Boop and
 `--otlp-people=off` on the gateway and the agent, so that their events

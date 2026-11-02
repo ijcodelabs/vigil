@@ -124,8 +124,7 @@ their life; nobody copies a key or a certificate around.
 
    The directory must exist; files are replaced whole and never written
    through a symbolic link. The sender reads them again when they change
-   (Boop's emitters do: `--otlp-ca-file`, `--otlp-cert-file`,
-   `--otlp-key-file`).
+   (Boop's emitters do: see Boop).
 
 A certificate's name is the sender's `emitter`, as a token's is. A request
 with both must name the same emitter. **Revoking** a name
