@@ -46,6 +46,7 @@ type fleetState struct {
 	isStable map[*fleet.Profile]bool // the earlier versions kept for those rollouts
 	polls    map[string]uint64       // agent id -> how often it has polled since the server started
 	seen     map[string]time.Time    // agent id -> its last poll
+	skipped  map[string][]string     // agent id -> settings it skipped in its managed config
 }
 
 // setAttrs recomputes what selectors see for one agent: its labels and
@@ -83,6 +84,9 @@ type FleetAgent struct {
 	// ConfigState is "in sync", "pending" (not picked up yet) or "error".
 	ConfigState string `json:"config_state"`
 	ConfigError string `json:"config_error,omitempty"`
+	// ConfigSkipped are settings of its managed config the agent does not
+	// know (it is older than the server): skipped, the rest applied.
+	ConfigSkipped []string `json:"config_skipped,omitempty"`
 	// Limited names what the server is holding this agent back on
 	// ("metrics", "logs"): it sent more than the server's limits allow.
 	Limited []string `json:"limited,omitempty"`
@@ -121,7 +125,7 @@ func (s *Server) loadFleet() error {
 	f.labels, f.facts = map[string]map[string]string{}, map[string]map[string]string{}
 	f.inventory, f.detected = map[string]*model.Inventory{}, map[string][]string{}
 	f.rollouts, f.isStable = map[string]*rollout{}, map[*fleet.Profile]bool{}
-	f.polls, f.seen = map[string]uint64{}, map[string]time.Time{}
+	f.polls, f.seen, f.skipped = map[string]uint64{}, map[string]time.Time{}, map[string][]string{}
 	if err := s.reloadCatalog(); err != nil {
 		return err
 	}
@@ -341,6 +345,7 @@ func (s *Server) handleAgents(w http.ResponseWriter, _ *http.Request) {
 		if attrs == nil { // never polled: all we know is its id
 			attrs = fleet.Attributes(a.ID, nil, nil)
 		}
+		fa.ConfigSkipped = f.skipped[a.ID]
 		rep := reports[a.ID]
 		want := ""
 		res, rerr := f.current(a.ID, attrs)
@@ -676,10 +681,11 @@ func (s *Server) handleAgentConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		Labels      map[string]string `json:"labels"`
-		Facts       map[string]string `json:"facts"`
-		ConfigHash  string            `json:"config_hash"`
-		ConfigError string            `json:"config_error"`
+		Labels        map[string]string `json:"labels"`
+		Facts         map[string]string `json:"facts"`
+		ConfigHash    string            `json:"config_hash"`
+		ConfigError   string            `json:"config_error"`
+		ConfigSkipped []string          `json:"config_skipped"`
 		// Inventory is sent only when it changed since the agent last sent it.
 		Inventory *model.Inventory `json:"inventory"`
 	}
@@ -712,6 +718,14 @@ func (s *Server) handleAgentConfig(w http.ResponseWriter, r *http.Request) {
 	f.setAttrs(id)
 	f.polls[id]++
 	f.seen[id] = time.Now()
+	if len(in.ConfigSkipped) > 50 {
+		in.ConfigSkipped = in.ConfigSkipped[:50]
+	}
+	if len(in.ConfigSkipped) > 0 {
+		f.skipped[id] = in.ConfigSkipped
+	} else {
+		delete(f.skipped, id)
+	}
 	res, rerr := f.current(id, f.attrs[id])
 	f.mu.Unlock()
 

@@ -63,7 +63,10 @@ type Agent struct {
 	mu         sync.Mutex
 	remoteHash string // hash of the managed config in use; "" when running the local file
 	remoteErr  string // why the last managed config could not be used
-	eventsErr  string // why runtime events are off although configured
+	// remoteSkipped are settings in the managed config this agent does
+	// not know (from a newer server): skipped, the rest applied.
+	remoteSkipped []string
+	eventsErr     string // why runtime events are off although configured
 	// images lists the images of running containers, when the current
 	// config has Docker switched on.
 	images func() []string
@@ -170,7 +173,7 @@ func (a *Agent) Run(ctx context.Context) {
 	if *a.cfg.RemoteConfig {
 		cache := filepath.Join(a.cfg.SpoolDir, "managed-config.yaml")
 		if text, err := os.ReadFile(cache); err == nil {
-			if c, err := a.parseManaged(string(text)); err == nil {
+			if c, _, err := a.parseManaged(string(text)); err == nil {
 				cur, a.remoteHash = c, config.Hash(string(text))
 			}
 		}
@@ -200,16 +203,16 @@ func (a *Agent) Run(ctx context.Context) {
 
 // parseManaged reads a config sent by the server. The labels from the
 // agent's own file stay on top: they say what this host is.
-func (a *Agent) parseManaged(text string) (*config.Collection, error) {
-	c, err := config.ParseCollection(text)
+func (a *Agent) parseManaged(text string) (*config.Collection, []string, error) {
+	c, skipped, err := config.ParseCollectionSkipping(text)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if c.Labels == nil {
 		c.Labels = map[string]string{}
 	}
 	maps.Copy(c.Labels, a.cfg.LocalLabels)
-	return c, validate(c)
+	return c, skipped, validate(c)
 }
 
 // collect runs the sources of one collection config until ctx ends.
@@ -513,7 +516,7 @@ func (a *Agent) pollConfig(ctx context.Context, cache string, updates chan<- *co
 		// Spread the polls of a large fleet instead of all arriving together.
 		wait = a.PollEvery + time.Duration(rand.Int64N(int64(a.PollEvery)/5+1))
 		a.mu.Lock()
-		hash, lastErr, images := a.remoteHash, a.remoteErr, a.images
+		hash, lastErr, skipped, images := a.remoteHash, a.remoteErr, a.remoteSkipped, a.images
 		if lastErr == "" {
 			lastErr = a.eventsErr
 		}
@@ -522,6 +525,9 @@ func (a *Agent) pollConfig(ctx context.Context, cache string, updates chan<- *co
 		body := map[string]any{
 			"labels": a.cfg.LocalLabels, "facts": facts.Collect(ctx, a.cfg.AgentID, a.version),
 			"config_hash": hash, "config_error": lastErr,
+		}
+		if len(skipped) > 0 {
+			body["config_skipped"] = skipped
 		}
 		if inv == nil || time.Since(invTaken) > min(5*time.Minute, 10*a.PollEvery) {
 			inv, _ = json.Marshal(inventory.Collect(ctx, images))
@@ -561,7 +567,7 @@ func (a *Agent) pollConfig(ctx context.Context, cache string, updates chan<- *co
 		}
 
 		var next *config.Collection
-		newHash, newErr := hash, ""
+		newHash, newErr, newSkipped := hash, "", skipped
 		switch resp.StatusCode {
 		case http.StatusNotModified:
 			continue
@@ -570,14 +576,18 @@ func (a *Agent) pollConfig(ctx context.Context, cache string, updates chan<- *co
 				continue
 			}
 			os.Remove(cache)
-			newHash = ""
+			newHash, newSkipped = "", nil
 		case http.StatusOK:
-			c, err := a.parseManaged(string(respBody))
+			c, sk, err := a.parseManaged(string(respBody))
 			if err != nil {
 				a.log.Error("managed config rejected, keeping the current one", "err", err)
 				newErr = err.Error()
 				break
 			}
+			if len(sk) > 0 {
+				a.log.Warn("managed config applied without settings this agent version does not know", "skipped", strings.Join(sk, ", "))
+			}
+			newSkipped = sk
 			if err := os.WriteFile(cache+".tmp", respBody, 0o640); err == nil {
 				os.Rename(cache+".tmp", cache)
 			}
@@ -587,7 +597,7 @@ func (a *Agent) pollConfig(ctx context.Context, cache string, updates chan<- *co
 			continue
 		}
 		a.mu.Lock()
-		a.remoteHash, a.remoteErr = newHash, newErr
+		a.remoteHash, a.remoteErr, a.remoteSkipped = newHash, newErr, newSkipped
 		a.mu.Unlock()
 		if newHash != hash {
 			select {

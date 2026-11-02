@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -12,7 +13,8 @@ import (
 // fakeAgent polls for config the way an agent does, and remembers what it runs.
 type fakeAgent struct {
 	id, hash, config string
-	refuse           bool // behaves as if it could not apply what it is given
+	refuse           bool     // behaves as if it could not apply what it is given
+	skipped          []string // settings it reports skipping (an older agent)
 }
 
 func (a *fakeAgent) poll(t *testing.T, base string) {
@@ -20,6 +22,9 @@ func (a *fakeAgent) poll(t *testing.T, base string) {
 	report := map[string]any{"labels": map[string]string{"role": "web"}, "facts": map[string]string{"os": "linux"}, "config_hash": a.hash}
 	if a.refuse {
 		report["config_error"] = "cannot apply: disk on fire"
+	}
+	if a.skipped != nil {
+		report["config_skipped"] = a.skipped
 	}
 	body, _ := json.Marshal(report)
 	req, _ := http.NewRequest("POST", base+"/api/v1/agent/config", strings.NewReader(string(body)))
@@ -259,5 +264,46 @@ func TestStagedRollout(t *testing.T) {
 		if code, body, _ := c.do("PUT", "/api/v1/fleet/profiles/bad", doc); code != 400 || !strings.Contains(body, want) {
 			t.Errorf("%s: %d %s", doc, code, body)
 		}
+	}
+}
+
+// TestSkippedSettingsShown: an older agent's skipped settings are on the
+// Fleet list until it reports none.
+func TestSkippedSettingsShown(t *testing.T) {
+	store := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }))
+	defer store.Close()
+	_, central := startServer(t, store.URL)
+	c := newClient(t, central.URL)
+	if code := c.login("admin", "admin-token-secret"); code != 204 {
+		t.Fatalf("login: %d", code)
+	}
+	a := &fakeAgent{id: "old-1", skipped: []string{"otlp.shiny_new"}}
+	a.poll(t, central.URL)
+	// One push, so the server lists it.
+	req, _ := http.NewRequest("POST", central.URL+"/api/v1/write", strings.NewReader(""))
+	req.Header.Set("Authorization", "Bearer ingest")
+	req.Header.Set("X-Vigil-Agent", "old-1")
+	if resp, err := http.DefaultClient.Do(req); err != nil || resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("push: %v %v", resp.StatusCode, err)
+	}
+	list := func() map[string]any {
+		_, body, _ := c.do("GET", "/api/v1/agents", "")
+		var agents []map[string]any
+		json.Unmarshal([]byte(body), &agents)
+		for _, x := range agents {
+			if x["id"] == "old-1" {
+				return x
+			}
+		}
+		t.Fatalf("not listed: %s", body)
+		return nil
+	}
+	if got := fmt.Sprint(list()["config_skipped"]); got != "[otlp.shiny_new]" {
+		t.Errorf("skipped: %s", got)
+	}
+	a.skipped = nil
+	a.poll(t, central.URL)
+	if got, ok := list()["config_skipped"]; ok {
+		t.Errorf("still shown after the upgrade: %v", got)
 	}
 }
