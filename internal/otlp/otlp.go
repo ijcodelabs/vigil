@@ -154,7 +154,10 @@ func (r *Receiver) Run(ctx context.Context) error {
 	} else if r.TokensFile != "" && !loopback(ln.Addr()) {
 		r.Log.Warn("OTLP tokens travel in clear: set otlp.tls for an endpoint that is not on loopback", "addr", ln.Addr().String())
 	}
-	srv := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second}
+	// Read/Idle timeouts, so that slow or idle clients cannot hold
+	// connections for ever; OTLP requests are small and quick.
+	srv := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout: time.Minute, WriteTimeout: time.Minute, IdleTimeout: 2 * time.Minute}
 	go func() {
 		<-ctx.Done()
 		shut, cancel := context.WithTimeout(context.Background(), 3*time.Second)
