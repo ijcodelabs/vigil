@@ -432,7 +432,12 @@ func (s *Server) Run(ctx context.Context) error {
 		go c.Run(ctx)
 	}
 
+	// Without Read/Idle timeouts Go never closes a connection by itself: a
+	// client that sends a body a byte at a time, or keeps a connection idle
+	// after one request, holds it for ever, and enough of them lock everyone
+	// out. The read limit leaves room for a 64 MB capture on a slow link.
 	srv := &http.Server{Addr: s.cfg.Listen, Handler: s.Handler(), ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout: 5 * time.Minute, WriteTimeout: 10 * time.Minute, IdleTimeout: 2 * time.Minute,
 		ErrorLog: stdlog.New(connErrors{s.log}, "", 0)}
 	errc := make(chan error, 1)
 	switch {

@@ -167,7 +167,10 @@ func (r *Relay) Handler() http.Handler {
 
 // Run serves until ctx is cancelled.
 func (r *Relay) Run(ctx context.Context) error {
+	// Read/Idle timeouts, so that slow or idle clients cannot hold
+	// connections for ever (see the server's Run).
 	srv := &http.Server{Addr: r.cfg.Listen, Handler: r.Handler(), ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout: 5 * time.Minute, WriteTimeout: 10 * time.Minute, IdleTimeout: 2 * time.Minute,
 		ErrorLog: slog.NewLogLogger(r.log.Handler(), slog.LevelDebug)}
 	errc := make(chan error, 1)
 	switch {

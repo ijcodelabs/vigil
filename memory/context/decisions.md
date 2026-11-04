@@ -123,3 +123,15 @@ vulnerability in code never called is not a reason to block a PR, and
 often has no fix). The vendored UI files are the unchanged npm files,
 listed with checksums in `internal/ui/VENDOR.md` and held there by a test.
 
+**Every listener has read, write and idle timeouts, and no Multipath TCP
+(2026-11-04).** `ReadHeaderTimeout` alone left connections open for ever
+to a client that sent its body slowly or stayed idle after a request.
+Server and relay: 5 min to read a request (a 64 MB capture on a slow
+link), 10 min to answer, 2 min idle; OTLP 1/1/2 min. No handler streams,
+so a write timeout breaks nothing. A per-address connection cap is not
+built: the timeouts bound how long each connection lasts, and a reverse
+proxy in front can cap counts. `godebug multipathtcp=0` in go.mod turns
+off the MPTCP default Go has had since 1.24: vigil gains nothing from it,
+and the known root exploit of the kernel TCP flaw CVE-2026-98432 went
+through an MPTCP listener. Checked live: with Go's default `ss -Mlnp`
+lists the relay, with this setting it does not.

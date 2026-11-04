@@ -14,6 +14,17 @@ after. How a release is made: [releasing.md](memory/context/releasing.md).
 
 ## Unreleased
 
+### Security
+
+- The server, the relay and the agent's OTLP endpoint close connections
+  that stay idle for 2 minutes or take too long to send a request (5
+  minutes; 1 for OTLP). Before, a client could hold a connection open for
+  ever, and enough of them shut everyone out.
+- The binaries listen and connect with plain TCP instead of Multipath TCP,
+  which Go turns on by default and which the known exploit of the Linux
+  TCP flaw CVE-2026-98432 goes through. This does not replace a fixed
+  kernel on the host.
+
 ## v0.2.0 (2026-11-02)
 
 ### Added
