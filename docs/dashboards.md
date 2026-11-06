@@ -3,7 +3,9 @@
 A dashboard is a grid of panels that share one time range, one refresh
 interval and one set of variables.
 
-A new server comes with **Hosts**, **Containers**, **Logs and security**,
+A new server comes with **Hosts**, **Containers**, **Logs and security**
+(log lines, errors, security detections, and failed SSH logins with the
+addresses and user names tried),
 **Site checks** (what answers, how fast, and the days left on
 certificates), **vigil agents** (what each agent sends and what it costs
 its host), **AI costs** (all AI spending together: applications,
