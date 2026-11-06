@@ -47,8 +47,11 @@ large fleets. Expect rough edges, and please say what you find.
 - **Coming up**: disks that will be full within 30 days (as a range, only
   when the data is clean enough to say), certificates running out, agents
   held back by their limits.
-- **AI spend** of the last day against a usual one, and alerts that keep
-  coming back.
+- **AI spend** of the last day against a usual one, with the totals of the
+  last 30 days and the last year, and alerts that keep coming back.
+- **Long-term history** (optional): hourly rollups of AI cost, SLOs,
+  hosts and site checks kept for years in a second metric store, next to
+  the main store's short retention.
 - **AI explanations, if you want them**: an admin previews exactly what
   would be sent about an incident, then asks a language model why it
   happened. vigil picks and masks the evidence, every claim in the answer

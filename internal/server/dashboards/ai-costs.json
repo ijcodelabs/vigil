@@ -74,6 +74,35 @@
       ]
     },
     {
+      "title": "History: billed in the shown time",
+      "type": "stat",
+      "source": "history",
+      "w": 3,
+      "h": 2,
+      "unit": "",
+      "queries": [
+        {
+          "expr": "sum(sum_over_time(ai_cost_usd_per_hour{billing!=\"subscription\"}[$__range])) or vector(0)"
+        }
+      ]
+    },
+    {
+      "title": "History: AI cost per day, by source (USD)",
+      "type": "timeseries",
+      "source": "history",
+      "w": 9,
+      "h": 3,
+      "unit": "",
+      "min": 0,
+      "fill": true,
+      "queries": [
+        {
+          "expr": "sum by (source, billing) (sum_over_time(ai_cost_usd_per_hour[1d]))",
+          "legend": "{{source}} ({{billing}})"
+        }
+      ]
+    },
+    {
       "title": "All AI: by who spent it, in the shown time (USD)",
       "type": "table",
       "w": 6,

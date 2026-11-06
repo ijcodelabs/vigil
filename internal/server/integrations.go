@@ -145,8 +145,16 @@ func (s *Server) applyRules(ctx context.Context) error {
 		}
 		file.Groups = append(file.Groups, g)
 	}
+	if s.history != nil {
+		for _, g := range historyRuleGroups() {
+			if !taken[g.Name] {
+				file.Groups = append(file.Groups, g)
+			}
+		}
+	}
 	for i := range file.Groups {
 		alignPerMinute(&file.Groups[i])
+		alignHistory(&file.Groups[i])
 	}
 	s.rulesStarted.Store(true)
 	return s.rules.Apply(ctx, file)
