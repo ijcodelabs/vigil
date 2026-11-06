@@ -26,6 +26,9 @@ after. How a release is made: [releasing.md](memory/context/releasing.md).
   write there with `store: history`, dashboard panels read it ("PromQL
   (history, hourly)"), and the AI costs dashboard has two History panels.
 - Time ranges of 30 days, 90 days and a year.
+- The **Logs and security** dashboard counts failed SSH logins: a total,
+  a chart per agent, and the addresses and user names tried most. It reads
+  sshd's lines in the journal and needs no integration.
 
 ### Security
 
