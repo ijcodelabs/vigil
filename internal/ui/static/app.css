@@ -29,6 +29,35 @@
   --accent: #d9601f; --accent-text: #ffffff; --link: #1f62d6; --ok: #1a7f4b; --warn: #a06c00; --bad: #c4322b; --info: #1f62d6;
   color-scheme: light;
 }
+/* Tempest: an "ops console" theme, teal on deep navy. Just tokens, plus the
+   signature touches below (backdrop grid, nav glow) scoped to this theme. */
+:root[data-theme="tempest"] {
+  --bg: #071017; --panel: #0b1822; --panel-2: #102534; --border: #1e4053; --text: #e0e0e0; --muted: #6f8794;
+  --accent: #2fffd2; --accent-text: #04121a; --accent-glow: rgba(47, 255, 210, .18);
+  --link: #45c8ff; --ok: #00ff88; --warn: #ffab40; --bad: #ff5470; --info: #00d4ff;
+  color-scheme: dark;
+}
+/* Blueprint grid + faint diagonal hatch behind the shell. */
+:root[data-theme="tempest"] .shell::before {
+  content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image:
+    linear-gradient(rgba(47, 255, 210, .035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(47, 255, 210, .028) 1px, transparent 1px),
+    repeating-linear-gradient(135deg, transparent 0 42px, rgba(47, 255, 210, .022) 42px 43px, transparent 43px 86px);
+  background-size: 50px 50px, 50px 50px, auto;
+}
+:root[data-theme="tempest"] .side,
+:root[data-theme="tempest"] .main { position: relative; z-index: 1; }
+:root[data-theme="tempest"] .side { background: linear-gradient(180deg, #081621, var(--panel) 42%, #071017); }
+/* The active nav item glows. */
+:root[data-theme="tempest"] .nav a.on {
+  background: var(--accent-glow); color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent), 0 0 14px rgba(47, 255, 210, .14);
+}
+/* Section headers read as small-caps labels. */
+:root[data-theme="tempest"] h2.section {
+  text-transform: uppercase; letter-spacing: .09em; font-size: 12.5px; color: var(--muted);
+}
 
 * { box-sizing: border-box; }
 html, body { height: 100%; }
@@ -45,13 +74,42 @@ code, .mono { font-family: var(--mono); font-size: 12.5px; }
 .shell { display: grid; grid-template-columns: 208px 1fr; min-height: 100vh; }
 .side { background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 14px 10px; position: sticky; top: 0; height: 100vh; }
 .brand { display: flex; align-items: center; gap: 9px; font-weight: 650; font-size: 16px; padding: 2px 8px 16px; }
-.brand i { width: 22px; height: 22px; border-radius: 6px; background: var(--accent); display: inline-block; }
-.nav a { display: block; padding: 8px 10px; border-radius: 6px; color: var(--text); margin-bottom: 2px; }
+.brand i { width: 22px; height: 22px; border-radius: 6px; background: var(--accent); display: inline-block; flex: none; }
+.nav a { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: var(--text); margin-bottom: 2px; position: relative; }
 .nav a:hover { background: var(--panel-2); text-decoration: none; }
 .nav a.on { background: var(--panel-2); box-shadow: inset 3px 0 0 var(--accent); font-weight: 600; }
+.nav a .ic { width: 18px; height: 18px; flex: none; display: inline-flex; color: var(--muted); }
+.nav a .ic svg { width: 18px; height: 18px; display: block; }
+.nav a.on .ic, .nav a:hover .ic { color: var(--accent); }
+.nav a .lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .side .who { border-top: 1px solid var(--border); padding: 12px 8px 0; font-size: 13px; }
-.side .who button { margin-top: 8px; margin-right: 6px; }
 .side .who .version { font-size: 11.5px; margin-top: 2px; font-family: var(--mono); overflow-wrap: anywhere; }
+.side .sidebtns { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.side .sidebtns button { display: flex; align-items: center; gap: 8px; width: 100%; justify-content: flex-start; text-align: left; }
+.side .sidebtns button .ic { width: 16px; height: 16px; flex: none; display: inline-flex; }
+.side .sidebtns button .ic svg { width: 16px; height: 16px; display: block; }
+
+/* Collapsed sidebar: an icons-only rail, labels on hover. Desktop only;
+   the narrow-screen layout below turns the sidebar into a top bar instead. */
+@media (min-width: 761px) {
+  .shell.collapsed { grid-template-columns: 56px 1fr; }
+  /* Sit above .main so hover labels, which overflow the rail, are not
+     painted over (the tempest theme gives .side and .main a z-index). */
+  .shell.collapsed .side { padding: 14px 8px; position: relative; z-index: 30; }
+  .shell.collapsed .brand { justify-content: center; padding: 2px 0 16px; }
+  .shell.collapsed .brandname { display: none; }
+  .shell.collapsed .nav a { justify-content: center; padding: 8px 0; }
+  .shell.collapsed .nav a .lbl {
+    position: absolute; left: calc(100% + 10px); top: 50%; transform: translateY(-50%);
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+    padding: 4px 10px; box-shadow: 0 6px 20px rgba(0, 0, 0, .35); z-index: 20;
+    display: none; pointer-events: none; font-weight: 400;
+  }
+  .shell.collapsed .nav a:hover .lbl, .shell.collapsed .nav a:focus-visible .lbl { display: block; }
+  .shell.collapsed .who .whoami, .shell.collapsed .who .version { display: none; }
+  .shell.collapsed .sidebtns button { justify-content: center; }
+  .shell.collapsed .sidebtns button .lbl { display: none; }
+}
 .main { padding: 20px 26px 60px; min-width: 0; }
 .head { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; flex-wrap: wrap; }
 
@@ -171,7 +229,8 @@ td.lvl-bad { color: var(--bad); background: color-mix(in srgb, var(--bad) 16%, t
   .brand { padding: 0 8px 0 4px; }
   .nav { display: flex; }
   .side .who { border: none; padding: 0; margin-left: auto; }
-  .side .who button { margin-top: 0; }
+  .side .sidebtns { flex-direction: row; margin-top: 0; }
+  .side .sidebtns button { width: auto; }
   .main { padding: 14px 14px 50px; }
   .log { grid-template-columns: 1fr; gap: 0; }
   .panel.flush { overflow-x: auto; }
