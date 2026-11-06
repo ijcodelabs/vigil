@@ -21,6 +21,7 @@ type fakeBackend struct {
 	queryErr error
 	notified []alerting.Alert
 	recorded []model.Sample
+	stores   []string // the store of each Record call
 	states   map[string][]byte
 }
 
@@ -50,10 +51,11 @@ func (b *fakeBackend) Notify(_ context.Context, a []alerting.Alert) error {
 	return nil
 }
 
-func (b *fakeBackend) Record(_ context.Context, s []model.Sample) error {
+func (b *fakeBackend) Record(_ context.Context, store string, s []model.Sample) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.recorded = append(b.recorded, s...)
+	b.stores = append(b.stores, store)
 	return nil
 }
 
@@ -300,6 +302,9 @@ func TestParseErrors(t *testing.T) {
 		"valid metric name":   "groups: [{name: a, rules: [{record: 'a b', expr: up}]}]",
 		"only apply to alert": "groups: [{name: a, rules: [{record: a, expr: up, for: 1m}]}]",
 		"label name":          "groups: [{name: a, rules: [{alert: A, expr: up, labels: {alertname: x}}]}]",
+		"store must be":       "groups: [{name: a, store: cold}]",
+		"metrics groups only": "groups: [{name: a, type: logs, store: history}]",
+		"records only":        "groups: [{name: a, store: history, rules: [{alert: A, expr: up}]}]",
 	} {
 		if _, err := Parse(text); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%s: got %v, want error containing %q", text, err, want)
@@ -413,6 +418,39 @@ func TestAlignedGroup(t *testing.T) {
 		}
 		if i > 0 && s.TS != be.recorded[i-1].TS+1000 {
 			t.Errorf("sample %d at %d follows %d: an interval was recorded twice or left out", i, s.TS, be.recorded[i-1].TS)
+		}
+	}
+}
+
+// A history group writes to the long-term store, and its first run records
+// the Backfill before now as well, each interval once.
+func TestHistoryGroupBackfill(t *testing.T) {
+	be := newBackend()
+	be.set("sum", Series{Labels: map[string]string{"model": "m"}, Value: 2})
+	f := &File{Groups: []Group{{Name: "history/x", Store: StoreHistory, Interval: commonmodel.Duration(time.Second),
+		Delay: 100 * time.Millisecond, Backfill: 5 * time.Second, Rules: []Rule{{Record: "per_second", Expr: "sum"}}}}}
+	m := NewManager(be, "", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err := m.Apply(context.Background(), f); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	m.Stop()
+
+	be.mu.Lock()
+	defer be.mu.Unlock()
+	// The 5 intervals before the one due and that one; a second may pass
+	// meanwhile and add the next.
+	if n := len(be.recorded); n < 6 || n > 7 {
+		t.Fatalf("%d intervals recorded on the first run, want 6", n)
+	}
+	for i := 1; i < len(be.recorded); i++ {
+		if be.recorded[i].TS != be.recorded[i-1].TS+1000 {
+			t.Errorf("sample %d at %d follows %d", i, be.recorded[i].TS, be.recorded[i-1].TS)
+		}
+	}
+	for i, st := range be.stores {
+		if st != StoreHistory {
+			t.Errorf("call %d wrote to %q", i, st)
 		}
 	}
 }

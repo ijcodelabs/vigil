@@ -254,6 +254,105 @@ type Spend struct {
 	Subscription float64   `json:"subscription"` // at API prices, not billed
 	UsualBilled  float64   `json:"usual_billed"` // a day, averaged over the 7 days before
 	Unpriced     int       `json:"unpriced"`     // models and GPU kinds in use without a price
+	// Periods are the totals over 30 and 365 days, so the cost of a month
+	// and a year is on the page next to the day's.
+	Periods []SpendPeriod `json:"periods,omitempty"`
+}
+
+// SpendPeriod is spending over the last Days days. Since is the first
+// sample in that window: a metric store that keeps less than the window
+// (30 days by default) or a cost that started later gives a shorter one.
+type SpendPeriod struct {
+	Days         int       `json:"days"`
+	Billed       float64   `json:"billed"`
+	Subscription float64   `json:"subscription"`
+	Since        time.Time `json:"since"`
+}
+
+// spendPeriods reads a year of per-minute samples, so it runs far less
+// often than spend.
+const spendPeriodsEvery = 15 * time.Minute
+
+// spendPeriods sums the main store's per-minute cost; when the history
+// store reaches further back, its hourly sums up to its last hour plus the
+// main store's minutes since then.
+func (s *Server) spendPeriods(ctx context.Context, now time.Time) ([]SpendPeriod, error) {
+	b := ruleBackend{s}
+	one := func(store string, expr string) (float64, bool, error) {
+		series, err := b.Query(ctx, store, expr, now)
+		if err != nil || len(series) == 0 {
+			return 0, false, err
+		}
+		return series[0].Value, true, nil
+	}
+	billed, sub := `{billing!="subscription"}`, `{billing="subscription"}`
+	out := make([]SpendPeriod, 0, 2)
+	for _, days := range []int{30, 365} {
+		p := SpendPeriod{Days: days}
+		w := fmt.Sprintf("[%dd]", days)
+		for _, q := range []struct {
+			dst  *float64
+			expr string
+		}{
+			{&p.Billed, `sum(sum_over_time(ai_cost_usd_per_minute` + billed + w + `))`},
+			{&p.Subscription, `sum(sum_over_time(ai_cost_usd_per_minute` + sub + w + `))`},
+		} {
+			v, _, err := one("", q.expr)
+			if err != nil {
+				return nil, err
+			}
+			*q.dst = v
+		}
+		first, ok, err := one("", `min(tfirst_over_time(ai_cost_usd_per_minute`+w+`))`)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			p.Since = time.Unix(int64(first), 0).UTC()
+		}
+		if s.history != nil {
+			if hp, ok, err := s.spendFromHistory(ctx, one, days, now); err != nil {
+				s.log.Warn("AI spend from the history store", "err", err)
+			} else if ok && (p.Since.IsZero() || hp.Since.Before(p.Since)) {
+				p = hp
+			}
+		}
+		out = append(out, p)
+	}
+	return out, nil
+}
+
+// spendFromHistory is a period from the hourly rollups. Each rollup is
+// stamped at the end of its hour; the minutes after the last one come from
+// the main store.
+func (s *Server) spendFromHistory(ctx context.Context, one func(string, string) (float64, bool, error), days int, now time.Time) (SpendPeriod, bool, error) {
+	p := SpendPeriod{Days: days}
+	w := fmt.Sprintf("[%dd]", days)
+	first, ok, err := one(rules.StoreHistory, `min(tfirst_over_time(ai_cost_usd_per_hour`+w+`))`)
+	if err != nil || !ok {
+		return p, false, err
+	}
+	last, _, err := one(rules.StoreHistory, `max(tlast_over_time(ai_cost_usd_per_hour`+w+`))`)
+	if err != nil {
+		return p, false, err
+	}
+	p.Since = time.Unix(int64(first), 0).Add(-time.Hour).UTC()
+	tail := fmt.Sprintf("[%ds]", max(int64(1), now.Unix()-int64(last)))
+	for _, q := range []struct {
+		dst     *float64
+		billing string
+	}{{&p.Billed, `{billing!="subscription"}`}, {&p.Subscription, `{billing="subscription"}`}} {
+		h, _, err := one(rules.StoreHistory, `sum(sum_over_time(ai_cost_usd_per_hour`+q.billing+w+`))`)
+		if err != nil {
+			return p, false, err
+		}
+		m, _, err := one("", `sum(sum_over_time(ai_cost_usd_per_minute`+q.billing+tail+`))`)
+		if err != nil {
+			return p, false, err
+		}
+		*q.dst = h + m
+	}
+	return p, true, nil
 }
 
 // spend returns nil when nothing writes the cost metric.
@@ -292,8 +391,19 @@ func (s *Server) spend(ctx context.Context, now time.Time) (*Spend, error) {
 func (s *Server) spendLoop(ctx context.Context) {
 	t := time.NewTicker(time.Minute)
 	defer t.Stop()
+	var periods []SpendPeriod
+	var periodsAt time.Time
 	for {
-		if sp, err := s.spend(ctx, time.Now()); err == nil {
+		now := time.Now()
+		if sp, err := s.spend(ctx, now); err == nil {
+			if sp != nil && now.Sub(periodsAt) >= spendPeriodsEvery {
+				if p, err := s.spendPeriods(ctx, now); err == nil {
+					periods, periodsAt = p, now
+				}
+			}
+			if sp != nil {
+				sp.Periods = periods
+			}
 			s.spendState.Store(sp)
 		}
 		select {

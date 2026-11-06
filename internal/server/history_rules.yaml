@@ -1,0 +1,40 @@
+# Rollups for the long-term metric store (storage.history_url): what is
+# worth keeping for months or years, an hour at a time, so the main store's
+# retention can stay short. Each group queries the main store at the end
+# of each hour and writes to the history store. On its first start a group
+# also records the hours the main store still keeps, up to 90 days.
+groups:
+  - name: history/ai-cost
+    interval: 1h
+    store: history
+    rules:
+      # The cost of the hour, with all the labels of ai_cost_usd_per_minute
+      # (source, billing, owner, model, agent, tool).
+      - record: ai_cost_usd_per_hour
+        expr: sum_over_time(ai_cost_usd_per_minute[1h])
+  - name: history/slo
+    interval: 1h
+    store: history
+    rules:
+      - record: slo_good_per_hour
+        expr: sum_over_time(slo_good_per_minute[1h])
+      - record: slo_total_per_hour
+        expr: sum_over_time(slo_total_per_minute[1h])
+  - name: history/hosts
+    interval: 1h
+    store: history
+    rules:
+      # Averages over the hour, per agent; the filesystem at its fullest.
+      - record: host_cpu_used_percent_1h
+        expr: 100 * (1 - sum by (agent) (rate(host_cpu_seconds_total{mode="idle"}[1h])) / sum by (agent) (rate(host_cpu_seconds_total[1h])))
+      - record: host_memory_used_percent_1h
+        expr: avg_over_time((100 * (1 - host_memory_available_bytes / host_memory_total_bytes))[1h:1m])
+      - record: host_filesystem_used_percent_1h
+        expr: max_over_time((100 * (1 - host_filesystem_free_bytes / host_filesystem_size_bytes))[1h:5m])
+  - name: history/checks
+    interval: 1h
+    store: history
+    rules:
+      # The share of the hour a site check answered, 0 to 1.
+      - record: probe_success_ratio_1h
+        expr: avg_over_time(probe_success[1h])

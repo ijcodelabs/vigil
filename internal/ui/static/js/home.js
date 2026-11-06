@@ -14,6 +14,21 @@ const q = s => JSON.stringify(String(s));
 // act makes a link do something without leaving the page.
 const act = fn => e => { e.preventDefault(); fn(); };
 
+// SpendPeriod is the total over the last 30 or 365 days. When the first
+// cost in the window is later than its start (the metric store keeps 30
+// days by default, or spending began later), it says from when.
+function SpendPeriod({ p, at }) {
+  const start = new Date(at).getTime() - p.days * 86400e3;
+  const since = new Date(p.since);
+  const short = since.getTime() > start + 86400e3;
+  const label = p.days === 365 ? 'Last year' : `Last ${p.days} days`;
+  return html`<div class="muted" style="margin: 12px 0 2px">${label}${short && html`, since ${since.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`}</div>
+    <div class="row" style="gap: 24px; flex-wrap: wrap">
+      <div><strong style="font-size: 20px">${usd(p.billed)}</strong> <span class="muted">billed</span></div>
+      ${p.subscription > 0 && html`<div><strong style="font-size: 20px">${usd(p.subscription)}</strong> <span class="muted">of subscription use at API prices</span></div>`}
+    </div>`;
+}
+
 function greeting(user) {
   const h = new Date().getHours();
   const part = h < 5 ? 'Good night' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
@@ -257,12 +272,14 @@ export function Home({ me, admin }) {
         ${c.query && html`<a href=${'#/explore/metrics?q=' + encodeURIComponent(c.query) + '&last=604800'}>chart</a>`}</div>`)}
     <//>`}
 
-    ${b.spend && html`<${Section} title="AI spend, last 24 hours" right=${html`<a href="#/dashboards/ai-costs">AI costs</a>`}>
+    ${b.spend && html`<${Section} title="AI spend" right=${html`<a href="#/dashboards/ai-costs">AI costs</a>`}>
+      <div class="muted" style="margin-bottom: 2px">Last 24 hours</div>
       <div class="row" style="gap: 24px; flex-wrap: wrap">
         <div><strong style="font-size: 20px">${usd(b.spend.billed)}</strong> <span class="muted">billed${b.spend.usual_billed > 0 ? `, usually ${usd(b.spend.usual_billed)} a day` : ''}</span></div>
         ${b.spend.subscription > 0 && html`<div><strong style="font-size: 20px">${usd(b.spend.subscription)}</strong> <span class="muted">of subscription use at API prices, not billed</span></div>`}
         ${b.spend.unpriced > 0 && html`<${Badge} kind="warn">${b.spend.unpriced} models or GPUs without a price<//>`}
       </div>
+      ${(b.spend.periods || []).map(p => html`<${SpendPeriod} p=${p} at=${b.spend.at} />`)}
     <//>`}
 
     ${b.noisy.length > 0 && html`<${Section} title="Alerts that keep coming back">

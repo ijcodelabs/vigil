@@ -7,8 +7,8 @@ import { html, useState, useEffect, useRef } from './lib.js';
 // its middle. Absolute ranges used recently are offered again (kept in this
 // browser only).
 
-export const RANGES = [['5m', 300], ['15m', 900], ['30m', 1800], ['1h', 3600], ['3h', 10800], ['6h', 21600], ['12h', 43200], ['24h', 86400], ['2d', 172800], ['7d', 604800]];
-const LONG = { m: 'minutes', h: 'hours', d: 'days' };
+export const RANGES = [['5m', 300], ['15m', 900], ['30m', 1800], ['1h', 3600], ['3h', 10800], ['6h', 21600], ['12h', 43200], ['24h', 86400], ['2d', 172800], ['7d', 604800], ['30d', 2592000], ['90d', 7776000], ['1y', 31536000]];
+const LONG = { m: 'minutes', h: 'hours', d: 'days', y: 'years' };
 const longName = l => { const n = parseInt(l, 10); const u = LONG[l.slice(-1)]; return `Last ${n} ${n === 1 ? u.slice(0, -1) : u}`; };
 
 const RECENT_KEY = 'vigil.recentRanges';

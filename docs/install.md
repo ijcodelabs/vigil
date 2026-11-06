@@ -118,6 +118,7 @@ All server settings:
 | `external_url` | how people reach the server | `http://localhost:<port>` |
 | `storage.metrics_url`, `storage.logs_url` | the two stores | required |
 | `storage.traces_url` | VictoriaTraces, for [traces](apm.md); optional | none |
+| `storage.history_url` | a second VictoriaMetrics with a long retention, for hourly rollups; see [Long-term history](#long-term-history) | none |
 | `admin_token` | for scripts, and the very first sign-in | required |
 | `ingest_token` | a token any agent may use | none |
 | `heartbeat_timeout` | an agent counts as down after this silence | `60s` |
@@ -130,6 +131,56 @@ All server settings:
 | `tls.self_signed` | serve HTTPS with the server's own certificate authority | off |
 | `tls.cert_file`, `tls.key_file` | serve HTTPS with a certificate you supply | none |
 | `tls.names` | extra names or addresses for the server's own certificate | none |
+
+### Long-term history
+
+A metric store keeps everything for one retention period
+(`-retentionPeriod`, 30 days in the example compose file). Keeping every
+sample for a year costs disk for little use, so the server can keep
+**hourly rollups** of what is worth having for longer in a second
+VictoriaMetrics, the history store:
+
+```yaml
+# docker-compose.yml, next to victoriametrics
+  victoriametrics-history:
+    image: docker.io/victoriametrics/victoria-metrics:v1.153.0
+    command: ["-storageDataPath=/storage", "-retentionPeriod=5y"]
+    volumes: ["vmhistory:/storage"]
+```
+
+```yaml
+# server.yaml
+storage:
+  metrics_url: http://victoriametrics:8428
+  logs_url: http://victorialogs:9428
+  history_url: http://victoriametrics-history:8428
+```
+
+At the end of every hour (five minutes late, so the last minutes are in)
+the server sums or averages the hour from the main store and writes it to
+the history:
+
+| Metric | What one sample is |
+|---|---|
+| `ai_cost_usd_per_hour` | the AI spend of the hour, with the labels of `ai_cost_usd_per_minute` ([AI costs](finops.md#all-ai-in-one-metric)) |
+| `slo_good_per_hour`, `slo_total_per_hour` | the [SLO](slo.md) counts of the hour |
+| `host_cpu_used_percent_1h`, `host_memory_used_percent_1h` | per agent, the hour's average |
+| `host_filesystem_used_percent_1h` | per filesystem, the hour at its fullest |
+| `probe_success_ratio_1h` | per site check, the share of the hour it answered |
+
+The first time the server runs with a history store it also fills in the
+past, an hour at a time, from whatever the main store still keeps (up to
+90 days). Each hour is written once, also across restarts.
+
+A sample is stamped at the end of its hour. Home's 30-day and year
+totals of [AI spend](home.md) read the history when it reaches further back
+than the main store. Dashboard panels read it when their queries are
+"PromQL (history, hourly)" ([Dashboards](dashboards.md)). Your own rollups
+go there with `store: history` on a rule group ([Alerts](alerts.md#recording-rules)).
+
+At the size of a few dozen hosts the history grows by tens of MB a
+year. Logs, traces and audit events are not rolled up. Keeping those
+for long is the planned archive's job.
 
 ### Encryption
 

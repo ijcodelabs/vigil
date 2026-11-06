@@ -45,7 +45,8 @@ type Variable struct {
 type Panel struct {
 	Title string `json:"title"`
 	Type  string `json:"type"` // timeseries, stat, table, logs or map
-	// Source says what the queries are: "metrics" (PromQL, the default) or
+	// Source says what the queries are: "metrics" (PromQL, the default),
+	// "history" (PromQL over the long-term store's hourly rollups) or
 	// "logs" (LogsQL ending in | stats ...). A logs panel is always LogsQL.
 	Source  string  `json:"source,omitempty"`
 	W       int     `json:"w"` // width in twelfths of the row
@@ -134,8 +135,8 @@ func parseDashboard(body []byte) (*Dashboard, error) {
 		if p.Type == "map" && p.Source == "logs" {
 			return nil, fmt.Errorf("%s: a map's queries are PromQL", where)
 		}
-		if p.Source != "" && p.Source != "metrics" && p.Source != "logs" {
-			return nil, fmt.Errorf("%s: source must be metrics or logs", where)
+		if p.Source != "" && p.Source != "metrics" && p.Source != "history" && p.Source != "logs" {
+			return nil, fmt.Errorf("%s: source must be metrics, history or logs", where)
 		}
 		if !units[p.Unit] {
 			return nil, fmt.Errorf("%s: unknown unit %q", where, p.Unit)

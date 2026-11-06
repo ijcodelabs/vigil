@@ -55,8 +55,11 @@ its end, and saves it at once.
 A panel has a **width** out of 12 (6 is half the row) and a **height** in
 rows.
 
-**Queries** are PromQL. Choose "LogsQL (logs)" to compute numbers from logs
-instead; such a query has to end in `| stats …`:
+**Queries** are PromQL. "PromQL (history, hourly)" asks the
+[history store](install.md#long-term-history) instead: hourly rollups kept
+for years, for ranges longer than the main store keeps
+(`"source": "history"` in the JSON). Choose "LogsQL (logs)" to compute
+numbers from logs instead; such a query has to end in `| stats …`:
 
 ```logsql
 level:error | stats by (app) count() as errors
