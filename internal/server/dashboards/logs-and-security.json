@@ -117,6 +117,64 @@
       ]
     },
     {
+      "title": "Failed SSH logins",
+      "type": "stat",
+      "source": "logs",
+      "w": 2,
+      "h": 3,
+      "queries": [
+        {
+          "expr": "unit:~\"^sshd?(@.+)?[.]service$\" agent:~\"$agent\" \"Failed \" _msg:~\"^Failed \\\\S+ for (invalid user )?\\\\S+ from \\\\S+ port \" | stats count() as attempts"
+        }
+      ]
+    },
+    {
+      "title": "Failed SSH logins by agent",
+      "type": "timeseries",
+      "source": "logs",
+      "w": 4,
+      "h": 3,
+      "min": 0,
+      "queries": [
+        {
+          "expr": "unit:~\"^sshd?(@.+)?[.]service$\" agent:~\"$agent\" \"Failed \" _msg:~\"^Failed \\\\S+ for (invalid user )?\\\\S+ from \\\\S+ port \" | stats by (agent) count() as attempts",
+          "legend": "{{agent}}"
+        }
+      ]
+    },
+    {
+      "title": "Failed SSH logins: top sources",
+      "type": "table",
+      "source": "logs",
+      "w": 3,
+      "h": 3,
+      "columns": [
+        "ip"
+      ],
+      "queries": [
+        {
+          "expr": "unit:~\"^sshd?(@.+)?[.]service$\" agent:~\"$agent\" \"Failed \" _msg:~\"^Failed \\\\S+ for (invalid user )?\\\\S+ from \\\\S+ port \" | extract \"from <ip> port \" | stats by (ip) count() as attempts | sort by (attempts desc) | limit 10",
+          "legend": "attempts"
+        }
+      ]
+    },
+    {
+      "title": "Failed SSH logins: users tried",
+      "type": "table",
+      "source": "logs",
+      "w": 3,
+      "h": 3,
+      "columns": [
+        "user"
+      ],
+      "queries": [
+        {
+          "expr": "unit:~\"^sshd?(@.+)?[.]service$\" agent:~\"$agent\" \"Failed \" _msg:~\"^Failed \\\\S+ for (invalid user )?\\\\S+ from \\\\S+ port \" | extract_regexp \"for (invalid user )?(?P<user>\\\\S+) from\" | stats by (user) count() as attempts | sort by (attempts desc) | limit 10",
+          "legend": "attempts"
+        }
+      ]
+    },
+    {
       "title": "Latest detections",
       "type": "logs",
       "w": 12,
