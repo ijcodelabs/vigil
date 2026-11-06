@@ -622,7 +622,7 @@ Step 2 of the plan. `#/home` is the first page (`home.js`), docs/home.md.
   Needs attention (ranked, nested, "I'm on it" with a note for admins,
   links to logs / capture / site checks, silenced behind a toggle, an
   explicit "nothing needs attention"), Coming up, AI spend (24 h against a
-  usual day, subscription apart, unpriced count), alerts that keep coming
+  usual day, subscription apart, unpriced count; 30-day and 365-day totals), alerts that keep coming
   back (5+ firings in a week, median duration, no threshold suggested),
   resolved in 24 h, an incident history dialog. Refreshes every 30 s.
 - Forecasts (`internal/forecast`, `internal/server/forecasts.go`, every
@@ -635,7 +635,9 @@ Step 2 of the plan. `#/home` is the first page (`home.js`), docs/home.md.
   within 7; filesystems under 1 GB and pseudo file systems left out.
   Certificates expiring in 14-30 days; agents limited in the last hour.
 - AI spend: a 1-minute loop over `ai_cost_usd_per_minute`; absent when
-  nothing writes it. Noisy alerts from `incident_events`.
+  nothing writes it. The 30- and 365-day totals are read every 15 min
+  (a year of per-minute samples) with the first sample's date, so a
+  store keeping 30 days (the default) shows "since <date>" for the year. Noisy alerts from `incident_events`.
 - Verified in the browser against a local server with alerts posted into
   its Alertmanager (no stores there): ranking, nesting, acknowledge,
   history, silenced toggle, "some forecasts could not be made". The
@@ -1347,6 +1349,28 @@ Design and review in `identity.md`.
   server, receiver over real TLS with current/old/unknown epochs, token
   mismatch, revoke on an open connection; Chat emitter with a renewed
   certificate).
+
+## Long-term history store (built 2026-11-04, uncommitted)
+
+- `storage.history_url`: a second VictoriaMetrics with a long retention.
+  Rule groups with `store: history` (rules.Group.Store) query the main
+  store and write there (`Backend.Record(ctx, store, samples)`); they hold
+  recording rules only. The server makes them aligned (5 min late) and
+  gives them a Backfill: on the first run (no mark yet) an aligned group
+  starts that long ago, 90 days or 2200 intervals, whichever is shorter.
+- Built-in rollups (`internal/server/history_rules.yaml`, added only with
+  a history store): `ai_cost_usd_per_hour`, `slo_{good,total}_per_hour`,
+  `host_{cpu,memory}_used_percent_1h`, `host_filesystem_used_percent_1h`,
+  `probe_success_ratio_1h`.
+- `/api/v1/history/{query,query_range,series,labels}` proxies to it (404
+  with a hint when not set); panels with `"source": "history"`; the AI
+  costs dashboard has two History panels; ranges 30d, 90d, 1y.
+- Home's 30-day and year totals use the history (hourly sums up to its
+  last hour + the main store's minutes after) when it reaches further back.
+- Verified locally: backfill of 20 days of test cost in seconds (480 hours,
+  sums match the main store), Home and the AI costs dashboard over a year
+  in the browser with older data only in the history.
+- Not built: the history in Explore; rollups of logs (the archive's job).
 
 ## Next
 

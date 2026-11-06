@@ -46,8 +46,9 @@ type Backend interface {
 	Query(ctx context.Context, typ, expr string, at time.Time) ([]Series, error)
 	// Notify delivers firing and resolved alerts.
 	Notify(ctx context.Context, alerts []alerting.Alert) error
-	// Record stores samples produced by rules.
-	Record(ctx context.Context, samples []model.Sample) error
+	// Record stores samples produced by rules in the group's store: "" for
+	// the main metric store, or StoreHistory.
+	Record(ctx context.Context, store string, samples []model.Sample) error
 	// Alert state survives restarts through these three.
 	LoadAlertStates() (map[string][]byte, error)
 	SaveAlertState(key string, data []byte) error
@@ -274,16 +275,21 @@ func (m *Manager) runGroup(ctx context.Context, g *Group, rules []*ruleState) {
 // interval ended, at the interval's end: each interval is recorded exactly
 // once, with its own timestamp, however often the rules are restarted.
 // Intervals missed (a restart, a store that did not answer) are recorded
-// late, up to maxCatchUp of them.
+// late, up to maxCatchUp of them or Backfill, whichever is longer. A group
+// with Backfill starts that long ago the first time it runs.
 func (m *Manager) runAligned(ctx context.Context, g *Group, rules []*ruleState) {
 	every := g.interval()
+	catchUp := max(maxCatchUp*every, g.Backfill)
 	for {
 		due := time.Now().Add(-g.Delay).Truncate(every)
 		m.marksMu.Lock()
 		last := m.marks[g.Name]
 		m.marksMu.Unlock()
 		next := last.Add(every)
-		if last.IsZero() || next.Before(due.Add(-maxCatchUp*every)) {
+		switch {
+		case last.IsZero():
+			next = due.Add(-g.Backfill).Truncate(every)
+		case next.Before(due.Add(-catchUp)):
 			next = due
 		}
 		for at := next; !at.After(due); at = at.Add(every) {
@@ -361,7 +367,7 @@ func (m *Manager) record(ctx context.Context, rs *ruleState, series []Series, no
 	if len(samples) == 0 {
 		return nil
 	}
-	return m.be.Record(ctx, samples)
+	return m.be.Record(ctx, rs.group.Store, samples)
 }
 
 // update moves the rule's alerts through pending → firing → resolved.
@@ -459,7 +465,7 @@ func (m *Manager) publish(ctx context.Context, rs *ruleState, now time.Time) {
 		}
 	}
 	if len(samples) > 0 {
-		if err := m.be.Record(ctx, samples); err != nil && !errors.Is(err, context.Canceled) {
+		if err := m.be.Record(ctx, "", samples); err != nil && !errors.Is(err, context.Canceled) {
 			m.log.Warn("writing ALERTS series failed", "rule", rs.rule.Alert, "err", err)
 		}
 	}

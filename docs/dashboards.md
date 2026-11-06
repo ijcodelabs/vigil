@@ -3,7 +3,9 @@
 A dashboard is a grid of panels that share one time range, one refresh
 interval and one set of variables.
 
-A new server comes with **Hosts**, **Containers**, **Logs and security**,
+A new server comes with **Hosts**, **Containers**, **Logs and security**
+(log lines, errors, security detections, and failed SSH logins with the
+addresses and user names tried),
 **Site checks** (what answers, how fast, and the days left on
 certificates), **vigil agents** (what each agent sends and what it costs
 its host), **AI costs** (all AI spending together: applications,
@@ -55,8 +57,11 @@ its end, and saves it at once.
 A panel has a **width** out of 12 (6 is half the row) and a **height** in
 rows.
 
-**Queries** are PromQL. Choose "LogsQL (logs)" to compute numbers from logs
-instead; such a query has to end in `| stats …`:
+**Queries** are PromQL. "PromQL (history, hourly)" asks the
+[history store](install.md#long-term-history) instead: hourly rollups kept
+for years, for ranges longer than the main store keeps
+(`"source": "history"` in the JSON). Choose "LogsQL (logs)" to compute
+numbers from logs instead; such a query has to end in `| stats …`:
 
 ```logsql
 level:error | stats by (app) count() as errors

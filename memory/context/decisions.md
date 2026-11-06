@@ -123,6 +123,18 @@ vulnerability in code never called is not a reason to block a PR, and
 often has no fix). The vendored UI files are the unchanged npm files,
 listed with checksums in `internal/ui/VENDOR.md` and held there by a test.
 
+**Long retention for metrics is a second VictoriaMetrics of hourly
+rollups, not the Parquet archive (2026-11-04).** A VictoriaMetrics instance
+has one retention for everything in it (per-series retention and
+downsampling are enterprise features), so keeping a year of AI spend meant
+a year of every sample. Rollups made by vigil's own recording rules into a
+second instance keep what matters for years at tens of MB, and dashboards,
+Home and rules read them with the same PromQL; no second query engine, no
+CGO. The archive (direction.md, Storage) stays for logs, audit, events and
+captures, where object storage, WORM and per-tenant keys matter. Measured
+on the trial before: ~37 MB of metrics and ~15 MB of logs a day, so 90
+days of metrics and 30 of logs take ~5 GB and no extra memory.
+
 **Every listener has read, write and idle timeouts, and no Multipath TCP
 (2026-11-04).** `ReadHeaderTimeout` alone left connections open for ever
 to a client that sent its body slowly or stayed idle after a request.

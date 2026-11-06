@@ -292,7 +292,13 @@ func (b ruleBackend) Notify(ctx context.Context, alerts []alerting.Alert) error 
 	return b.s.am.Send(ctx, alerts)
 }
 
-func (b ruleBackend) Record(ctx context.Context, samples []model.Sample) error {
+func (b ruleBackend) Record(ctx context.Context, store string, samples []model.Sample) error {
+	if store == rules.StoreHistory {
+		if b.s.history == nil {
+			return errors.New("no history store: set storage.history_url")
+		}
+		return b.s.write(ctx, b.s.history, "", promwire.Encode(samples))
+	}
 	return b.s.forward(ctx, "", promwire.Encode(samples))
 }
 
@@ -307,8 +313,14 @@ func (b ruleBackend) PruneAlertStates(keep map[string]bool) error {
 // which answers in the same vector format.
 func (b ruleBackend) Query(ctx context.Context, typ, expr string, at time.Time) ([]rules.Series, error) {
 	u := b.s.metrics.JoinPath("/api/v1/query")
-	if typ == rules.TypeLogs {
+	switch typ {
+	case rules.TypeLogs:
 		u = b.s.logs.JoinPath("/select/logsql/stats_query")
+	case rules.StoreHistory: // the server's own reads of the history store; no rule group has this type
+		if b.s.history == nil {
+			return nil, &rules.QueryError{Msg: "no history store"}
+		}
+		u = b.s.history.JoinPath("/api/v1/query")
 	}
 	u.RawQuery = url.Values{"query": {expr}, "time": {strconv.FormatFloat(float64(at.UnixMilli())/1000, 'f', 3, 64)}}.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)

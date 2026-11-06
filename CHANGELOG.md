@@ -14,6 +14,22 @@ after. How a release is made: [releasing.md](memory/context/releasing.md).
 
 ## Unreleased
 
+### Added
+
+- **Home** shows the AI spend of the last 30 days and the last year under
+  the last 24 hours, with the date the total starts from when the metric
+  store keeps less than that.
+- **Long-term history:** with `storage.history_url`, a second
+  VictoriaMetrics, the server keeps hourly rollups for years: AI cost, SLO
+  counts, host CPU, memory and filesystems, and site checks. On its first
+  start it fills them in from what the main store keeps. Rule groups can
+  write there with `store: history`, dashboard panels read it ("PromQL
+  (history, hourly)"), and the AI costs dashboard has two History panels.
+- Time ranges of 30 days, 90 days and a year.
+- The **Logs and security** dashboard counts failed SSH logins: a total,
+  a chart per agent, and the addresses and user names tried most. It reads
+  sshd's lines in the journal and needs no integration.
+
 ### Security
 
 - The server, the relay and the agent's OTLP endpoint close connections
