@@ -36,10 +36,16 @@ on the stores; the links lead to the pages that do.
   - **agents held back by their limits** in the last hour; they drop data
     when their spool fills.
   Worked out every ten minutes. "Soon" means within a week.
-- **AI spend, last 24 hours:** what was billed against a usual day of the
-  week before, subscription use at API prices apart, and how many models
-  or GPUs have no price. Shown when anything writes the cost metric (see
-  [AI costs](finops.md)).
+- **AI spend:** for the last 24 hours, what was billed against a usual
+  day of the week before, subscription use at API prices apart, and how
+  many models or GPUs have no price; below it the totals of the last 30
+  days and the last year. The metric store keeps 30 days by default
+  (`-retentionPeriod`), so a total that covers less than its period says
+  from which date it counts. With a
+  [history store](install.md#long-term-history) the totals read its hourly
+  rollups when they reach further back. The longer totals are updated
+  every 15 minutes.
+  Shown when anything writes the cost metric (see [AI costs](finops.md)).
 - **Alerts that keep coming back:** an alert that fired at least five
   times in a week, with how long it usually lasted and a link to its
   history. Whether it needs a longer `for`, a different threshold, a fix

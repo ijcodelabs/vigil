@@ -255,6 +255,8 @@ async function run(panel, from, to, variables, values, width) {
   const span = Math.max(60, Math.round(to - from)) + 's';
   const queries = panel.queries.map(q => ({ ...q, expr: fill(q.expr, variables, values).replaceAll('$__range_s', String(parseInt(span))).replaceAll('$__range', span) }));
   const form = o => ({ method: 'POST', body: new URLSearchParams(o) });
+  // history: the long-term store's hourly rollups, same query API.
+  const prom = panel.source === 'history' ? '/api/v1/history/' : '/api/v1/';
   if (panel.type === 'logs') {
     const text = await api('/api/v1/logs/query', form({ query: queries[0].expr, start: from, end: to, limit: panel.limit || 50 }));
     return { rows: parseLines(text).sort((a, b) => (a._time < b._time ? 1 : -1)) };
@@ -265,7 +267,7 @@ async function run(panel, from, to, variables, values, width) {
     for (const q of queries) {
       const r = logs
         ? await api('/api/v1/logs/stats_query_range', form({ query: q.expr, start: from, end: to, step: step + 's' }))
-        : await api('/api/v1/query_range', form({ query: q.expr, start: from, end: to, step }));
+        : await api(prom + 'query_range', form({ query: q.expr, start: from, end: to, step }));
       for (const s of r.data.result) { series.push(s); names.push(legendFor(q, s.metric)); }
     }
     return { series: series.slice(0, 40), names: names.slice(0, 40), total: series.length, from, to, step };
@@ -275,7 +277,7 @@ async function run(panel, from, to, variables, values, width) {
   for (const q of queries) {
     const r = logs
       ? await api('/api/v1/logs/stats_query', form({ query: `_time:[${iso(from)}, ${iso(to)}] ${q.expr}`, time: to }))
-      : await api('/api/v1/query', form({ query: q.expr, time: to }));
+      : await api(prom + 'query', form({ query: q.expr, time: to }));
     for (const s of r.data.result || []) rows.push({ metric: s.metric, value: Number(s.value[1]), name: legendFor(q, s.metric), q: queries.indexOf(q) });
   }
   return { values: rows };
@@ -399,7 +401,7 @@ export function PanelEditor({ panel, onSave, onClose, heading, action, head, err
         ...(p.type === 'table' && q.crit != null ? { crit: q.crit } : {}) })) };
     const columns = (Array.isArray(p.columns) ? p.columns.join(',') : String(p.columns || '')).split(',').map(c => c.trim()).filter(Boolean);
     if (p.type === 'table' && columns.length) out.columns = columns;
-    if (!logsOnly && p.source === 'logs') out.source = 'logs';
+    if (!logsOnly && (p.source === 'logs' || p.source === 'history')) out.source = p.source;
     if (p.unit && !logsOnly) out.unit = p.unit;
     if (p.type === 'timeseries') { if (p.min != null) out.min = p.min; if (p.fill) out.fill = true; }
     if (p.type === 'stat') { if (p.warn != null) out.warn = p.warn; if (p.crit != null) out.crit = p.crit; }
@@ -420,7 +422,7 @@ export function PanelEditor({ panel, onSave, onClose, heading, action, head, err
       <div class="field" style="flex: 1"><label>Shows</label><select value=${p.type} onChange=${e => set('type', e.target.value)}>
         ${(panel.type === 'map' ? [...TYPES, ['map', 'Map (nodes and links)']] : TYPES).map(([v, l]) => html`<option value=${v}>${l}</option>`)}</select></div>
       ${!logsOnly && html`<div class="field" style="flex: 1"><label>Queries are</label><select value=${p.source || 'metrics'} onChange=${e => set('source', e.target.value)}>
-        <option value="metrics">PromQL (metrics)</option><option value="logs">LogsQL (logs)</option></select></div>`}
+        <option value="metrics">PromQL (metrics)</option><option value="history">PromQL (history, hourly)</option><option value="logs">LogsQL (logs)</option></select></div>`}
     </div>
     ${p.queries.map((q, i) => html`<div class="row" style="align-items: flex-start; margin-bottom: 8px">
       <textarea rows="2" style="flex: 3" spellcheck="false" required=${i === 0} aria-label="Query" value=${q.expr} onInput=${e => setQuery(i, 'expr', e.target.value)}

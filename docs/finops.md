@@ -111,6 +111,16 @@ sum by (source) (sum_over_time(ai_cost_usd_per_minute{billing!="subscription"}[3
 topk(10, sum by (owner, source) (sum_over_time(ai_cost_usd_per_minute[7d])))
 ```
 
+With a [history store](install.md#long-term-history) the hour's sum is
+kept for years as `ai_cost_usd_per_hour`, with the same labels. The AI
+costs dashboard shows it in its "History" panels, and Home uses it for
+the year:
+
+```
+# billed AI spend in the last year, from the history store
+sum(sum_over_time(ai_cost_usd_per_hour{billing!="subscription"}[365d]))
+```
+
 Something else that spends money on AI joins by writing the same metric
 with a recording rule of your own, one sample a minute. For example, an
 application that counts its own tokens in a Prometheus counter:

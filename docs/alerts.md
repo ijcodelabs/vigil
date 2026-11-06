@@ -74,6 +74,23 @@ every row it returns is an alert.
         expr: '_time:5m level:error | stats by (app) count() as errors'
 ```
 
+A metrics group with `store: history` writes what it records to the
+[history store](install.md#long-term-history) instead. Its queries still
+read the main store. Such a group holds recording rules only, and it
+records each interval once, at its end, five minutes late. The first time
+it runs, it also records the intervals the main store still keeps, up to
+90 days or 2200 intervals:
+
+```yaml
+groups:
+  - name: shop-orders-history
+    interval: 1h
+    store: history
+    rules:
+      - record: shop_orders_per_hour
+        expr: sum(increase(shop_orders_total[1h]))
+```
+
 ### What a rule can use
 
 | Field | Meaning |

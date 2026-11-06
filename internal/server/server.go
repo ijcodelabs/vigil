@@ -70,6 +70,7 @@ type Server struct {
 	log     *slog.Logger
 	store   *Store
 	metrics *url.URL
+	history *url.URL // nil: no long-term store (history.go)
 	logs    *url.URL
 	traces  *url.URL // nil: no trace store
 	vault   vault    // the secret store set up in the interface (secrets.go)
@@ -119,6 +120,12 @@ func New(cfg *config.Server, log *slog.Logger) (*Server, error) {
 			return nil, fmt.Errorf("storage.traces_url %q is not a URL", cfg.Storage.TracesURL)
 		}
 	}
+	var hu *url.URL
+	if cfg.Storage.HistoryURL != "" {
+		if hu, err = url.Parse(cfg.Storage.HistoryURL); err != nil || hu.Host == "" {
+			return nil, fmt.Errorf("storage.history_url %q is not a URL", cfg.Storage.HistoryURL)
+		}
+	}
 	lu, err := url.Parse(cfg.Storage.LogsURL)
 	if err != nil || lu.Host == "" {
 		return nil, fmt.Errorf("storage.logs_url %q is not a URL", cfg.Storage.LogsURL)
@@ -144,7 +151,7 @@ func New(cfg *config.Server, log *slog.Logger) (*Server, error) {
 		st.Close()
 		return nil, fmt.Errorf("store: %w", err)
 	}
-	s := &Server{cfg: cfg, log: log, store: st, metrics: u, logs: lu, traces: tu, runCtx: context.Background(), incidents: tracker,
+	s := &Server{cfg: cfg, log: log, store: st, metrics: u, history: hu, logs: lu, traces: tu, runCtx: context.Background(), incidents: tracker,
 		logins:  loginLimiter{fails: map[string][]time.Time{}},
 		started: time.Now(),
 		limiter: ingestLimiter{buckets: map[string]*bucket{}},
@@ -219,6 +226,8 @@ func (s *Server) Handler() http.Handler {
 	s.viewRoutes(mux)
 	s.logLineRoutes(mux)
 	s.secretRoutes(mux)
+
+	s.historyRoutes(mux)
 
 	// Read-only Prometheus query API, served by the metrics store.
 	proxy := httputil.NewSingleHostReverseProxy(s.metrics)
@@ -363,7 +372,12 @@ func (s *Server) handleWrite(w http.ResponseWriter, r *http.Request) {
 // An empty agentID writes the series as they are; that is for rule results,
 // whose own agent label says which host they are about.
 func (s *Server) forward(ctx context.Context, agentID string, body []byte) error {
-	u := s.metrics.JoinPath("/api/v1/write")
+	return s.write(ctx, s.metrics, agentID, body)
+}
+
+// write is forward to a given metric store: the main one or the history.
+func (s *Server) write(ctx context.Context, store *url.URL, agentID string, body []byte) error {
+	u := store.JoinPath("/api/v1/write")
 	if agentID != "" {
 		u.RawQuery = url.Values{"extra_label": {"agent=" + agentID}}.Encode()
 	}

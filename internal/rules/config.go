@@ -1,6 +1,7 @@
 // Package rules evaluates alerting and recording rules against the metric
-// and log stores. The file format is Prometheus' rule-file format, with one
-// addition: a group may set `type: logs` to make its expressions LogsQL.
+// and log stores. The file format is Prometheus' rule-file format, with two
+// additions: a group may set `type: logs` to make its expressions LogsQL,
+// and `store: history` to write what it records to the long-term store.
 package rules
 
 import (
@@ -20,8 +21,12 @@ const (
 	// seconds or so.
 	AlignDelay = 90 * time.Second
 
-	TypeMetrics     = "metrics"
-	TypeLogs        = "logs"
+	TypeMetrics = "metrics"
+	TypeLogs    = "logs"
+	// StoreHistory is the long-term metric store: rollups kept for years,
+	// next to the main store's short retention. Groups that write there
+	// still query the main store.
+	StoreHistory    = "history"
 	defaultInterval = time.Minute
 )
 
@@ -34,12 +39,17 @@ type Group struct {
 	Type     string            `yaml:"type"` // metrics (default) or logs
 	Interval model.Duration    `yaml:"interval"`
 	Labels   map[string]string `yaml:"labels"`
+	Store    string            `yaml:"store,omitempty"` // "" (the main store) or history
 	Rules    []Rule            `yaml:"rules"`
 	// Delay, set by the server for the groups it generates (SLOs), makes
 	// the group record whole intervals: each one once, at its end, Delay
 	// after it ended, so late samples are in and a restart does not record
 	// an interval twice. Meant for recording rules. Not in the file format.
 	Delay time.Duration `yaml:"-" json:"-"`
+	// Backfill, set by the server for history groups, makes an aligned
+	// group's first run record the intervals of that long before now too,
+	// from what the main store still keeps.
+	Backfill time.Duration `yaml:"-" json:"-"`
 }
 
 type Rule struct {
@@ -100,6 +110,15 @@ func Parse(text string) (*File, error) {
 		if err := checkLabels(g.Labels); err != nil {
 			return nil, fmt.Errorf("group %q: %w", g.Name, err)
 		}
+		switch g.Store {
+		case "":
+		case StoreHistory:
+			if g.Type != TypeMetrics {
+				return nil, fmt.Errorf("group %q: store %q takes metrics groups only", g.Name, StoreHistory)
+			}
+		default:
+			return nil, fmt.Errorf("group %q: store must be empty or %q", g.Name, StoreHistory)
+		}
 		for ri := range g.Rules {
 			r := &g.Rules[ri]
 			where := fmt.Sprintf("group %q, rule %d", g.Name, ri+1)
@@ -108,6 +127,9 @@ func Parse(text string) (*File, error) {
 			}
 			if (r.Alert == "") == (r.Record == "") {
 				return nil, fmt.Errorf("%s: set exactly one of alert and record", where)
+			}
+			if g.Store != "" && r.Alert != "" {
+				return nil, fmt.Errorf("%s: a group with a store records only", where)
 			}
 			if r.Expr == "" {
 				return nil, fmt.Errorf("%s: expr is required", where)

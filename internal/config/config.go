@@ -720,6 +720,9 @@ type Server struct {
 		// TracesURL is a VictoriaTraces instance; optional. Without it,
 		// spans are counted into metrics but not kept.
 		TracesURL string `yaml:"traces_url"`
+		// HistoryURL is a second VictoriaMetrics with a long retention,
+		// for hourly rollups of what is worth keeping; optional.
+		HistoryURL string `yaml:"history_url"`
 	} `yaml:"storage"`
 	// TLS encrypts the server's port. Either give a certificate and key
 	// (from a public or company authority), or let the server be its own
