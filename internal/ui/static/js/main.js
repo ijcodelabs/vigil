@@ -24,10 +24,37 @@ const pages = [
   ['secrets', 'Secrets', Secrets, 'admin'],
 ];
 
+// Sidebar icons. Plain inline SVG, one per page plus the footer actions, so
+// the collapsed rail reads at a glance. They inherit currentColor, so the
+// theme's accent lights the active one.
+const S = { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.9, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' };
+const icon = {
+  home: html`<svg ...${S}><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9.5h13V10"/></svg>`,
+  dashboards: html`<svg ...${S}><rect x="3.5" y="3.5" width="7" height="7" rx="1"/><rect x="13.5" y="3.5" width="7" height="7" rx="1"/><rect x="3.5" y="13.5" width="7" height="7" rx="1"/><rect x="13.5" y="13.5" width="7" height="7" rx="1"/></svg>`,
+  explore: html`<svg ...${S}><circle cx="11" cy="11" r="6.5"/><path d="m20 20-3.6-3.6"/></svg>`,
+  services: html`<svg ...${S}><path d="M12 3 21 8l-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/></svg>`,
+  slos: html`<svg ...${S}><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4"/></svg>`,
+  sessions: html`<svg ...${S}><path d="M20 4H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3v3.5L11.5 16H20a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1Z"/></svg>`,
+  alerts: html`<svg ...${S}><path d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6Z"/><path d="M10.4 19a1.8 1.8 0 0 0 3.2 0"/></svg>`,
+  captures: html`<svg ...${S}><path d="M12 3 5 6v5c0 4.5 3 7.5 7 9 4-1.5 7-4.5 7-9V6l-7-3Z"/></svg>`,
+  fleet: html`<svg ...${S}><rect x="3.5" y="4" width="17" height="7" rx="1.5"/><rect x="3.5" y="13" width="17" height="7" rx="1.5"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>`,
+  users: html`<svg ...${S}><circle cx="12" cy="8" r="3.5"/><path d="M5.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/></svg>`,
+  secrets: html`<svg ...${S}><rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></svg>`,
+  docs: html`<svg ...${S}><path d="M6 4h9a2 2 0 0 1 2 2v12a2 2 0 0 0-2-2H6z"/><path d="M6 4v14"/></svg>`,
+  key: html`<svg ...${S}><circle cx="8.5" cy="8.5" r="3.8"/><path d="m11.2 11.2 7 7"/><path d="m15.5 15.5 2 2M17.5 13.5 19.5 15.5"/></svg>`,
+  theme: html`<svg ...${S}><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17a8.5 8.5 0 0 0 0-17Z" fill="currentColor" stroke="none"/></svg>`,
+  signout: html`<svg ...${S}><path d="M14 5V4a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-1"/><path d="M10 12h10"/><path d="m17 9 3 3-3 3"/></svg>`,
+  collapse: html`<svg ...${S}><path d="m13 7-5 5 5 5"/><path d="m19 7-5 5 5 5"/></svg>`,
+  expand: html`<svg ...${S}><path d="m11 7 5 5-5 5"/><path d="m5 7 5 5-5 5"/></svg>`,
+};
+
 function App() {
   const [me, setMe] = useState(undefined); // undefined: checking, null: signed out
   const [route, setRoute] = useState({ ...parseHash(), nav: 0 });
   const [dialog, setDialog] = useState(null);
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem('vigil-sidebar') === 'collapsed'; } catch { return false; }
+  });
 
   // Sessions shows while an AI module (an integration named ai_module_…)
   // is switched on somewhere.
@@ -57,20 +84,28 @@ function App() {
   const visible = pages.filter(p => !p[3] || (p[3] === 'admin' && admin) || (p[3] === 'ai' && (ai || route.parts[0] === 'sessions')) || (p[3] === 'slo' && (slos || admin || route.parts[0] === 'slos')));
   const [id, , Page] = visible.find(p => p[0] === route.parts[0]) || visible[0];
   const logout = () => api('/api/v1/logout', { method: 'POST' }).then(() => setMe(null));
+  const toggleCollapsed = () => setCollapsed(c => {
+    const n = !c;
+    try { localStorage.setItem('vigil-sidebar', n ? 'collapsed' : 'open'); } catch {}
+    return n;
+  });
 
-  return html`<div class="shell">
+  return html`<div class=${collapsed ? 'shell collapsed' : 'shell'}>
     <aside class="side">
-      <div class="brand"><i></i>vigil</div>
+      <div class="brand"><i></i><span class="brandname">vigil</span></div>
       <nav class="nav">${visible.map(([pid, label]) =>
-        html`<a class=${pid === id ? 'on' : ''} href="#/${pid}">${label}</a>`)}</nav>
+        html`<a class=${pid === id ? 'on' : ''} href="#/${pid}"><span class="ic">${icon[pid]}</span><span class="lbl">${label}</span></a>`)}</nav>
       <span class="spacer"></span>
-      <nav class="nav"><a href="/docs/" target="_blank" rel="noopener">Docs</a></nav>
+      <nav class="nav"><a href="/docs/" target="_blank" rel="noopener"><span class="ic">${icon.docs}</span><span class="lbl">Docs</span></a></nav>
       <div class="who">
-        <div><strong>${me.user}</strong> <span class="muted">${me.role}</span></div>
+        <div class="whoami"><strong>${me.user}</strong> <span class="muted">${me.role}</span></div>
         ${me.version && html`<div class="version muted" title="Version of the vigil server">vigil ${me.version}</div>`}
-        ${!me.bootstrap && html`<button class="small" onClick=${() => setDialog('password')}>Password</button>`}
-        <button class="small" onClick=${toggleTheme}>Theme</button>
-        <button class="small" onClick=${logout}>Sign out</button>
+        <div class="sidebtns">
+          ${!me.bootstrap && html`<button class="small" title="Change password" onClick=${() => setDialog('password')}><span class="ic">${icon.key}</span><span class="lbl">Password</span></button>`}
+          <button class="small" title="Switch theme (dark / light / tempest)" onClick=${cycleTheme}><span class="ic">${icon.theme}</span><span class="lbl">Theme</span></button>
+          <button class="small" title="Sign out" onClick=${logout}><span class="ic">${icon.signout}</span><span class="lbl">Sign out</span></button>
+          <button class="small" title=${collapsed ? 'Expand sidebar' : 'Collapse sidebar'} onClick=${toggleCollapsed}><span class="ic">${collapsed ? icon.expand : icon.collapse}</span><span class="lbl">Collapse</span></button>
+        </div>
       </div>
     </aside>
     <main class="main">
@@ -82,10 +117,13 @@ function App() {
   </div>`;
 }
 
-function toggleTheme() {
+// Cycle dark → light → tempest. "tempest" is an ops-console look (see app.css);
+// the other two are the original dark and light.
+const themes = ['dark', 'light', 'tempest'];
+function cycleTheme() {
   const root = document.documentElement;
-  const dark = root.dataset.theme ? root.dataset.theme === 'dark' : !matchMedia('(prefers-color-scheme: light)').matches;
-  root.dataset.theme = dark ? 'light' : 'dark';
+  const cur = root.dataset.theme || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+  root.dataset.theme = themes[(themes.indexOf(cur) + 1) % themes.length] || 'dark';
   try { localStorage.setItem('vigil-theme', root.dataset.theme); } catch {}
   dispatchEvent(new Event('themechange'));
 }
