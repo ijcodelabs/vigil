@@ -273,7 +273,7 @@ function Tokens() {
         <div class="field"><label>Name (what will use it)</label><input name="name" required maxlength="100" placeholder="e.g. grafana" /></div>
         <div class="field"><label>It may</label><select name="scope">
           <option value="read">read what a viewer sees</option>
-          <option value="issue">only issue evidence grants (for Boop Chat)</option></select></div>
+          <option value="issue">only issue evidence grants (for Portun Chat)</option></select></div>
         <div class="field"><label>Valid for</label><select name="valid">
           <option value="0">until revoked</option><option value="30">30 days</option><option value="90">90 days</option><option value="365">1 year</option></select></div>
         <${ErrorBox} error=${formError} />

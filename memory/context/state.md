@@ -1372,6 +1372,21 @@ Design and review in `identity.md`.
   in the browser with older data only in the history.
 - Not built: the history in Explore; rollups of logs (the archive's job).
 
+## Boop is Portun: integrations renamed (2026-11-11)
+
+Boop renamed itself Portun on 2026-11-07 with a clean break (only
+`portun_*` metrics, `portun.*` events, `portun.audit`, `portun-jump:v1:`
+Key IDs). The integrations, their tests and test data (still byte for byte
+Portun Jump's `testdata/o11y/v1/`), the markers, the docs page
+(`/docs/portun`) and the examples were renamed the same way; the sections
+above keep the old names as they were then. A profile that names `boop`,
+`boop_jump_gateway` or `boop_jump_agent` is refused with the new name
+(`Catalog.Missing`), since the old ones would only see nothing. Not tried
+against the trial's Portun yet: the trial wires Portun by hand (jobs
+`portun`, `portun-chat`, `portun-jump-gateway`), so it can move to the
+integrations once this is released. Portun Chat's metrics (`portun-chat`
+job) have no integration.
+
 ## Next
 
 - Foundations, build order in `direction.md`: step 1 on paper (data

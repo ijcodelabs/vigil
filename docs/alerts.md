@@ -187,7 +187,7 @@ running version, to copy from.
 
 The same holds for the rules of an integration in use: an alert of the
 same name in the rule file runs instead of the integration's. So a rule
-file that carries a product's own copy of its rules (Boop's, for one)
+file that carries a product's own copy of its rules (Portun's, for one)
 alerts once, not twice. A group in the rule file named like the
 integration's (`nginx/alerts`) replaces that whole group.
 
@@ -334,24 +334,24 @@ receivers:
   `<!channel>` notifies everyone in the channel; leave it out where that is
   too loud.
 
-### Boop Chat, Mattermost and other Slack-compatible chats
+### Portun Chat, Mattermost and other Slack-compatible chats
 
 Chats that take Slack's incoming-webhook format work with the same
 `slack_configs` as above; only the URL changes.
 
-- **Boop Chat:** in the channel (say `#alerts`), **⚙︎ → Webhooks → Add
+- **Portun Chat:** in the channel (say `#alerts`), **⚙︎ → Webhooks → Add
   webhook**, name it `vigil`, copy the URL (it is shown once) into
-  `/etc/vigil/boop-chat-webhook` and use the Slack receiver above with
-  `api_url_file: /etc/vigil/boop-chat-webhook`. The message posts into the
+  `/etc/vigil/portun-chat-webhook` and use the Slack receiver above with
+  `api_url_file: /etc/vigil/portun-chat-webhook`. The message posts into the
   webhook's own channel whatever `channel:` says. `<!channel>` only
   notifies everyone when the webhook was made with **May notify
-  everyone**. Boop Chat takes about one message a second per webhook, which
+  everyone**. Portun Chat takes about one message a second per webhook, which
   Alertmanager's grouping stays well under.
 - **Mattermost** and **Rocket.Chat:** an incoming webhook for the channel,
   used the same way.
 
 When vigil and the chat run on the same Docker host, the chat's internal
-address in the webhook URL (for example `http://boop-chat:7470/hooks/…` on a
+address in the webhook URL (for example `http://portun-chat:7470/hooks/…` on a
 shared network) keeps alerts flowing when the public edge in front of the
 chat is down.
 

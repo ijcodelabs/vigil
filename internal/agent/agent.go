@@ -748,7 +748,7 @@ func (a *Agent) shipClusterEvents(ctx context.Context, cluster *kube.Client, eve
 // exportAgentLabel keeps a label named agent, from a scrape or an OTLP
 // sender, as exported_agent, the way Prometheus does: the server stamps
 // agent=<this agent's id> on everything, which would otherwise overwrite
-// it and fold, say, every Boop Jump agent of a gateway into one series.
+// it and fold, say, every Portun Jump agent of a gateway into one series.
 func exportAgentLabel(batch []model.Sample) {
 	for i := range batch {
 		v, ok := batch[i].Labels["agent"]

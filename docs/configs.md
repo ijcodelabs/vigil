@@ -342,7 +342,7 @@ It is a map so that profiles add to it; `false` keeps a label that
 another profile dropped.
 
 Log records the same way, by attribute name as stored: what a sender must
-not be kept for (the `boop` integration drops Boop's person pseudonyms
+not be kept for (the `portun` integration drops Portun's person pseudonyms
 this way):
 
 ```yaml

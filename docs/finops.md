@@ -156,7 +156,7 @@ The same prices go further than the totals:
   column once any service has one. These read `ai_cost_usd_per_minute`.
 - **A trace** (one request, or one action of an agent) says how many model
   calls it made and what they cost.
-- **A work item** (a ticket, a Boop item, an agent's task) when its spans
+- **A work item** (a ticket, a Portun item, an agent's task) when its spans
   carry its key as `work_item.key`. Set it as a resource attribute for the
   process that does the work (`OTEL_RESOURCE_ATTRIBUTES=work_item.key=OPS-42`),
   or on the spans. A trace that has one shows the item's model calls and

@@ -652,7 +652,7 @@ function ApproveIdentity({ initial, onClose }) {
   return html`<${Dialog} title=${editing ? (initial.revoked ? `Approve ${initial.name} again` : `Edit ${initial.name}`) : 'Approve a name'} onClose=${onClose}>
     <form onSubmit=${submit}>
       ${!editing && html`<div class="field"><label>Name (it becomes the sender's emitter)</label>
-        <input name="name" required autofocus pattern="[a-z0-9][a-z0-9._\-]{0,62}" placeholder="e.g. boop-chat" /></div>`}
+        <input name="name" required autofocus pattern="[a-z0-9][a-z0-9._\-]{0,62}" placeholder="e.g. portun-chat" /></div>`}
       <div class="field"><label>Kind</label>
         <select value=${kind} onChange=${e => setKind(e.target.value)} disabled=${editing}>
           <option value="client">client: a program that sends</option>

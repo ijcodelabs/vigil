@@ -25,14 +25,14 @@ func TestSignClient(t *testing.T) {
 	der, _ := x509.CreateCertificateRequest(rand.Reader, &x509.CertificateRequest{Subject: pkix.Name{CommonName: "admin"},
 		DNSNames: []string{"vigil.example.com"}, URIs: []*url.URL{evil}}, key)
 	csr := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: der})
-	certPEM, err := a.SignClient(csr, "boop-chat", 3, time.Now())
+	certPEM, err := a.SignClient(csr, "portun-chat", 3, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
 	b, _ := pem.Decode(certPEM)
 	c, _ := x509.ParseCertificate(b.Bytes)
 	name, epoch, err := ClientOf(c)
-	if err != nil || name != "boop-chat" || epoch != 3 || len(c.DNSNames) != 0 || c.IsCA {
+	if err != nil || name != "portun-chat" || epoch != 3 || len(c.DNSNames) != 0 || c.IsCA {
 		t.Fatalf("%s %d %v %v", name, epoch, err, c.DNSNames)
 	}
 	pool := x509.NewCertPool()
@@ -55,11 +55,11 @@ func TestSignClient(t *testing.T) {
 	bad := append([]byte(nil), der...)
 	bad[len(bad)-5] ^= 0xff
 	for what, d := range map[string][]byte{"p384": d384, "rsa": drsa, "tampered": bad} {
-		if _, err := a.SignClient(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: d}), "boop-chat", 1, time.Now()); err == nil {
+		if _, err := a.SignClient(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: d}), "portun-chat", 1, time.Now()); err == nil {
 			t.Errorf("%s was signed", what)
 		}
 	}
-	for _, n := range []string{"", "Boop", "a/b", "x?epoch=2"} {
+	for _, n := range []string{"", "Portun", "a/b", "x?epoch=2"} {
 		if _, err := a.SignClient(csr, n, 1, time.Now()); err == nil {
 			t.Errorf("name %q was signed", n)
 		}
@@ -67,8 +67,8 @@ func TestSignClient(t *testing.T) {
 }
 
 func TestClientOfIsExact(t *testing.T) {
-	for _, raw := range []string{"vigil://client/boop-chat?epoch=1&x=2", "vigil://client/boop-chat", "vigil://client/boop-chat?epoch=01",
-		"vigil://agent/web-1?epoch=1", "https://client/boop-chat?epoch=1", "vigil://u@client/boop-chat?epoch=1", "vigil://client/a/b?epoch=1"} {
+	for _, raw := range []string{"vigil://client/portun-chat?epoch=1&x=2", "vigil://client/portun-chat", "vigil://client/portun-chat?epoch=01",
+		"vigil://agent/web-1?epoch=1", "https://client/portun-chat?epoch=1", "vigil://u@client/portun-chat?epoch=1", "vigil://client/a/b?epoch=1"} {
 		u, _ := url.Parse(raw)
 		if _, _, err := ClientOf(&x509.Certificate{URIs: []*url.URL{u}}); err == nil {
 			t.Errorf("%s was accepted", raw)

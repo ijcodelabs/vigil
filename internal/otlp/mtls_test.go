@@ -50,7 +50,7 @@ func TestClientCerts(t *testing.T) {
 	pool.AppendCertsFromPEM(ca.CAPEM())
 
 	var mu sync.Mutex
-	epochs := map[string]int{"boop-chat": 2, "boop": 1}
+	epochs := map[string]int{"portun-chat": 2, "portun": 1}
 	ln, _ := net.Listen("tcp", "127.0.0.1:0")
 	addr := ln.Addr().String()
 	ln.Close()
@@ -59,7 +59,7 @@ func TestClientCerts(t *testing.T) {
 		GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) { return &serving, nil },
 		ClientCAs:      func() *x509.CertPool { return pool },
 		Epochs:         func() map[string]int { mu.Lock(); defer mu.Unlock(); return epochs },
-		TokensFile:     writeTokens(t, "boop "+boopToken+"\n"),
+		TokensFile:     writeTokens(t, "portun "+portunToken+"\n"),
 		Log:            slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Logs:           func(e []model.LogEntry) error { got <- e[0]; return nil },
 		Metrics:        func([]model.Sample) {}}
@@ -67,7 +67,7 @@ func TestClientCerts(t *testing.T) {
 	defer cancel()
 	go r.Run(ctx)
 
-	b, _ := proto.Marshal(boopEvent())
+	b, _ := proto.Marshal(portunEvent())
 	post := func(cert *tls.Certificate, token string) (int, error) {
 		cfg := &tls.Config{RootCAs: pool}
 		if cert != nil {
@@ -94,14 +94,14 @@ func TestClientCerts(t *testing.T) {
 		return 0, err
 	}
 
-	chat := issue("boop-chat", 2)
+	chat := issue("portun-chat", 2)
 	if c, err := post(&chat, ""); err != nil || c != 200 {
 		t.Fatalf("current certificate: %d %v", c, err)
 	}
-	if e := <-got; e.Stream["emitter"] != "boop-chat" {
+	if e := <-got; e.Stream["emitter"] != "portun-chat" {
 		t.Errorf("emitter: %+v", e.Stream)
 	}
-	old := issue("boop-chat", 1)
+	old := issue("portun-chat", 1)
 	if c, _ := post(&old, ""); c != http.StatusForbidden {
 		t.Errorf("older epoch: %d", c)
 	}
@@ -109,15 +109,15 @@ func TestClientCerts(t *testing.T) {
 	if c, _ := post(&stranger, ""); c != http.StatusForbidden {
 		t.Errorf("unknown name: %d", c)
 	}
-	if c, _ := post(&chat, boopToken); c != http.StatusForbidden {
+	if c, _ := post(&chat, portunToken); c != http.StatusForbidden {
 		t.Errorf("token for another emitter: %d", c)
 	}
-	boop := issue("boop", 1)
-	if c, _ := post(&boop, boopToken); c != 200 {
+	portun := issue("portun", 1)
+	if c, _ := post(&portun, portunToken); c != 200 {
 		t.Errorf("token and certificate agree: %d", c)
 	}
 	<-got
-	if c, err := post(nil, boopToken); err == nil {
+	if c, err := post(nil, portunToken); err == nil {
 		t.Errorf("no certificate with required: %d", c)
 	}
 
@@ -140,7 +140,7 @@ func TestClientCerts(t *testing.T) {
 	}
 	<-got
 	mu.Lock()
-	epochs = map[string]int{"boop-chat": 3, "boop": 1}
+	epochs = map[string]int{"portun-chat": 3, "portun": 1}
 	mu.Unlock()
 	if c := send(); c != http.StatusForbidden {
 		t.Errorf("after revoking, same connection: %d", c)

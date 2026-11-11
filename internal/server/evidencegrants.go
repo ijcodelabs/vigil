@@ -12,7 +12,7 @@ import (
 )
 
 // An evidence grant lets something that investigates one incident, such as
-// an AI agent's run in a Boop workroom, read that incident's evidence
+// an AI agent's run in a Portun workroom, read that incident's evidence
 // bundle and nothing else: no queries, no other incident, no change. It is
 // short-lived, used a bounded number of times, and every issue and use is
 // logged. The bundle is the one Explain sends, built by vigil, masked
@@ -20,7 +20,7 @@ import (
 // for AI (agentic.md, principle 4).
 //
 // Grants are issued by an admin or by an issuer token: a token whose only
-// power is to issue grants, so the system that starts runs (Boop Chat)
+// power is to issue grants, so the system that starts runs (Portun Chat)
 // holds no token that can read anything itself.
 
 const (

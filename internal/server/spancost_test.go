@@ -46,7 +46,7 @@ func TestSpanCost(t *testing.T) {
 		"trace=xyz":       400,
 		"work_item=a%20b": 400,
 		"trace=0af7651916cd43dd8448eb211c80319c&work_item=X": 400,
-		"work_item=BOOP-42&from=1&to=99999999":               400,
+		"work_item=PORTUN-42&from=1&to=99999999":             400,
 	} {
 		if code, body := get(q); code != want {
 			t.Errorf("%q: %d %s, want %d", q, code, body, want)
@@ -83,8 +83,8 @@ func TestSpanCost(t *testing.T) {
 		t.Errorf("query for a trace: %s", asked)
 	}
 
-	if code, _ := get("work_item=BOOP-42"); code != 200 ||
-		!strings.Contains(asked, `"span_attr:work_item.key":="BOOP-42" OR "resource_attr:work_item.key":="BOOP-42"`) {
+	if code, _ := get("work_item=PORTUN-42"); code != 200 ||
+		!strings.Contains(asked, `"span_attr:work_item.key":="PORTUN-42" OR "resource_attr:work_item.key":="PORTUN-42"`) {
 		t.Errorf("query for a work item: %d %s", code, asked)
 	}
 }

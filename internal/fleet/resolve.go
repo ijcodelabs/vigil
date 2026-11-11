@@ -62,7 +62,7 @@ func Resolve(profiles []*Profile, catalog Catalog, attrs map[string]string) (*Re
 		for _, name := range names {
 			in := catalog[name]
 			if in == nil {
-				return nil, fmt.Errorf("profile %s uses integration %q, which does not exist", p.Name, name)
+				return nil, fmt.Errorf("profile %s: %w", p.Name, catalog.Missing(name))
 			}
 			frag, err := in.Fragment(p.Integrations[name])
 			if err != nil {

@@ -151,14 +151,14 @@ func TestDropLogAttributes(t *testing.T) {
 		return &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: s}}
 	}
 	in := &otlpwire.LogsRequest{ResourceLogs: []*logspb.ResourceLogs{{ScopeLogs: []*logspb.ScopeLogs{{
-		Scope: &commonpb.InstrumentationScope{Name: "boop.audit"},
-		LogRecords: []*logspb.LogRecord{{Body: val("boop.grant.started"), Attributes: []*commonpb.KeyValue{
-			str("event_name", "boop.grant.started"), str("actor_ref", "ff5647e96289343ba9394d958f4dfec5"), str("approver.ref", "aa")}}}}}}}}
-	out := convertLogs(in, "boop", map[string]bool{"actor_ref": true, "approver_ref": true})
-	if len(out) != 1 || out[0].Fields["event_name"] != "boop.grant.started" || out[0].Fields["actor_ref"] != "" || out[0].Fields["approver_ref"] != "" {
+		Scope: &commonpb.InstrumentationScope{Name: "portun.audit"},
+		LogRecords: []*logspb.LogRecord{{Body: val("portun.grant.started"), Attributes: []*commonpb.KeyValue{
+			str("event_name", "portun.grant.started"), str("actor_ref", "ff5647e96289343ba9394d958f4dfec5"), str("approver.ref", "aa")}}}}}}}}
+	out := convertLogs(in, "portun", map[string]bool{"actor_ref": true, "approver_ref": true})
+	if len(out) != 1 || out[0].Fields["event_name"] != "portun.grant.started" || out[0].Fields["actor_ref"] != "" || out[0].Fields["approver_ref"] != "" {
 		t.Fatalf("%+v", out)
 	}
-	if all := convertLogs(in, "boop", nil); all[0].Fields["actor_ref"] == "" {
+	if all := convertLogs(in, "portun", nil); all[0].Fields["actor_ref"] == "" {
 		t.Error("without the setting nothing is dropped")
 	}
 }

@@ -106,7 +106,7 @@ A node is a label's name and value together: `gateway="gw-1"` and
 `exported_agent="gw-1"` are two nodes. A node's colour is the worst of its
 own and its details'. `columns` lists the labels its card shows. To join
 nodes that have no label in common, give them one with
-`label_replace(…, "control", "Boop", "", "")`. A map takes up to 20
+`label_replace(…, "control", "Portun", "", "")`. A map takes up to 20
 queries and draws up to 300 nodes.
 
 ```json

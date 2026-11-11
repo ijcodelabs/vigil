@@ -105,9 +105,9 @@ ask. It is advice: nothing acts on it by itself.
 
 | | |
 |---|---|
-| `GET /api/v1/markers?service=<name>` | what happened to the work of a service in `from`..`to` (Unix seconds, an hour by default, at most 31 days): Boop Chat's item, investigation and run events whose `item_service` is that service, and vigil's own profile changes; oldest first, at most 500 (`more` says when there were more) |
-| `…?work_item=<KEY>` | the events of one Boop item |
-| `…?incident=<id>` | the events of the Boop item whose investigation read this vigil incident's evidence (`work_item` says which) |
+| `GET /api/v1/markers?service=<name>` | what happened to the work of a service in `from`..`to` (Unix seconds, an hour by default, at most 31 days): Portun Chat's item, investigation and run events whose `item_service` is that service, and vigil's own profile changes; oldest first, at most 500 (`more` says when there were more) |
+| `…?work_item=<KEY>` | the events of one Portun item |
+| `…?incident=<id>` | the events of the Portun item whose investigation read this vigil incident's evidence (`work_item` says which) |
 
 Each marker has `time`, `kind` (`item`, `investigation`, `task`, `config`),
 `title` (made by vigil from the event's bounded fields), `work_item` and
@@ -126,7 +126,7 @@ tokens and no money, and `limits` says so.
 
 ## Evidence grants
 
-A grant lets one run of an AI agent (a Boop Chat workroom investigating an
+A grant lets one run of an AI agent (a Portun Chat workroom investigating an
 incident, say) read one incident's evidence for a short time, and nothing
 else: no queries, no other incident, no change. The evidence is the bundle
 Explain would send (`GET /api/v1/incidents/{id}/explain` shows it), masked

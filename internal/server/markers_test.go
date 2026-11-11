@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// Markers come from Boop's events that name the service or the work item,
+// Markers come from Portun's events that name the service or the work item,
 // in time order, titled from bounded fields only, and one query serves the
 // charts of a page.
 func TestMarkers(t *testing.T) {
@@ -28,9 +28,9 @@ func TestMarkers(t *testing.T) {
 		asked.Store(r.FormValue("query"))
 		at := func(m int) string { return now.Add(-time.Duration(m) * time.Minute).Format(time.RFC3339Nano) }
 		for _, row := range []map[string]string{
-			{"_time": at(5), "event_name": "boop.item.moved", "work_item_key": "SHOP-1", "item_service": "shop-api", "from_category": "open", "to_category": "active"},
-			{"_time": at(20), "event_name": "boop.task.started", "work_item_key": "SHOP-1", "mode": "investigate", "task_id": "t1"},
-			{"_time": at(30), "event_name": "boop.item.opened", "work_item_key": "SHOP-1", "item_service": "shop-api", "item_type": "incident", "severity": "sev1",
+			{"_time": at(5), "event_name": "portun.item.moved", "work_item_key": "SHOP-1", "item_service": "shop-api", "from_category": "open", "to_category": "active"},
+			{"_time": at(20), "event_name": "portun.task.started", "work_item_key": "SHOP-1", "mode": "investigate", "task_id": "t1"},
+			{"_time": at(30), "event_name": "portun.item.opened", "work_item_key": "SHOP-1", "item_service": "shop-api", "item_type": "incident", "severity": "sev1",
 				"title": "should never be shown"},
 		} {
 			b, _ := json.Marshal(row)
@@ -73,7 +73,7 @@ func TestMarkers(t *testing.T) {
 		t.Error("a free-text field went into a marker")
 	}
 	q, _ := asked.Load().(string)
-	if !strings.Contains(q, `logger:="boop.audit"`) || !strings.Contains(q, `item_service:="shop-api"`) || !strings.Contains(q, `event_name:in("boop.item.opened"`) {
+	if !strings.Contains(q, `logger:="portun.audit"`) || !strings.Contains(q, `item_service:="shop-api"`) || !strings.Contains(q, `event_name:in("portun.item.opened"`) {
 		t.Errorf("query: %s", q)
 	}
 	// The other charts of the page: from the cache.

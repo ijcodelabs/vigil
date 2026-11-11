@@ -34,7 +34,7 @@ import (
 
 const (
 	gatewayToken = "gateway-test-token-xxxx"
-	boopToken    = "boop-test-token-xxxxxxx"
+	portunToken  = "portun-test-token-xxxxxxx"
 )
 
 func writeTokens(t *testing.T, body string) string {
@@ -59,10 +59,10 @@ func withToken(t *testing.T, h http.Handler, path, token string, m proto.Message
 	return w.Code
 }
 
-func boopEvent(attrs ...*commonpb.KeyValue) *collogs.ExportLogsServiceRequest {
+func portunEvent(attrs ...*commonpb.KeyValue) *collogs.ExportLogsServiceRequest {
 	return &collogs.ExportLogsServiceRequest{ResourceLogs: []*logspb.ResourceLogs{{Resource: resource, ScopeLogs: []*logspb.ScopeLogs{{
 		LogRecords: []*logspb.LogRecord{{TimeUnixNano: 1_700_000_000_000_000_000,
-			Body:       &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: "boop.session.started"}},
+			Body:       &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: "portun.session.started"}},
 			Attributes: attrs}}}}}}}
 }
 
@@ -72,7 +72,7 @@ func TestTokens(t *testing.T) {
 	r := &Receiver{Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Logs:    func(e []model.LogEntry) error { logs = append(logs, e...); return nil },
 		Metrics: func(s []model.Sample) { samples = append(samples, s...) }}
-	path := writeTokens(t, "# emitters\nboop-jump-gateway "+gatewayToken+"\n\n")
+	path := writeTokens(t, "# emitters\nportun-jump-gateway "+gatewayToken+"\n\n")
 	tokens, err := newTokenFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -80,7 +80,7 @@ func TestTokens(t *testing.T) {
 	h := r.authenticate(tokens, r.Handler())
 
 	for _, tok := range []string{"", "wrong-test-token-xxxxx", gatewayToken + "x"} {
-		if c := withToken(t, h, "/v1/logs", tok, boopEvent()); c != http.StatusUnauthorized {
+		if c := withToken(t, h, "/v1/logs", tok, portunEvent()); c != http.StatusUnauthorized {
 			t.Errorf("token %q: %d", tok, c)
 		}
 	}
@@ -89,34 +89,34 @@ func TestTokens(t *testing.T) {
 	}
 
 	// The name comes from the token; a sender's own "emitter" is kept apart.
-	if c := withToken(t, h, "/v1/logs", gatewayToken, boopEvent(str("emitter", "boop"), str("agent", "agt-1"))); c != 200 {
+	if c := withToken(t, h, "/v1/logs", gatewayToken, portunEvent(str("emitter", "portun"), str("agent", "agt-1"))); c != 200 {
 		t.Fatalf("good token: %d", c)
 	}
-	if e := logs[0]; e.Stream["emitter"] != "boop-jump-gateway" || e.Fields["attr_emitter"] != "boop" || e.Fields["agent"] != "agt-1" {
+	if e := logs[0]; e.Stream["emitter"] != "portun-jump-gateway" || e.Fields["attr_emitter"] != "portun" || e.Fields["agent"] != "agt-1" {
 		t.Errorf("entry: %+v", e)
 	}
 	metrics := &colmetrics.ExportMetricsServiceRequest{ResourceMetrics: []*metricspb.ResourceMetrics{{Resource: resource,
 		ScopeMetrics: []*metricspb.ScopeMetrics{{Metrics: []*metricspb.Metric{{Name: "queue_depth",
-			Data: &metricspb.Metric_Gauge{Gauge: &metricspb.Gauge{DataPoints: []*metricspb.NumberDataPoint{dbl(3, str("emitter", "boop"))}}}}}}}}}}
+			Data: &metricspb.Metric_Gauge{Gauge: &metricspb.Gauge{DataPoints: []*metricspb.NumberDataPoint{dbl(3, str("emitter", "portun"))}}}}}}}}}}
 	if c := withToken(t, h, "/v1/metrics", gatewayToken, metrics); c != 200 {
 		t.Fatalf("metrics: %d", c)
 	}
-	if l := samples[0].Labels; l["emitter"] != "boop-jump-gateway" || l["exported_emitter"] != "boop" {
+	if l := samples[0].Labels; l["emitter"] != "portun-jump-gateway" || l["exported_emitter"] != "portun" {
 		t.Errorf("labels: %v", l)
 	}
 
 	// A token added to the file is taken without a restart; a removed one
 	// is refused.
-	os.WriteFile(path, []byte("boop "+boopToken+"\n"), 0o600)
+	os.WriteFile(path, []byte("portun "+portunToken+"\n"), 0o600)
 	future := time.Now().Add(time.Minute)
 	os.Chtimes(path, future, future)
 	tokens.mu.Lock()
 	tokens.checked = time.Time{}
 	tokens.mu.Unlock()
-	if c := withToken(t, h, "/v1/logs", boopToken, boopEvent()); c != 200 {
+	if c := withToken(t, h, "/v1/logs", portunToken, portunEvent()); c != 200 {
 		t.Errorf("new token: %d", c)
 	}
-	if c := withToken(t, h, "/v1/logs", gatewayToken, boopEvent()); c != http.StatusUnauthorized {
+	if c := withToken(t, h, "/v1/logs", gatewayToken, portunEvent()); c != http.StatusUnauthorized {
 		t.Errorf("removed token: %d", c)
 	}
 
@@ -127,24 +127,24 @@ func TestTokens(t *testing.T) {
 	tokens.mu.Lock()
 	tokens.checked = time.Time{}
 	tokens.mu.Unlock()
-	if c := withToken(t, h, "/v1/logs", boopToken, boopEvent()); c != 200 {
+	if c := withToken(t, h, "/v1/logs", portunToken, portunEvent()); c != 200 {
 		t.Errorf("after a broken file: %d", c)
 	}
 }
 
 func TestTokenFileErrors(t *testing.T) {
 	for _, body := range []string{
-		"boop short",
-		"Boop " + boopToken,
-		"boop " + boopToken + " extra",
-		"boop " + boopToken + "\ngateway " + boopToken,
+		"portun short",
+		"Portun " + portunToken,
+		"portun " + portunToken + " extra",
+		"portun " + portunToken + "\ngateway " + portunToken,
 	} {
 		if _, err := parseTokens([]byte(body)); err == nil {
 			t.Errorf("%q: accepted", body)
 		}
 	}
 	// One name, two tokens: a rotation.
-	got, err := parseTokens([]byte("boop " + boopToken + "\nboop " + gatewayToken))
+	got, err := parseTokens([]byte("portun " + portunToken + "\nportun " + gatewayToken))
 	if err != nil || len(got) != 2 {
 		t.Errorf("rotation: %v %v", got, err)
 	}
@@ -154,7 +154,7 @@ func TestTokenFileErrors(t *testing.T) {
 		t.Error("missing file: no error")
 	}
 	h := (&Receiver{}).authenticate(tf, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
-	if c := withToken(t, h, "/v1/logs", boopToken, boopEvent()); c != http.StatusUnauthorized {
+	if c := withToken(t, h, "/v1/logs", portunToken, portunEvent()); c != http.StatusUnauthorized {
 		t.Errorf("missing file let a request in: %d", c)
 	}
 }
@@ -168,7 +168,7 @@ func TestTLS(t *testing.T) {
 
 	got := make(chan model.LogEntry, 1)
 	r := &Receiver{Listen: addr, CertFile: certFile, KeyFile: keyFile,
-		TokensFile: writeTokens(t, "boop "+boopToken+"\n"),
+		TokensFile: writeTokens(t, "portun "+portunToken+"\n"),
 		Log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Logs:       func(e []model.LogEntry) error { got <- e[0]; return nil },
 		Metrics:    func([]model.Sample) {}}
@@ -177,13 +177,13 @@ func TestTLS(t *testing.T) {
 	go r.Run(ctx)
 
 	client := &http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool}}}
-	b, _ := proto.Marshal(boopEvent())
+	b, _ := proto.Marshal(portunEvent())
 	var resp *http.Response
 	var err error
 	for range 50 {
 		req, _ := http.NewRequest("POST", "https://"+addr+"/v1/logs", bytes.NewReader(b))
 		req.Header.Set("Content-Type", "application/x-protobuf")
-		req.Header.Set("Authorization", "Bearer "+boopToken)
+		req.Header.Set("Authorization", "Bearer "+portunToken)
 		if resp, err = client.Do(req); err == nil {
 			break
 		}
@@ -196,7 +196,7 @@ func TestTLS(t *testing.T) {
 	if resp.StatusCode != 200 {
 		t.Fatalf("status %d", resp.StatusCode)
 	}
-	if e := <-got; e.Stream["emitter"] != "boop" {
+	if e := <-got; e.Stream["emitter"] != "portun" {
 		t.Errorf("entry: %+v", e)
 	}
 	// Plain HTTP is not answered as OTLP.

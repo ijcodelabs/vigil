@@ -23,7 +23,7 @@ func checkIntegrations(p *fleet.Profile, catalog fleet.Catalog) error {
 	for name, params := range p.Integrations {
 		in := catalog[name]
 		if in == nil {
-			return fmt.Errorf("integration %q does not exist (known: %v)", name, catalog.Names())
+			return catalog.Missing(name)
 		}
 		if _, err := in.Fragment(params); err != nil {
 			return err

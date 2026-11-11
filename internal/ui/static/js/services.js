@@ -310,13 +310,13 @@ function ServiceView({ name, params }) {
     return rows.sort((x, y) => (x._time < y._time ? 1 : -1));
   }, [range, name, errorsOnly, minMs, op], 30000);
 
-  // What Boop did to this service's work, and vigil's own changes, in the range.
+  // What Portun did to this service's work, and vigil's own changes, in the range.
   const { data: marks } = useLoad(async () => {
     const [from, to] = win();
     try {
       const r = await api(`/api/v1/markers?service=${encodeURIComponent(name)}&from=${Math.floor(from)}&to=${Math.ceil(to)}`);
       return r;
-    } catch { return { markers: [] }; } // a name Boop could not send (not its pattern): no markers
+    } catch { return { markers: [] }; } // a name Portun could not send (not its pattern): no markers
   }, [range, name], 30000);
   const markers = marks?.markers || [];
   const [checkAt, setCheckAt] = useState(null);
@@ -384,7 +384,7 @@ function ServiceView({ name, params }) {
 // One trace as a waterfall: every span a bar on a shared time axis, nested
 // under the span that started it.
 // WorkItemCost: what the model calls of everything done for one work item
-// (a Boop item, a ticket) cost in the last week, from spans carrying its key.
+// (a Portun item, a ticket) cost in the last week, from spans carrying its key.
 function WorkItemCost({ item }) {
   const { data: cost } = useLoad(() => spanCost('work_item=' + encodeURIComponent(item)), [item]);
   return html`<div style="margin-top: 6px">Work item <span class="chip">${item}</span>${cost

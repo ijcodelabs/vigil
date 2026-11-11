@@ -12,12 +12,12 @@ import (
 	"time"
 )
 
-// Markers are things that happened to the work, drawn on charts: what Boop
+// Markers are things that happened to the work, drawn on charts: what Portun
 // did (items opened and moved, investigations, workroom runs; from its
 // audit events, observability contract v1) and vigil's own configuration
 // changes. A chart asks for the markers of one service or one work item
 // over its range; only events that name that service or that work item
-// count, nothing is joined or guessed. Boop is the record of what happened:
+// count, nothing is joined or guessed. Portun is the record of what happened:
 // these are its events as received.
 
 const (
@@ -26,9 +26,9 @@ const (
 	markersMaxRange = 31 * 24 * time.Hour
 )
 
-// The Boop events that make markers.
-var markerEvents = []string{"boop.item.opened", "boop.item.moved", "boop.investigation.started", "boop.investigation.proposed",
-	"boop.investigation.accepted", "boop.investigation.dismissed", "boop.investigation.failed", "boop.task.started", "boop.task.ended"}
+// The Portun events that make markers.
+var markerEvents = []string{"portun.item.opened", "portun.item.moved", "portun.investigation.started", "portun.investigation.proposed",
+	"portun.investigation.accepted", "portun.investigation.dismissed", "portun.investigation.failed", "portun.task.started", "portun.task.ended"}
 
 var (
 	markerServiceRe = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,62}$`)
@@ -80,7 +80,7 @@ func (s *Server) handleMarkers(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	case service != "" && !markerServiceRe.MatchString(service):
-		http.Error(w, "service: lower-case letters, digits and ._- (as Boop sends it)", http.StatusBadRequest)
+		http.Error(w, "service: lower-case letters, digits and ._- (as Portun sends it)", http.StatusBadRequest)
 		return
 	case item != "" && !markerItemRe.MatchString(item):
 		http.Error(w, "work_item is a key like OPS-12", http.StatusBadRequest)
@@ -103,7 +103,7 @@ func (s *Server) handleMarkers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if incident != "" {
-		// The Boop item an investigation of this incident belongs to: the
+		// The Portun item an investigation of this incident belongs to: the
 		// only exact link there is today.
 		key, err := s.itemOfIncident(r.Context(), incident, from, to)
 		if err != nil {
@@ -142,7 +142,7 @@ func (s *Server) handleMarkers(w http.ResponseWriter, r *http.Request) {
 // itemOfIncident finds the work item whose investigation read this
 // incident's evidence ("" when there is none).
 func (s *Server) itemOfIncident(ctx context.Context, incident string, from, to time.Time) (string, error) {
-	rows, err := s.logQuery(ctx, `logger:="boop.audit" event_name:="boop.investigation.started" vigil_incident:=`+strconv.Quote(incident)+
+	rows, err := s.logQuery(ctx, `logger:="portun.audit" event_name:="portun.investigation.started" vigil_incident:=`+strconv.Quote(incident)+
 		` | sort by (_time desc) | limit 1`, from.Add(-7*24*time.Hour), to, 1)
 	if err != nil || len(rows) == 0 {
 		return "", err
@@ -162,7 +162,7 @@ func (s *Server) loadMarkers(ctx context.Context, service, item string, from, to
 	if service != "" {
 		filter = "item_service:=" + strconv.Quote(service)
 	}
-	query := fmt.Sprintf(`logger:="boop.audit" event_name:in(%s) %s | sort by (_time desc) | limit %d`,
+	query := fmt.Sprintf(`logger:="portun.audit" event_name:in(%s) %s | sort by (_time desc) | limit %d`,
 		strings.Join(names, ","), filter, markersMax+1)
 	rows, err := s.logQuery(ctx, query, from, to, markersMax+1)
 	if err != nil {
@@ -187,7 +187,7 @@ func (s *Server) loadMarkers(ctx context.Context, service, item string, from, to
 	return out, more, nil
 }
 
-// markerOf makes a marker of one Boop event, from its bounded fields only.
+// markerOf makes a marker of one Portun event, from its bounded fields only.
 func markerOf(t time.Time, f map[string]string) Marker {
 	key, ev := f["work_item_key"], f["event_name"]
 	m := Marker{Time: t, Event: ev, WorkItem: key, Service: f["item_service"]}
@@ -196,13 +196,13 @@ func markerOf(t time.Time, f map[string]string) Marker {
 		item = "an item"
 	}
 	switch ev {
-	case "boop.item.opened":
+	case "portun.item.opened":
 		m.Kind = "item"
 		m.Title = fmt.Sprintf("%s opened (%s%s)", item, orDash(f["item_type"]), sevSuffix(f["severity"]))
-	case "boop.item.moved":
+	case "portun.item.moved":
 		m.Kind = "item"
 		m.Title = fmt.Sprintf("%s → %s (from %s)", item, orDash(f["to_category"]), orDash(f["from_category"]))
-	case "boop.task.started":
+	case "portun.task.started":
 		m.Kind = "task"
 		m.Title = "Workroom run started"
 		if f["mode"] == "investigate" {
@@ -211,15 +211,15 @@ func markerOf(t time.Time, f map[string]string) Marker {
 		if key != "" {
 			m.Title += " for " + key
 		}
-	case "boop.task.ended":
+	case "portun.task.ended":
 		m.Kind = "task"
 		m.Title = "Workroom run ended: " + orDash(f["reason"])
 		if key != "" {
 			m.Title += " (" + key + ")"
 		}
-	default: // boop.investigation.*
+	default: // portun.investigation.*
 		m.Kind = "investigation"
-		m.Title = fmt.Sprintf("Investigation of %s %s", item, strings.TrimPrefix(ev, "boop.investigation."))
+		m.Title = fmt.Sprintf("Investigation of %s %s", item, strings.TrimPrefix(ev, "portun.investigation."))
 	}
 	return m
 }

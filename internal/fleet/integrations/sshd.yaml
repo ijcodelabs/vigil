@@ -1,20 +1,20 @@
 title: SSH logins
-description: Who logged in over SSH, how, and from where, from sshd's lines in the systemd journal. Certificate logins keep the certificate's Key ID, serial and CA, which is what tells a Boop Jump login from any other.
+description: Who logged in over SSH, how, and from where, from sshd's lines in the systemd journal. Certificate logins keep the certificate's Key ID, serial and CA, which is what tells a Portun Jump login from any other.
 # Not detected: sshd runs nearly everywhere, and every host would be listed
 # as running something unmonitored.
 detect: {}
 params: {}
 config:
-  # A Boop Jump certificate's Key ID names the person by a pseudonym
-  # (boop-jump:v1:<actor_ref>:<session>:<grant>). vigil keeps no person
+  # A Portun Jump certificate's Key ID names the person by a pseudonym
+  # (portun-jump:v1:<actor_ref>:<session>:<grant>). vigil keeps no person
   # ids: the agent masks that part, in the line and in ssh_key_id, before
   # anything is sent. Session and grant stay, which is what tells a Jump
   # login from any other.
   redact:
     rules:
-      - name: boop_jump_person
-        match: 'boop-jump:v1:[0-9a-f]{32}:'
-        replace: 'boop-jump:v1:masked:'
+      - name: portun_jump_person
+        match: 'portun-jump:v1:[0-9a-f]{32}:'
+        replace: 'portun-jump:v1:masked:'
   logs:
     journald:
       enabled: true
