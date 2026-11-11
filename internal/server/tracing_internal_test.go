@@ -28,7 +28,7 @@ func TestTraced(t *testing.T) {
 	parent := "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
 	req := httptest.NewRequest("GET", "/api/v1/incidents/42", nil)
 	req.Header.Set("traceparent", parent)
-	req.Header.Set("User-Agent", "boop-chat/1.0")
+	req.Header.Set("User-Agent", "portun-chat/1.0")
 	h.ServeHTTP(httptest.NewRecorder(), req)
 	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("POST", "/api/v1/write", nil))
 	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/api/v1/query?query=up{owner=%22ada%22}", nil))

@@ -42,7 +42,7 @@ design too (some systems mount `/usr` that way); exclude those in a rule.
 Plus whatever the target itself exposes. If the target has its own `job` or
 `instance` label, it is kept as `exported_job` / `exported_instance`. The
 same goes for `agent`, which the server sets on everything an agent sends:
-a target's own `agent` label (Boop Jump's agent id, for one) is kept as
+a target's own `agent` label (Portun Jump's agent id, for one) is kept as
 `exported_agent`, from scrapes and from OpenTelemetry alike, and so is an
 `agent` field on a log line.
 

@@ -52,7 +52,7 @@ func TestIdentities(t *testing.T) {
 
 	for body, want := range map[string]int{`{"agents":"gw-1"}`: 200, `{"agents":""}`: 400, `{"agents":"(","kind":"client"}`: 400,
 		`{"agents":"gw-1","kind":"endpoint"}`: 400, `{"agents":"gw-1","kind":"x"}`: 400} {
-		if code, out := admin("PUT", "/api/v1/identities/boop-chat", body); code != want {
+		if code, out := admin("PUT", "/api/v1/identities/portun-chat", body); code != want {
 			t.Errorf("%s: %d %s, want %d", body, code, out, want)
 		}
 	}
@@ -62,7 +62,7 @@ func TestIdentities(t *testing.T) {
 
 	// The agent with its own token gets a certificate; the shared ingest
 	// token, another agent and an unknown name get none.
-	code, body := asAgent("gw-1", tok.Token, "POST", "/api/v1/identity/sign", signReq("boop-chat"))
+	code, body := asAgent("gw-1", tok.Token, "POST", "/api/v1/identity/sign", signReq("portun-chat"))
 	var signed struct {
 		Cert, CA string
 		Epoch    int
@@ -72,12 +72,12 @@ func TestIdentities(t *testing.T) {
 	}
 	b, _ := pem.Decode([]byte(signed.Cert))
 	cert, _ := x509.ParseCertificate(b.Bytes)
-	if name, epoch, err := pki.ClientOf(cert); name != "boop-chat" || epoch != 1 || err != nil {
+	if name, epoch, err := pki.ClientOf(cert); name != "portun-chat" || epoch != 1 || err != nil {
 		t.Errorf("certificate: %s %d %v", name, epoch, err)
 	}
 	for what, call := range map[string][2]string{"ingest token": {"gw-1", "ingest"}, "another agent": {"web-1", other.Token},
 		"someone else's token": {"gw-1", other.Token}} {
-		if code, _ := asAgent(call[0], call[1], "POST", "/api/v1/identity/sign", signReq("boop-chat")); code != 401 && code != 403 {
+		if code, _ := asAgent(call[0], call[1], "POST", "/api/v1/identity/sign", signReq("portun-chat")); code != 401 && code != 403 {
 			t.Errorf("%s: %d", what, code)
 		}
 	}
@@ -86,22 +86,22 @@ func TestIdentities(t *testing.T) {
 	}
 
 	code, body = asAgent("gw-1", tok.Token, "GET", "/api/v1/identity/state", "")
-	if code != 200 || !strings.Contains(body, `"boop-chat":1`) {
+	if code != 200 || !strings.Contains(body, `"portun-chat":1`) {
 		t.Errorf("state: %d %s", code, body)
 	}
 
 	// Revoked: no new certificates and not current; approved again at a new epoch.
-	if code, body := admin("POST", "/api/v1/identities/boop-chat/revoke", ""); code != 200 || !strings.Contains(body, `"epoch":2`) || !strings.Contains(body, `"revoked":true`) {
+	if code, body := admin("POST", "/api/v1/identities/portun-chat/revoke", ""); code != 200 || !strings.Contains(body, `"epoch":2`) || !strings.Contains(body, `"revoked":true`) {
 		t.Errorf("revoke: %d %s", code, body)
 	}
-	if code, _ := asAgent("gw-1", tok.Token, "POST", "/api/v1/identity/sign", signReq("boop-chat")); code != 403 {
+	if code, _ := asAgent("gw-1", tok.Token, "POST", "/api/v1/identity/sign", signReq("portun-chat")); code != 403 {
 		t.Errorf("a revoked name was signed: %d", code)
 	}
-	if _, body := asAgent("gw-1", tok.Token, "GET", "/api/v1/identity/state", ""); strings.Contains(body, "boop-chat") {
+	if _, body := asAgent("gw-1", tok.Token, "GET", "/api/v1/identity/state", ""); strings.Contains(body, "portun-chat") {
 		t.Errorf("a revoked name is current: %s", body)
 	}
-	admin("PUT", "/api/v1/identities/boop-chat", `{"agents":"gw-1"}`)
-	if _, body := asAgent("gw-1", tok.Token, "GET", "/api/v1/identity/state", ""); !strings.Contains(body, `"boop-chat":3`) {
+	admin("PUT", "/api/v1/identities/portun-chat", `{"agents":"gw-1"}`)
+	if _, body := asAgent("gw-1", tok.Token, "GET", "/api/v1/identity/state", ""); !strings.Contains(body, `"portun-chat":3`) {
 		t.Errorf("approved again: %s", body)
 	}
 

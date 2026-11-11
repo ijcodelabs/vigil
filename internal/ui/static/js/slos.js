@@ -182,7 +182,7 @@ function SLOView({ name, admin }) {
 
   // The counts in buckets across the window: budget left as it went, the
   // bad share and the number of events.
-  // Changes to the SLO's service's work in its window (Boop's items and runs, vigil's profiles).
+  // Changes to the SLO's service's work in its window (Portun's items and runs, vigil's profiles).
   const { data: marks } = useLoad(async () => {
     if (!st || !slo?.service) return null;
     try {

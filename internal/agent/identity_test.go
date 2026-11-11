@@ -39,7 +39,7 @@ func (f *fakeSigner) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer f.mu.Unlock()
 	switch r.URL.Path {
 	case "/api/v1/identity/state":
-		json.NewEncoder(w).Encode(map[string]any{"epochs": map[string]int{"boop-chat": f.epoch},
+		json.NewEncoder(w).Encode(map[string]any{"epochs": map[string]int{"portun-chat": f.epoch},
 			"endpoints": map[string][]string{"gateway": f.names}, "ca": string(f.ca.CAPEM())})
 	case "/api/v1/identity/sign":
 		var in struct{ Name, CSR string }
@@ -80,7 +80,7 @@ func TestIdentityRenews(t *testing.T) {
 	defer srv.Close()
 	a := testAgent(t, srv.URL)
 	out := t.TempDir()
-	slot := config.IdentityClient{Name: "boop-chat", CertFile: filepath.Join(out, "chat.pem"),
+	slot := config.IdentityClient{Name: "portun-chat", CertFile: filepath.Join(out, "chat.pem"),
 		KeyFile: filepath.Join(out, "chat.key"), CAFile: filepath.Join(out, "ca.pem")}
 	id := newIdentity(a, "gateway", []config.IdentityClient{slot})
 	ctx := context.Background()
@@ -110,7 +110,7 @@ func TestIdentityRenews(t *testing.T) {
 	if c, err := id.GetCertificate(nil); err != nil || c == nil {
 		t.Fatalf("endpoint certificate: %v", err)
 	}
-	if id.ClientCAs() == nil || id.Epochs()["boop-chat"] != 1 {
+	if id.ClientCAs() == nil || id.Epochs()["portun-chat"] != 1 {
 		t.Errorf("state: %v", id.Epochs())
 	}
 
@@ -147,7 +147,7 @@ func TestIdentityRenews(t *testing.T) {
 	a2 := testAgent(t, "http://127.0.0.1:1")
 	a2.cfg.SpoolDir = a.cfg.SpoolDir
 	id2 := newIdentity(a2, "gateway", nil)
-	if c, _ := id2.GetCertificate(nil); c == nil || id2.Epochs()["boop-chat"] != 2 || id2.ClientCAs() == nil {
+	if c, _ := id2.GetCertificate(nil); c == nil || id2.Epochs()["portun-chat"] != 2 || id2.ClientCAs() == nil {
 		t.Errorf("not kept across a restart: %v", id2.Epochs())
 	}
 }
@@ -156,7 +156,7 @@ func TestDue(t *testing.T) {
 	ca, _ := pki.Open(t.TempDir(), []string{"localhost"})
 	_, csr, _ := pki.NewKeyCSR()
 	now := time.Now()
-	c, _ := ca.SignClient(csr, "boop-chat", 3, now)
+	c, _ := ca.SignClient(csr, "portun-chat", 3, now)
 	for _, tc := range []struct {
 		name string
 		cert []byte

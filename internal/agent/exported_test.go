@@ -9,8 +9,8 @@ import (
 func TestExportAgentLabel(t *testing.T) {
 	shared := map[string]string{"agent": "agt-1", "gateway": "gw-1"}
 	batch := []model.Sample{
-		{Name: "boop_jump_agent_connected", Labels: shared},
-		{Name: "boop_jump_agent_streams_open", Labels: shared},
+		{Name: "portun_jump_agent_connected", Labels: shared},
+		{Name: "portun_jump_agent_streams_open", Labels: shared},
 		{Name: "already", Labels: map[string]string{"agent": "b", "exported_agent": "a"}},
 		{Name: "none", Labels: map[string]string{"job": "x"}},
 	}

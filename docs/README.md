@@ -42,7 +42,7 @@ events and dashboards. It is a few static Go binaries: the **agent**
 | see how your applications do: requests, errors, latency, traces | [Services and traces](apm.md); set-up for [Python](apm-python.md) and [Go](apm-go.md) |
 | watch GPUs and what AI use costs | [GPUs and AI machines](gpu.md), [AI costs](finops.md) |
 | see what Claude Code costs and does | [Claude Code](claude-code.md) |
-| watch Boop and Boop Jump, and SSH logins that bypass them | [Boop and Boop Jump](boop.md) |
+| watch Portun and Portun Jump, and SSH logins that bypass them | [Portun and Portun Jump](portun.md) |
 | see at a glance what needs attention | [Home](home.md) |
 | keep the AI key in your OpenBao or Vault | [Secrets](secrets.md) |
 | be told when something is wrong | [Alerts](alerts.md) |

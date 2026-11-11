@@ -250,6 +250,24 @@ func (c Catalog) Names() []string {
 	return out
 }
 
+// renamed maps integrations that existed under another name to their new
+// one. Boop became Portun with no period of old names on the wire, so the
+// old integrations would only draw empty panels: a profile that still
+// names one is refused with the name to use instead.
+var renamed = map[string]string{
+	"boop":              "portun",
+	"boop_jump_gateway": "portun_jump_gateway",
+	"boop_jump_agent":   "portun_jump_agent",
+}
+
+// Missing explains why a profile may not use the integration name.
+func (c Catalog) Missing(name string) error {
+	if to, ok := renamed[name]; ok && c[to] != nil {
+		return fmt.Errorf("integration %q was renamed to %q (Boop is Portun now): rename it in the profile", name, to)
+	}
+	return fmt.Errorf("integration %q does not exist (known: %v)", name, c.Names())
+}
+
 // Detect returns the names of the integrations an inventory shows.
 func (c Catalog) Detect(inv *model.Inventory) []string {
 	var out []string

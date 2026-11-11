@@ -17,7 +17,7 @@ func TestBuiltinIntegrations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Join(cat.Names(), ","); got != "ai_module_claude,boop,boop_jump_agent,boop_jump_gateway,docker,gpu,haproxy,kubernetes,kubernetes_cluster,nginx,postgres,redis,sshd,victoriametrics" {
+	if got := strings.Join(cat.Names(), ","); got != "ai_module_claude,docker,gpu,haproxy,kubernetes,kubernetes_cluster,nginx,portun,portun_jump_agent,portun_jump_gateway,postgres,redis,sshd,victoriametrics" {
 		t.Fatalf("catalog: %s", got)
 	}
 	// Each one, switched on with its defaults, gives an agent a valid config.
@@ -73,9 +73,10 @@ config:
 
 	// Mistakes are named.
 	for want, doc := range map[string]string{
-		`"mongo", which does not exist`: "integrations: [mongo]",
-		`no parameter "port"`:           "integrations: {postgres: {port: '1'}}",
-		"list of names, or a map":       "integrations: postgres",
+		`"mongo" does not exist`:         "integrations: [mongo]",
+		`"boop" was renamed to "portun"`: "integrations: [boop]",
+		`no parameter "port"`:            "integrations: {postgres: {port: '1'}}",
+		"list of names, or a map":        "integrations: postgres",
 	} {
 		p, err := ParseProfile("p", doc)
 		if err == nil {

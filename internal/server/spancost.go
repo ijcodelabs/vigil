@@ -14,7 +14,7 @@ import (
 )
 
 // What the model calls in stored spans cost: of one trace (one request, an
-// agent's one action), or of everything done for one work item (a Boop
+// agent's one action), or of everything done for one work item (a Portun
 // item, a ticket) whose key the spans carry as `work_item.key`, on the span
 // or on the resource. Priced with the server's `costs.tokens`.
 //

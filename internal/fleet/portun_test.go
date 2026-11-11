@@ -17,10 +17,10 @@ import (
 // The tenant CA of the contract's test data.
 const tenantCA = "SHA256:38lMZN9s593n4PAe0oPt/XESnoQduAWmRgcoOOzgK00"
 
-// The Boop integrations use only metric names from Boop's contract, so a
-// rename on Boop's side shows up here and not as an empty panel.
-func TestBoopContractMetrics(t *testing.T) {
-	b, err := os.ReadFile("testdata/boop/contract-metrics.txt")
+// The Portun integrations use only metric names from Portun's contract, so a
+// rename on Portun's side shows up here and not as an empty panel.
+func TestPortunContractMetrics(t *testing.T) {
+	b, err := os.ReadFile("testdata/portun/contract-metrics.txt")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,9 +32,9 @@ func TestBoopContractMetrics(t *testing.T) {
 			}
 		}
 	}
-	name := regexp.MustCompile(`\b(?:aps|boop)_[a-z0-9_]+`)
+	name := regexp.MustCompile(`\bportun_[a-z0-9_]+`)
 	cat, _ := Builtin()
-	for _, in := range []string{"boop", "boop_jump_gateway", "boop_jump_agent"} {
+	for _, in := range []string{"portun", "portun_jump_gateway", "portun_jump_agent"} {
 		text, _ := json.Marshal([]any{cat[in].Rules, cat[in].Dashboard, cat[in].Queries})
 		for _, n := range name.FindAllString(string(text), -1) {
 			base := n
@@ -49,8 +49,8 @@ func TestBoopContractMetrics(t *testing.T) {
 		}
 	}
 	// The fixtures, too, have only contract names.
-	for _, f := range []string{"metrics-boop.txt", "metrics-export.txt", "metrics-gateway.txt", "metrics-agent.txt"} {
-		b, _ := os.ReadFile("testdata/boop/" + f)
+	for _, f := range []string{"metrics-portun.txt", "metrics-export.txt", "metrics-gateway.txt", "metrics-agent.txt"} {
+		b, _ := os.ReadFile("testdata/portun/" + f)
 		for _, n := range name.FindAllString(string(b), -1) {
 			base := strings.TrimSuffix(strings.TrimSuffix(strings.TrimSuffix(n, "_bucket"), "_sum"), "_count")
 			if !known[n] && !known[base] {
@@ -71,7 +71,7 @@ type journalLine struct {
 // shadow-access rule's conditions, applied to its fields, classify each
 // line the way the contract says. The conditions are read out of the
 // rule's own expression, so the test follows the rule.
-func TestBoopShadowAccess(t *testing.T) {
+func TestPortunShadowAccess(t *testing.T) {
 	cat, _ := Builtin()
 	r, err := Resolve([]*Profile{profile(t, "p", "integrations: [sshd]")}, cat, Attributes("x", nil, nil))
 	if err != nil {
@@ -89,14 +89,14 @@ func TestBoopShadowAccess(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	groups, err := cat["boop"].RuleGroups(map[string]string{"tenant_ca": tenantCA, "guarded_agents": "web-prod-.*"})
+	groups, err := cat["portun"].RuleGroups(map[string]string{"tenant_ca": tenantCA, "guarded_agents": "web-prod-.*"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var expr string
 	for _, g := range groups {
 		for _, rule := range g.Rules {
-			if rule.Alert == "SshLoginNotThroughBoopJump" {
+			if rule.Alert == "SshLoginNotThroughPortunJump" {
 				expr = rule.Expr
 			}
 		}
@@ -120,9 +120,9 @@ func TestBoopShadowAccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	personRe := regexp.MustCompile(`boop-jump:v1:[0-9a-f]{32}:`)
+	personRe := regexp.MustCompile(`portun-jump:v1:[0-9a-f]{32}:`)
 
-	f, err := os.Open("testdata/boop/sshd-journal.jsonl")
+	f, err := os.Open("testdata/portun/sshd-journal.jsonl")
 	if err != nil {
 		t.Fatal(err)
 	}

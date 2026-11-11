@@ -15,7 +15,7 @@ import (
 // Identities are the names the server's certificate authority signs
 // certificates for, besides its own (memory/context/identity.md):
 //
-//   - a client, such as Boop Chat sending its events to an agent's OTLP
+//   - a client, such as Portun Chat sending its events to an agent's OTLP
 //     endpoint: a certificate naming vigil://client/<name>?epoch=<n>, signed
 //     for the agents an admin allowed to hold it, which renew it for the
 //     program on their host;

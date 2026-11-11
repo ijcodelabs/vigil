@@ -16,7 +16,7 @@ import (
 // the same length of time before and after a moment, compared on what the
 // agents count for every request (rate, failures, 95th percentile) or on
 // the SLO's good and total minutes. The verdict is advice with its
-// reasons and limits; a person, or Boop's policy, decides what to do with
+// reasons and limits; a person, or Portun's policy, decides what to do with
 // it (agentic.md). Fixed queries over bounded windows only: nothing the
 // caller writes reaches the store as a query.
 

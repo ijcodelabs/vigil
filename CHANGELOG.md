@@ -30,6 +30,31 @@ after. How a release is made: [releasing.md](memory/context/releasing.md).
   a chart per agent, and the addresses and user names tried most. It reads
   sshd's lines in the journal and needs no integration.
 
+### Changed
+
+- **Boop is Portun now:** the integrations `boop`, `boop_jump_gateway` and
+  `boop_jump_agent` are `portun`, `portun_jump_gateway` and
+  `portun_jump_agent`, and read Portun's names: metrics `portun_*`, audit
+  events `portun.*` (logger `portun.audit`), Jump Key IDs `portun-jump:v1:…`.
+  Their jobs are `portun` and `portun-export`, their alerts `Portun…` (the
+  names in Portun's own rule files), their default token files
+  `/etc/vigil/portun-metrics-token` and `/etc/vigil/portun-export-token`.
+  The `sshd` integration masks Portun Jump's Key IDs. A profile that still
+  names an old integration is refused with the new name to use.
+
+### Upgrade notes
+
+1. **If a profile uses `boop`, `boop_jump_gateway` or `boop_jump_agent`,**
+   upgrade the server, then rename them in the profile (their parameters
+   stay the same; check the token files, which had `boop` in their default
+   names). Until then, the Fleet page shows the error with the new name and
+   the agents that profile matches keep the configuration they have. Portun
+   sends only its new names, so the old integrations see nothing from it
+   anyway.
+2. Dashboards installed from the old integrations stay as they were;
+   delete them once the Portun ones are installed. Saved queries and rule
+   files that name `boop_*` metrics or `boop.audit` need the new names too.
+
 ### Security
 
 - The server, the relay and the agent's OTLP endpoint close connections

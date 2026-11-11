@@ -1,0 +1,33 @@
+# HELP portun_contract_info Observability contract version.
+# TYPE portun_contract_info gauge
+portun_contract_info{version="1"} 1
+# HELP portun_core_requests_open Requests waiting for a decision.
+# TYPE portun_core_requests_open gauge
+portun_core_requests_open 2
+# HELP portun_core_request_pending_oldest_seconds Age of the oldest request waiting for a decision.
+# TYPE portun_core_request_pending_oldest_seconds gauge
+portun_core_request_pending_oldest_seconds 340
+# HELP portun_core_outbox_oldest_seconds Age of the oldest message waiting in the outbox.
+# TYPE portun_core_outbox_oldest_seconds gauge
+portun_core_outbox_oldest_seconds 0
+# HELP portun_core_openbao_sealed 1 when the secrets store is sealed or unreachable.
+# TYPE portun_core_openbao_sealed gauge
+portun_core_openbao_sealed 0
+# HELP portun_core_request_decision_wait_seconds Time from request to decision.
+# TYPE portun_core_request_decision_wait_seconds histogram
+portun_core_request_decision_wait_seconds_bucket{decision="approved",le="30"} 1
+portun_core_request_decision_wait_seconds_bucket{decision="approved",le="60"} 3
+portun_core_request_decision_wait_seconds_bucket{decision="approved",le="300"} 8
+portun_core_request_decision_wait_seconds_bucket{decision="approved",le="900"} 9
+portun_core_request_decision_wait_seconds_bucket{decision="approved",le="1800"} 9
+portun_core_request_decision_wait_seconds_bucket{decision="approved",le="3600"} 10
+portun_core_request_decision_wait_seconds_bucket{decision="approved",le="14400"} 10
+portun_core_request_decision_wait_seconds_bucket{decision="approved",le="86400"} 10
+portun_core_request_decision_wait_seconds_bucket{decision="approved",le="+Inf"} 10
+portun_core_request_decision_wait_seconds_sum{decision="approved"} 4210
+portun_core_request_decision_wait_seconds_count{decision="approved"} 10
+# HELP portun_core_events_dropped_total Audit events dropped before delivery.
+# TYPE portun_core_events_dropped_total counter
+portun_core_events_dropped_total{reason="queue_full"} 0
+portun_core_events_dropped_total{reason="rejected"} 0
+portun_core_events_dropped_total{reason="timeout"} 3

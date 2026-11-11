@@ -91,8 +91,8 @@ their life; nobody copies a key or a certificate around.
    `VIGIL_ADMIN_TOKEN` and `VIGIL_CA_PIN` set, as for `vigil apply`):
 
    ```bash
-   vigil identity approve boop-chat -agents boop-host
-   vigil identity approve gateway -agents boop-host -endpoint -names 192.0.2.10
+   vigil identity approve portun-chat -agents portun-host
+   vigil identity approve gateway -agents portun-host -endpoint -names 192.0.2.10
    vigil identity list
    ```
 
@@ -117,16 +117,16 @@ their life; nobody copies a key or a certificate around.
    ```yaml
    identity:
      clients:
-       - name: boop-chat
-         cert_file: /srv/boop/otlp/chat.pem
-         key_file: /srv/boop/otlp/chat.key
-         ca_file: /srv/boop/otlp/ca.pem
+       - name: portun-chat
+         cert_file: /srv/portun/otlp/chat.pem
+         key_file: /srv/portun/otlp/chat.key
+         ca_file: /srv/portun/otlp/ca.pem
          group: 10001              # numeric; the key is then 0640
    ```
 
    The directory must exist; files are replaced whole and never written
    through a symbolic link. The sender reads them again when they change
-   (Boop's emitters do: see Boop).
+   (Portun's emitters do: see Portun).
 
 A certificate's name is the sender's `emitter`, as a token's is. A request
 with both must name the same emitter. **Revoking** a name

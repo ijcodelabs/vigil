@@ -32,7 +32,7 @@ func TestEvidenceGrants(t *testing.T) {
 		StartsAt: now, EndsAt: now.Add(time.Hour)}})
 	srv.SyncIncidents(ctx, now)
 
-	code, body := admin("POST", "/api/v1/tokens", `{"name":"boop-chat","scope":"issue"}`)
+	code, body := admin("POST", "/api/v1/tokens", `{"name":"portun-chat","scope":"issue"}`)
 	var issuer struct{ Token, Scope string }
 	if json.Unmarshal([]byte(body), &issuer); code != 200 || issuer.Scope != "issue" || !strings.HasPrefix(issuer.Token, "vgr_") {
 		t.Fatalf("issuer token: %d %s", code, body)
@@ -123,7 +123,7 @@ func TestEvidenceGrants(t *testing.T) {
 		t.Errorf("read 21: %d", code)
 	}
 	code, body = admin("GET", "/api/v1/evidence-grants", "")
-	if code != 200 || !strings.Contains(body, `"uses":20`) || !strings.Contains(body, `"issuer":"token boop-chat"`) || strings.Contains(body, g.Token) {
+	if code != 200 || !strings.Contains(body, `"uses":20`) || !strings.Contains(body, `"issuer":"token portun-chat"`) || strings.Contains(body, g.Token) {
 		t.Errorf("list: %d %s", code, body)
 	}
 

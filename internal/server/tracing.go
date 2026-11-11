@@ -12,7 +12,7 @@ import (
 )
 
 // traced makes a server span of each API request, a child of the caller's
-// span when the request carries W3C trace context (a Boop service calling
+// span when the request carries W3C trace context (a Portun service calling
 // with a grant, say). The tracer is the global one: a no-op unless the
 // command set one up from the OTEL_* variables (servercli).
 //
