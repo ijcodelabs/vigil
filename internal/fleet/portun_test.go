@@ -20,21 +20,25 @@ const tenantCA = "SHA256:38lMZN9s593n4PAe0oPt/XESnoQduAWmRgcoOOzgK00"
 // The Portun integrations use only metric names from Portun's contract, so a
 // rename on Portun's side shows up here and not as an empty panel.
 func TestPortunContractMetrics(t *testing.T) {
-	b, err := os.ReadFile("testdata/portun/contract-metrics.txt")
-	if err != nil {
-		t.Fatal(err)
-	}
+	// Portun Chat is not in contract v1; its names come from its deploy
+	// guide and are allowed beside the contract's.
 	known := map[string]bool{}
-	for _, line := range strings.Split(string(b), "\n") {
-		if !strings.HasPrefix(line, "#") {
-			for _, n := range strings.Fields(line) {
-				known[n] = true
+	for _, f := range []string{"contract-metrics.txt", "chat-metrics.txt"} {
+		b, err := os.ReadFile("testdata/portun/" + f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, line := range strings.Split(string(b), "\n") {
+			if !strings.HasPrefix(line, "#") {
+				for _, n := range strings.Fields(line) {
+					known[n] = true
+				}
 			}
 		}
 	}
 	name := regexp.MustCompile(`\bportun_[a-z0-9_]+`)
 	cat, _ := Builtin()
-	for _, in := range []string{"portun", "portun_jump_gateway", "portun_jump_agent"} {
+	for _, in := range []string{"portun", "portun_chat", "portun_jump_gateway", "portun_jump_agent"} {
 		text, _ := json.Marshal([]any{cat[in].Rules, cat[in].Dashboard, cat[in].Queries})
 		for _, n := range name.FindAllString(string(text), -1) {
 			base := n

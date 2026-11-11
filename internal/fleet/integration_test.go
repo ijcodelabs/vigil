@@ -17,7 +17,7 @@ func TestBuiltinIntegrations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Join(cat.Names(), ","); got != "ai_module_claude,docker,gpu,haproxy,kubernetes,kubernetes_cluster,nginx,portun,portun_jump_agent,portun_jump_gateway,postgres,redis,sshd,victoriametrics" {
+	if got := strings.Join(cat.Names(), ","); got != "ai_module_claude,docker,gpu,haproxy,kubernetes,kubernetes_cluster,nginx,portun,portun_chat,portun_jump_agent,portun_jump_gateway,postgres,redis,sshd,victoriametrics" {
 		t.Fatalf("catalog: %s", got)
 	}
 	// Each one, switched on with its defaults, gives an agent a valid config.

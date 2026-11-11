@@ -496,7 +496,7 @@ Further, as the person's infrastructure calls for:
 - **Integrations** bundle collection, alert rules and a dashboard for one
   technology: `docker`, `kubernetes`, `kubernetes_cluster`, `haproxy`,
   `nginx`, `postgres`, `redis`, `victoriametrics`, `gpu`, `sshd`, `portun`,
-  `portun_jump_gateway`, `portun_jump_agent`. The Fleet page's
+  `portun_jump_gateway`, `portun_jump_agent`, `portun_chat`. The Fleet page's
   Integrations tab shows what was *detected* on which host and not yet
   switched on. Some need an exporter running next to the service (nginx,
   PostgreSQL, Redis); say so rather than install exporters unasked.

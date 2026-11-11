@@ -16,6 +16,16 @@ after. How a release is made: [releasing.md](memory/context/releasing.md).
 
 ### Added
 
+- **Portun dashboard** for the whole installation, one row per part: Core
+  (also removals waiting or stuck, approved but not granted, shards,
+  broken recordings), Jump (from the gateways when there is no tenant
+  export), Chat, versions, and the `portun-*` containers with their errors.
+- **`portun_chat` integration:** Portun Chat's `/metrics`, alerts when it or
+  its database is down, its backup is over 26 hours old, Web Push fails or
+  webhook posts are refused, and its own dashboard.
+- **Portun Jump gateway:** Portun Jump's newer rules (connections limited,
+  recording quota, gateway CA expiring or its rotation left open, one agent
+  identity in two places) and panels for them.
 - **Home** shows the AI spend of the last 30 days and the last year under
   the last 24 hours, with the date the total starts from when the metric
   store keeps less than that.

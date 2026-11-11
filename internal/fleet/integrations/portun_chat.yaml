@@ -1,0 +1,91 @@
+title: Portun Chat
+description: Portun Chat's /metrics - up, its database, live connections, Web Push and incoming webhooks (where vigil's own alerts arrive), and the age of its last backup. The names are the ones Portun Chat's deploy guide lists.
+detect:
+  process: [portun-chat]
+  image: [portun-chat]
+params:
+  metrics_target:
+    default: "127.0.0.1:9470"
+    description: Portun Chat's --metrics-listen address (off unless set). It has no auth, so it should be a private address.
+config:
+  scrape:
+    static:
+      - job: portun-chat
+        targets: ["${metrics_target}"]
+        path: /metrics
+rules:
+  # What Portun Chat's deploy guide says is worth alerting on. Counters are
+  # compared with their value a while ago, not increase(): the store counts
+  # a counter it sees for the first time as having risen from zero.
+  - name: alerts
+    interval: 1m
+    rules:
+      - alert: PortunChatDown
+        expr: up{job="portun-chat"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: 'Portun Chat {{ $labels.instance }} is not answering scrapes'
+      - alert: PortunChatDatabaseDown
+        expr: portun_chat_database_up == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: 'Portun Chat {{ $labels.instance }} cannot reach its database'
+      # A backup that never ran reports 0; that is a setup question, not an
+      # alert every minute.
+      - alert: PortunChatBackupStale
+        expr: time() - (portun_chat_backup_last_success_timestamp_seconds > 0) > 26 * 3600
+        labels: {severity: warning}
+        annotations:
+          summary: 'Portun Chat {{ $labels.instance }} has had no successful backup for over 26 hours'
+      - alert: PortunChatPushFailing
+        expr: portun_chat_push_total{result="failed"} - portun_chat_push_total{result="failed"} offset 30m > 5
+        labels: {severity: warning}
+        annotations:
+          summary: 'Web Push from Portun Chat {{ $labels.instance }} keeps failing: people miss notifications'
+      # Vigil's alerts reach a chat channel through one of these webhooks: a
+      # refused post is very likely an alert nobody saw.
+      - alert: PortunChatWebhookPostsRefused
+        expr: sum by (instance, result) (portun_chat_webhook_posts_total{result!="ok"} - portun_chat_webhook_posts_total{result!="ok"} offset 15m) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: 'Portun Chat {{ $labels.instance }} refused {{ $value }} webhook posts ({{ $labels.result }}) in 15 minutes: alerts sent there may be missing'
+dashboard:
+  title: Portun Chat
+  panels:
+    - {title: Up, type: stat, w: 2, h: 2, unit: yesno, queries: [{expr: 'min(portun_chat_up)'}]}
+    - {title: Database, type: stat, w: 2, h: 2, unit: yesno, queries: [{expr: 'min(portun_chat_database_up)'}]}
+    - {title: Live connections, type: stat, w: 2, h: 2, queries: [{expr: 'sum(portun_chat_live_connections)'}]}
+    - {title: Last backup, type: stat, w: 2, h: 2, unit: seconds, warn: 93600, crit: 172800, queries: [{expr: 'time() - max(portun_chat_backup_last_success_timestamp_seconds > 0)'}]}
+    - {title: Webhook posts refused (range), type: stat, w: 2, h: 2, warn: 1, queries: [{expr: 'sum(portun_chat_webhook_posts_total{result!="ok"} - portun_chat_webhook_posts_total{result!="ok"} offset $__range) or vector(0)'}]}
+    - {title: Push failures (range), type: stat, w: 2, h: 2, warn: 1, queries: [{expr: 'sum(portun_chat_push_total{result="failed"} - portun_chat_push_total{result="failed"} offset $__range) or vector(0)'}]}
+    - title: Live connections
+      type: timeseries
+      w: 6
+      h: 3
+      min: 0
+      queries: [{expr: 'sum by (instance) (portun_chat_live_connections)', legend: '{{instance}}'}]
+    - title: Webhook posts by result
+      type: timeseries
+      w: 6
+      h: 3
+      unit: ops/s
+      min: 0
+      queries: [{expr: 'sum by (result) (rate(portun_chat_webhook_posts_total[5m]))', legend: '{{result}}'}]
+    - title: Web Push by result
+      type: timeseries
+      w: 6
+      h: 3
+      unit: ops/s
+      min: 0
+      queries: [{expr: 'sum by (result) (rate(portun_chat_push_total[5m]))', legend: '{{result}}'}]
+    - title: Versions
+      type: table
+      w: 6
+      h: 3
+      columns: [instance, version]
+      queries: [{expr: 'portun_chat_build_info', legend: Reporting, unit: yesno}]
+queries:
+  - name: Portun Chat webhook posts refused
+    query: sum by (result) (increase(portun_chat_webhook_posts_total{result!="ok"}[1h]))

@@ -48,7 +48,7 @@ func TestIntegrationsAndDetection(t *testing.T) {
 		return out
 	}
 	cat := catalog()
-	if len(cat) != 14 || cat["nginx"]["detected"] != 2.0 || cat["nginx"]["unmonitored"] != 2.0 || cat["postgres"]["detected"] != 1.0 ||
+	if len(cat) != 15 || cat["nginx"]["detected"] != 2.0 || cat["nginx"]["unmonitored"] != 2.0 || cat["postgres"]["detected"] != 1.0 ||
 		cat["redis"]["detected"] != 1.0 || cat["docker"]["detected"] != 0.0 || cat["nginx"]["builtin"] != true {
 		t.Fatalf("catalog: nginx=%v postgres=%v redis=%v", cat["nginx"], cat["postgres"], cat["redis"])
 	}

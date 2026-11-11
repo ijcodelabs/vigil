@@ -178,19 +178,63 @@ dashboard:
   title: Portun
   variables:
     - {name: hostgroup, label: hostgroup, match: portun_jump_inventory_agent_info}
+  # One row per part of a Portun installation: Core, its access work, Jump,
+  # Chat, then the containers. Chat's and the gateway's numbers come from
+  # the portun_chat and portun_jump_gateway integrations (their own
+  # dashboards have the detail); without them those tiles stay empty.
+  # Containers are found by name (portun-*), as Portun's kit names them.
   panels:
-    - {title: Portun up, type: stat, w: 2, h: 2, unit: yesno, queries: [{expr: 'min(up{job="portun"})'}]}
+    # Components
+    - {title: Core up, type: stat, w: 2, h: 2, unit: yesno, queries: [{expr: 'min(up{job="portun"})'}]}
+    - {title: Jump gateway up, type: stat, w: 2, h: 2, unit: yesno, queries: [{expr: 'min(up{job="portun-jump-gateway"})'}]}
+    - {title: Chat up, type: stat, w: 2, h: 2, unit: yesno, queries: [{expr: 'min(portun_chat_up)'}]}
+    - {title: Secrets store sealed, type: stat, w: 2, h: 2, unit: yesno, warn: 1, queries: [{expr: 'max(portun_core_openbao_sealed)'}]}
+    - {title: Containers not running, type: stat, w: 2, h: 2, warn: 1, queries: [{expr: 'count(container_running{container=~"portun-.+"} == 0) or vector(0)'}]}
+    - {title: Container restarts (range), type: stat, w: 2, h: 2, warn: 1, queries: [{expr: 'sum(container_restarts_total{container=~"portun-.+"} - container_restarts_total{container=~"portun-.+"} offset $__range) or vector(0)'}]}
+    # Core: requests and grants
     - {title: Requests waiting, type: stat, w: 2, h: 2, queries: [{expr: 'sum(portun_core_requests_open)'}]}
     - {title: Oldest waiting, type: stat, w: 2, h: 2, unit: seconds, warn: 3600, crit: 14400, queries: [{expr: 'max(portun_core_request_pending_oldest_seconds)'}]}
-    - {title: Access overdue, type: stat, w: 2, h: 2, warn: 1, queries: [{expr: 'sum(portun_core_access_overdue)'}]}
+    - {title: 'Approved, not granted yet', type: stat, w: 2, h: 2, unit: seconds, warn: 300, crit: 600, queries: [{expr: 'max(portun_core_request_unfulfilled_oldest_seconds)'}]}
+    - {title: Grants waiting to start, type: stat, w: 2, h: 2, queries: [{expr: 'sum(portun_core_grants_pending)'}]}
     - {title: Live sessions, type: stat, w: 2, h: 2, queries: [{expr: 'sum(portun_core_jump_sessions_live)'}]}
-    - {title: Secrets store sealed, type: stat, w: 2, h: 2, unit: yesno, warn: 1, queries: [{expr: 'max(portun_core_openbao_sealed)'}]}
-    - {title: Servers connected, type: stat, w: 2, h: 2, queries: [{expr: 'sum(portun_jump_agent_connected * on (exported_agent) group_left (hostgroup) portun_jump_inventory_agent_info{hostgroup=~"$hostgroup"})'}]}
+    - {title: Outbox lag, type: stat, w: 2, h: 2, unit: seconds, warn: 900, queries: [{expr: 'max(portun_core_outbox_oldest_seconds)'}]}
+    # Core: access that should have ended, and what Core depends on
+    - {title: Access overdue, type: stat, w: 2, h: 2, warn: 1, queries: [{expr: 'sum(portun_core_access_overdue)'}]}
+    - {title: Removals waiting, type: stat, w: 2, h: 2, warn: 1, queries: [{expr: 'sum(portun_core_grants_revoke_pending)'}]}
+    - {title: Removals stuck, type: stat, w: 2, h: 2, crit: 1, queries: [{expr: 'sum(portun_core_grants_revoke_stuck)'}]}
+    - {title: Shards unreachable, type: stat, w: 2, h: 2, crit: 1, queries: [{expr: 'sum(portun_core_shards_unreachable)'}]}
+    - {title: Broken recordings (24 h), type: stat, w: 2, h: 2, warn: 1, queries: [{expr: 'sum(portun_core_jump_recordings_problem_24h{status=~"broken|tampered"}) or vector(0)'}]}
+    - {title: Events dropped (range), type: stat, w: 2, h: 2, warn: 1, queries: [{expr: '(sum(portun_core_events_dropped_total - portun_core_events_dropped_total offset $__range) or vector(0)) + (sum(portun_jump_events_dropped_total - portun_jump_events_dropped_total offset $__range) or vector(0))'}]}
+    # Jump: from a tenant's export when there is one, else from the gateways
+    - {title: Servers connected, type: stat, w: 2, h: 2, queries: [{expr: 'sum(portun_jump_agent_connected * on (exported_agent) group_left (hostgroup) portun_jump_inventory_agent_info{hostgroup=~"$hostgroup"}) or sum(portun_jump_agents_connected)'}]}
     - {title: Servers offline, type: stat, w: 2, h: 2, warn: 1, queries: [{expr: 'count((portun_jump_agent_connected * on (exported_agent) group_left (hostgroup) portun_jump_inventory_agent_info{hostgroup=~"$hostgroup"}) == 0) or vector(0)'}]}
     - {title: Active grants, type: stat, w: 2, h: 2, queries: [{expr: 'sum(portun_jump_grants_active{hostgroup=~"$hostgroup"})'}]}
-    - {title: Outbox lag, type: stat, w: 2, h: 2, unit: seconds, warn: 900, queries: [{expr: 'max(portun_core_outbox_oldest_seconds)'}]}
-    - {title: Events dropped (range), type: stat, w: 2, h: 2, warn: 1, queries: [{expr: '(sum(portun_core_events_dropped_total - portun_core_events_dropped_total offset $__range) or vector(0)) + (sum(portun_jump_events_dropped_total - portun_jump_events_dropped_total offset $__range) or vector(0))'}]}
+    - {title: People connected, type: stat, w: 2, h: 2, queries: [{expr: 'sum(portun_jump_user_connections_open{phase="open"})'}]}
+    - {title: Recording spool used, type: stat, w: 2, h: 2, unit: percent, warn: 80, crit: 95, queries: [{expr: '100 * max(portun_jump_spool_bytes / portun_jump_spool_limit_bytes)'}]}
     - {title: Logins without a Jump Key ID (range), type: stat, source: logs, w: 2, h: 2, warn: 1, queries: [{expr: 'unit:~"^sshd?(@.+)?[.]service$" ssh_result:=Accepted !ssh_key_id:~"^portun-jump:v1:" | stats count() as logins'}]}
+    # Chat
+    - {title: Chat database, type: stat, w: 3, h: 2, unit: yesno, queries: [{expr: 'min(portun_chat_database_up)'}]}
+    - {title: Chat live connections, type: stat, w: 3, h: 2, queries: [{expr: 'sum(portun_chat_live_connections)'}]}
+    - {title: Chat's last backup, type: stat, w: 3, h: 2, unit: seconds, warn: 93600, crit: 172800, queries: [{expr: 'time() - max(portun_chat_backup_last_success_timestamp_seconds > 0)'}]}
+    - {title: Chat webhook posts refused (range), type: stat, w: 3, h: 2, warn: 1, queries: [{expr: 'sum(portun_chat_webhook_posts_total{result!="ok"} - portun_chat_webhook_posts_total{result!="ok"} offset $__range) or vector(0)'}]}
+    # What runs, and which versions
+    - title: Versions
+      type: table
+      w: 6
+      h: 3
+      columns: [job, instance, version]
+      queries:
+        - {expr: 'portun_core_info or portun_jump_gateway_info or portun_chat_build_info', legend: Reporting, unit: yesno, warn: 0.5, crit: 0}
+    - title: Containers
+      type: table
+      w: 6
+      h: 3
+      columns: [container]
+      queries:
+        - {expr: 'max by (container) (container_running{container=~"portun-.+"})', legend: Running, unit: yesno, warn: 0.5, crit: 0}
+        - {expr: 'max by (container) (container_restarts_total{container=~"portun-.+"} - container_restarts_total{container=~"portun-.+"} offset $__range)', legend: Restarts (range), warn: 1, crit: 3}
+        - {expr: 'sum by (container) (rate(container_cpu_usage_seconds_total{container=~"portun-.+"}[5m]))', legend: CPU, unit: cores}
+        - {expr: 'sum by (container) (container_memory_usage_bytes{container=~"portun-.+"})', legend: Memory, unit: bytes}
     # Admins only in this version. Nodes: Portun, its gateways, the agents
     # (grouped by host group) and what they reach; colour from the node's
     # value and its details. Links: who reaches whom, and the sessions open
@@ -242,6 +286,15 @@ dashboard:
       unit: seconds
       min: 0
       queries: [{expr: 'histogram_quantile(0.9, sum by (decision, le) (rate(portun_core_request_decision_wait_seconds_bucket[1h])))', legend: '{{decision}}'}]
+    - title: Access that should have ended
+      type: timeseries
+      w: 6
+      h: 3
+      min: 0
+      queries:
+        - {expr: 'sum(portun_core_access_overdue)', legend: overdue}
+        - {expr: 'sum(portun_core_grants_revoke_pending)', legend: removal waiting}
+        - {expr: 'sum(portun_core_grants_revoke_stuck)', legend: removal stuck}
     - title: Portun HTTP responses by class
       type: timeseries
       w: 6
@@ -249,12 +302,55 @@ dashboard:
       unit: ops/s
       min: 0
       queries: [{expr: 'sum by (code) (rate(portun_core_http_requests_total[5m]))', legend: '{{code}}'}]
+    - title: Portun HTTP time per request
+      type: timeseries
+      w: 6
+      h: 3
+      unit: seconds
+      min: 0
+      queries: [{expr: 'sum(rate(portun_core_http_request_seconds_total[5m])) / sum(rate(portun_core_http_requests_total[5m]))', legend: average}]
     - title: Open streams by protocol
       type: timeseries
       w: 6
       h: 3
       min: 0
       queries: [{expr: 'sum by (protocol) (portun_jump_agent_streams_open)', legend: '{{protocol}}'}]
+    - title: Jump connections
+      type: timeseries
+      w: 6
+      h: 3
+      min: 0
+      queries:
+        - {expr: 'sum(portun_jump_agents_connected)', legend: servers}
+        - {expr: 'sum by (phase) (portun_jump_user_connections_open)', legend: 'people ({{phase}})'}
+    - title: Chat webhook posts by result
+      type: timeseries
+      w: 6
+      h: 3
+      unit: ops/s
+      min: 0
+      queries: [{expr: 'sum by (result) (rate(portun_chat_webhook_posts_total[5m]))', legend: '{{result}}'}]
+    - title: Container CPU
+      type: timeseries
+      w: 6
+      h: 3
+      unit: cores
+      min: 0
+      queries: [{expr: 'sum by (container) (rate(container_cpu_usage_seconds_total{container=~"portun-.+"}[5m]))', legend: '{{container}}'}]
+    - title: Container memory
+      type: timeseries
+      w: 6
+      h: 3
+      unit: bytes
+      min: 0
+      queries: [{expr: 'sum by (container) (container_memory_usage_bytes{container=~"portun-.+"})', legend: '{{container}}'}]
+    - title: Audit events by name
+      type: timeseries
+      source: logs
+      w: 6
+      h: 3
+      min: 0
+      queries: [{expr: 'logger:="portun.audit" | stats by (event_name) count() as events', legend: '{{event_name}}'}]
     - title: Audit events by name (range, as received)
       type: table
       source: logs
@@ -268,6 +364,9 @@ dashboard:
       h: 4
       queries: [{expr: 'unit:~"^sshd?(@.+)?[.]service$" ssh_result:=Accepted !ssh_key_id:~"^portun-jump:v1:" | stats by (agent, ssh_user, ssh_from, ssh_method) count() as logins | sort by (logins desc) | limit 30'}]
     - {title: Latest audit events (as received; Portun is the record), type: logs, w: 12, h: 4, limit: 50, queries: [{expr: 'logger:="portun.audit"'}]}
+    # Errors in the containers' own output. TLS handshake errors are left
+    # out: on a public gateway they are the internet's scanners.
+    - {title: Errors in Portun's container logs, type: logs, w: 12, h: 4, limit: 50, queries: [{expr: 'container:~"^portun-" (i("error") or i("fatal") or i("panic")) !"TLS handshake error"'}]}
 queries:
   - name: Portun audit events by name
     type: logs

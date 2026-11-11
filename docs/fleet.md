@@ -177,7 +177,7 @@ Things to know:
 An integration bundles what one technology needs: how to recognise it, what
 to collect, alert rules and a dashboard. Built in: Docker, Kubernetes node,
 Kubernetes cluster, GPUs, HAProxy, nginx, PostgreSQL, Redis, VictoriaMetrics,
-SSH logins, and Portun, Portun Jump gateway and Portun Jump agent (see
+SSH logins, and Portun, Portun Jump gateway, Portun Jump agent and Portun Chat (see
 [Portun and Portun Jump](portun.md)).
 
 A profile switches one on, with parameters where the defaults do not fit:
