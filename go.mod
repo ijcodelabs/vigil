@@ -2,7 +2,7 @@ module github.com/ijcodelabs/vigil
 
 go 1.26.0
 
-toolchain go1.27.3
+toolchain go1.27.4
 
 // Plain TCP, not Multipath TCP, which Go uses by default since 1.24: the
 // listeners do not need it, and it has been a kernel attack path.

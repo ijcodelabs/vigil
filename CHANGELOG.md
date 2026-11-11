@@ -65,6 +65,8 @@ after. How a release is made: [releasing.md](memory/context/releasing.md).
   which Go turns on by default and which the known exploit of the Linux
   TCP flaw CVE-2026-98432 goes through. This does not replace a fixed
   kernel on the host.
+- Built with **Go 1.27.4**, which fixes GO-2026-6859 in `net/http`, code
+  vigil's server, agent and relay use.
 
 ## v0.2.0 (2026-11-02)
 
