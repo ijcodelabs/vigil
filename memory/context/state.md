@@ -1387,6 +1387,32 @@ against the trial's Portun yet: the trial wires Portun by hand (jobs
 integrations once this is released. Portun Chat's metrics (`portun-chat`
 job) have no integration.
 
+## Contacts can be tested (built 2026-11-11)
+
+Step 1 of a plan reviewed with Codex (receiver secrets from the secret
+store, tests, routing history); the order is in direction.md.
+- `internal/alerting`: `compile` (config → routing tree and receivers'
+  integrations, nothing started) is shared by `Apply`, `SendTest` and
+  `Route`. `SendTest` sends a `VigilTest` (severity info, says who) through
+  one integration, past routing, grouping, inhibition and silences; with
+  the saved config it goes through the wrapped integration, so it counts in
+  Delivery; with an unsaved config nothing is recorded. Errors go through
+  `cleanError` (host only). One test per integration every 10 s.
+  `Route` runs `dispatch.Route.Match` on given labels (saved or unsaved
+  config), with group_by, waits, time intervals, integrations, and whether a
+  silence mutes the labels now; inhibition is not considered.
+  `Deliveries` lists every integration in use, zeros before the first send.
+- Server: `POST /api/v1/alerting/test`, `POST /api/v1/alerting/route`
+  (`contacts.go`, admin), logged without values.
+- UI: Send test per Delivery row; "Who would be told" panel; the same in
+  the YAML editor on the unsaved text (`YamlEditor` got `tools`).
+- Verified: unit and server tests; in the browser against a local server
+  and a local webhook sink (delivered, a refused one shows its 403 without
+  the token in the path, the unsaved config's test arrived and saved
+  nothing). Not tried with Telegram, Slack or mail.
+- At phone width the Test column needs a sideways scroll: the page is
+  wider than the screen (the known layout issue under Next).
+
 ## Next
 
 - Foundations, build order in `direction.md`: step 1 on paper (data

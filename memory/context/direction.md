@@ -55,6 +55,33 @@ not commitments, and most are not started.
   Step 1 (SLO objects and their per-minute counts) is built; the spec is
   [slo.md](slo.md).
 
+## Contacts: secrets from the store, tests, history (agreed 2026-11-11)
+
+Asked after a webhook change on the trial was not picked up (a single-file
+bind mount) and, once it was, the chat's public edge refused the posts.
+Reviewed with Codex. Small PRs, in this order:
+
+1. Done: the routing config compiled without starting anything; Send test
+   per integration; "Who would be told" (dry run); both on unsaved text.
+2. Version history of the routing config, like profiles (author, time,
+   restore as a new version), before secrets make a bad config harder to
+   recover.
+3. Receiver secrets by reference: `api_url_secret: <use>` (and the other
+   `*_secret` fields) next to Alertmanager's `*_file`. The YAML keeps the
+   name; the server puts the value in only in memory before `Apply`, and
+   uses appear on the Secrets page (path and field, Test). Refuse unknown or
+   dangling uses on save. Store down at start: the server runs, alert
+   delivery says it is unavailable rather than sending to some contacts.
+   Keep a test that Alertmanager's status API still shows `<secret>`.
+4. Reload when a referenced secret's KV version changes (checked each
+   minute, fresh, not from the 5-minute cache); apply only a config that
+   built cleanly, never over a working one with an unresolved reference.
+   KV v1 has no version: compare a digest in memory, or document it.
+5. Optional writes from vigil into the store, off by default, only under
+   `alerts/`, with the password asked again. `OpenBao.Put` rewrites the
+   whole secret: use KV v2 patch or check-and-set first.
+6. Later: a form for common contacts that writes the YAML.
+
 ## Foundations: data pipeline, storage, modules, DORA (agreed 2026-10-25)
 
 Four designs, each reviewed with ChatGPT in three rounds (separate designs

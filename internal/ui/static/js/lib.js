@@ -116,8 +116,9 @@ export function Dialog({ title, wide, onClose, children }) {
 
 // YamlEditor edits one YAML document: load() fetches it, save(text) stores
 // it. The server validates on save; its reason is shown and nothing changes
-// when it refuses.
-export function YamlEditor({ title, help, load, save, onClose, extra }) {
+// when it refuses. tools, when given, is called with the text being edited
+// and shown under it, for checks on what is not saved yet.
+export function YamlEditor({ title, help, load, save, onClose, extra, tools }) {
   const [text, setText] = useState(null);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -138,6 +139,7 @@ export function YamlEditor({ title, help, load, save, onClose, extra }) {
     ${text === null && !error ? html`<div class="empty">Loading…</div>` : html`
       <textarea rows="24" spellcheck="false" value=${text || ''} onInput=${e => setText(e.target.value)} onKeyDown=${tab}
         aria-label=${title}></textarea>`}
+    ${tools && text !== null && tools(text)}
     <${ErrorBox} error=${error} />
     <div class="actions">
       ${extra}<span class="spacer"></span>

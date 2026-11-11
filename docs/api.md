@@ -57,6 +57,9 @@ API) and `GET` `POST /api/v1/traces/query` (LogsQL over spans); see
 | `GET /api/v1/rules/builtin` | the rules that come with vigil (YAML), as they are in the running version |
 | `GET /api/v1/alerts` | pending and firing alerts |
 | `GET` `PUT /api/v1/alerting/config` | the Alertmanager configuration (YAML); admin only |
+| `GET /api/v1/alerting/deliveries` | every integration of the contacts in use and how it did since the server started: sent, failed, last success, last error (addresses cut to their host); admin only |
+| `POST /api/v1/alerting/test` | `{"receiver", "integration", "index", "config"?}`: one test message (`VigilTest`, severity `info`) through that integration only; answers `{"ok", "error"?, "ms"}`, 404 for an integration the configuration does not have, 429 within ten seconds of the last test of it. With `config` (unsaved YAML) that configuration is used and nothing is counted; admin only |
+| `POST /api/v1/alerting/route` | `{"labels": {…}, "config"?}`: which contacts an alert with these labels reaches (`matches`: receiver, route, group_by, waits, integrations) and whether a silence covers it now (`silenced`); sends nothing; admin only |
 | `/alertmanager/api/v2/…` | Alertmanager's own API: silences, alert groups, receivers, status |
 | `GET /api/v1/briefing` | what the Home page shows: open incidents (those of a host that is down nested under it), incidents resolved in the last 24 hours, what happened since the caller last marked the briefing seen, and coverage (agents reporting, rules failing, silences in effect) |
 | `POST /api/v1/briefing/seen` | `{"event_id": N}`: the caller has seen everything up to that event (`since.latest` of the briefing they were shown); never moves back |

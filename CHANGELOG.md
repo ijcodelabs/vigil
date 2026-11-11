@@ -29,6 +29,14 @@ after. How a release is made: [releasing.md](memory/context/releasing.md).
 - The **Logs and security** dashboard counts failed SSH logins: a total,
   a chart per agent, and the addresses and user names tried most. It reads
   sshd's lines in the journal and needs no integration.
+- **Send test** on each integration under Alerts → Contacts & routing →
+  Delivery: a `VigilTest` message through that integration only, with the
+  answer shown at once. Delivery now lists every integration in use, also
+  before it sent anything.
+- **Who would be told:** the labels of an alert in, the contacts the
+  routing sends it to out (route, grouping, waits, silenced now), each with
+  a test. In the editor it works on the text before it is saved. API:
+  `POST /api/v1/alerting/test` and `/api/v1/alerting/route`.
 
 ### Changed
 

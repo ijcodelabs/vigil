@@ -186,8 +186,13 @@ The message says why. Common ones:
 - **Alerts → Silences**: is a silence matching it?
 - Alertmanager waits `group_wait` before the first message and
   `repeat_interval` between reminders.
-- Delivery failures (wrong SMTP password, unreachable webhook) are in the
-  server's log.
+- **Who would be told** on the Contacts & routing tab: type the alert's
+  labels and it shows which contacts its routing reaches, and whether a
+  silence covers it now.
+- **Delivery** on the same tab: the last error of each contact (wrong SMTP
+  password, unreachable webhook, a 403 from a firewall in front of a chat).
+  **Send test** on the row sends one message to that contact alone and
+  shows the answer. The errors are also in the server's log.
 
 ## Runtime events are off
 

@@ -89,6 +89,9 @@ large fleets. Expect rough edges, and please say what you find.
   expiring) and more with each integration.
 - Alertmanager inside for routing, contacts and silences, and a message to
   the contacts when someone silences an alert.
+- **Contacts you can check**: whether each one's messages get through and
+  its last error, a **Send test** button per contact, and **Who would be
+  told** for any alert's labels, also for routing not saved yet.
 - **Service level objectives** over site checks, spans or any counters:
   good and total events counted once a minute, error budgets,
   multi-window burn-rate alerts, a page with each SLO's budget, burn

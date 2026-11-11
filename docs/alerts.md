@@ -17,7 +17,10 @@ configuration.
   silence for exactly that alert.
 - **Rules**: every rule with its state and, if its query fails, the error.
 - **Silences**: active and ended ones.
-- **Contacts & routing** (admins): the Alertmanager configuration.
+- **Contacts & routing** (admins): the Alertmanager configuration, whether
+  each contact's messages get through, a **Send test** for each, and **Who
+  would be told** for any alert's labels (see
+  [Did the message get through?](#did-the-message-get-through)).
 
 ## Rules
 
@@ -266,6 +269,12 @@ receivers:
           {{ end }}
 ```
 
+A `_file` is read each time a message is sent, so changing the secret
+needs no restart. In a container, mount a **directory** with these files
+(`./notify:/etc/vigil/notify:ro`), not each file on its own: most editors
+save a file by replacing it, and a container that mounted the single file
+keeps seeing the old one until it is restarted.
+
 ### Did the message get through?
 
 **Alerts → Contacts & routing → Delivery** lists every way a contact is
@@ -277,6 +286,28 @@ the metric `vigil_notifications_total{receiver, integration, index,
 result}`, and the built-in `NotificationsFailing` alert fires when one of
 them only fails. Give important alerts two contacts, so that one can tell
 you when the other stops working.
+
+Every integration of the contacts in use is listed, also before it has
+sent anything. **Send test** on a row sends one message through that
+integration only: an alert `VigilTest` with severity `info` that says who
+sent it, past routing, grouping and silences, so testing the chat does not
+also message the pager. The answer shows next to the button (delivered, or
+the error the other side gave), and the attempt is counted like any other.
+One integration can be tested once every ten seconds.
+
+### Who would be told?
+
+**Who would be told** on the same tab takes the labels of an alert
+(`alertname=HostDown severity=critical agent=web-1`) and shows which
+contacts the routing in use sends it to, on which route, how it is grouped
+and how long it waits, with a Send test for each integration. Nothing is
+sent until you press one. It also says when a silence in effect now covers
+those labels. Inhibit rules are not considered: they depend on the other
+alerts that fire.
+
+In the editor, **Try this text before saving** does the same with the text
+as it stands: the routing and contacts you are writing, tested before
+anything is saved. Such a test is not counted under Delivery.
 
 ### Slack
 
@@ -355,7 +386,12 @@ address in the webhook URL (for example `http://portun-chat:7470/hooks/…` on a
 shared network) keeps alerts flowing when the public edge in front of the
 chat is down.
 
-To check a contact without waiting for trouble, hand Alertmanager an alert
+An internal address also avoids a web application firewall at the edge,
+which may refuse the line breaks in an alert's text (the chat answers 403).
+
+To check a contact without waiting for trouble, press **Send test** on its
+row under Delivery (see [Did the message get through?](#did-the-message-get-through)).
+To test the whole way, routing included, hand Alertmanager an alert
 yourself; it goes the same way a real one does:
 
 ```bash

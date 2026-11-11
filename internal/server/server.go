@@ -282,6 +282,7 @@ func (s *Server) Handler() http.Handler {
 	s.tokenRoutes(mux)
 	s.evidenceGrantRoutes(mux)
 	s.deliveryRoutes(mux)
+	s.contactRoutes(mux)
 	s.verifyRoutes(mux)
 	s.spanCostRoutes(mux)
 	s.markerRoutes(mux)

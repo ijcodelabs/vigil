@@ -81,7 +81,8 @@ type Alertmanager struct {
 	// See silences.go: who is told about silences, and what they were told before.
 	routing        atomic.Pointer[routing]
 	told           told
-	sent           deliveries // how each contact's integrations did (deliveries.go)
+	sent           deliveries  // how each contact's integrations did (deliveries.go)
+	tests          testLimiter // one test per integration at a time (contacts.go)
 	notifySilences atomic.Bool
 
 	mu         sync.Mutex // serialises Apply
@@ -168,32 +169,16 @@ func (a *Alertmanager) Handler() http.Handler { return a.handler }
 
 // Apply validates and activates a configuration, replacing the previous one.
 func (a *Alertmanager) Apply(yaml string) error {
-	conf, err := config.Load(yaml)
+	conf, tmpl, routes, built, err := a.compile(yaml, false)
 	if err != nil {
 		return err
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	tmpl, err := template.FromGlobs(conf.Templates)
-	if err != nil {
-		return fmt.Errorf("notification templates: %w", err)
-	}
-	tmpl.ExternalURL = a.externalURL
-
-	routes := dispatch.NewRoute(conf.Route, nil)
-	active := map[string]struct{}{}
-	routes.Walk(func(rt *dispatch.Route) { active[rt.RouteOpts.Receiver] = struct{}{} })
 	receivers := map[string][]notify.Integration{}
-	for _, rcv := range conf.Receivers {
-		if _, used := active[rcv.Name]; !used {
-			continue
-		}
-		integrations, err := receiver.BuildReceiverIntegrations(rcv, tmpl, a.log)
-		if err != nil {
-			return err
-		}
-		receivers[rcv.Name] = a.recordDeliveries(rcv.Name, integrations)
+	for name, integrations := range built {
+		receivers[name] = a.recordDeliveries(name, integrations)
 	}
 	intervals := map[string][]timeinterval.TimeInterval{}
 	for _, ti := range conf.MuteTimeIntervals {
@@ -225,6 +210,38 @@ func (a *Alertmanager) Apply(yaml string) error {
 	a.dispatcher.Store(dispatcher)
 	a.routing.Store(&routing{routes: routes, receivers: receivers})
 	return nil
+}
+
+// compile turns a configuration into its routing tree and the integrations
+// of its receivers, without starting or changing anything: Apply uses it,
+// and so do a test of a configuration that is not saved and a dry run of
+// the routing. Only receivers some route uses are built, unless all is set.
+func (a *Alertmanager) compile(yaml string, all bool) (*config.Config, *template.Template, *dispatch.Route, map[string][]notify.Integration, error) {
+	conf, err := config.Load(yaml)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	tmpl, err := template.FromGlobs(conf.Templates)
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("notification templates: %w", err)
+	}
+	tmpl.ExternalURL = a.externalURL
+
+	routes := dispatch.NewRoute(conf.Route, nil)
+	active := map[string]struct{}{}
+	routes.Walk(func(rt *dispatch.Route) { active[rt.RouteOpts.Receiver] = struct{}{} })
+	receivers := map[string][]notify.Integration{}
+	for _, rcv := range conf.Receivers {
+		if _, used := active[rcv.Name]; !used && !all {
+			continue
+		}
+		integrations, err := receiver.BuildReceiverIntegrations(rcv, tmpl, a.log)
+		if err != nil {
+			return nil, nil, nil, nil, err
+		}
+		receivers[rcv.Name] = integrations
+	}
+	return conf, tmpl, routes, receivers, nil
 }
 
 // NotifyAboutSilences switches the two messages about silences on or off
