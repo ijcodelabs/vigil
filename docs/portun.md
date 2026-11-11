@@ -12,13 +12,14 @@ were `boop`, `boop_jump_gateway` and `boop_jump_agent`. Portun sends only the
 new names, so a profile that still names an old integration is refused with
 the new name to use.
 
-Four integrations come with vigil:
+Five integrations come with vigil:
 
 | Integration | Where | What |
 |---|---|---|
 | `portun` | the host that reaches Portun | Portun's own `/metrics`, the tenant export (the servers Portun Jump knows, also the offline ones), Portun's audit events, and the SSH check below |
 | `portun_jump_gateway` | the gateway's host | the gateway's `/metrics`: sessions, refusals, the recording spool, per-agent detail |
 | `portun_jump_agent` | each Jump agent's host | the agent's `/metrics`: its tunnel, certificate, accepted and refused streams |
+| `portun_chat` | Portun Chat's host | Chat's `/metrics`: up, its database, live connections, Web Push, incoming webhooks, its last backup |
 | `sshd` | the hosts you guard | sshd's login lines from the journal, taken apart; useful on its own as an SSH logins dashboard |
 
 The alert rules carry the same names as Portun's own rule files
@@ -86,6 +87,22 @@ and the same with `portun_jump_agent` (default `127.0.0.1:9465`). Their
 `/metrics` have no authentication, so they belong on loopback or a private
 address. Detection finds them by process name (`jump-gateway`,
 `jump-agent`).
+
+### Portun Chat
+
+Start Portun Chat with `--metrics-listen` (it is off by default), on a
+private address, and switch on `portun_chat` where it runs:
+
+```yaml
+select: ['detected_portun_chat="true"']
+integrations:
+  portun_chat: {metrics_target: "127.0.0.1:9470"}   # its --metrics-listen
+```
+
+Chat's metrics are not part of contract v1; vigil uses the names its
+deploy guide lists. When vigil's alerts go to a Portun Chat channel,
+`PortunChatWebhookPostsRefused` is the one to keep: a refused post is
+most likely an alert nobody saw.
 
 ### Audit events
 
@@ -198,13 +215,36 @@ the certificate's serial; Portun's own records do.
 | `PortunEventsForAnotherTenant` | a pinned source sent events for another tenant (or `tenant_ref` is not set) |
 | `PortunBreakGlassUsed` | someone used break-glass access |
 | `SshLoginNotThroughPortunJump` | above |
-| `PortunJumpGatewayDown`, `PortunJumpSpool*`, `PortunJumpRecording*`, `PortunJumpAgentCertExpiring`, `PortunJumpAgentRenewalsRefused`, `PortunJumpDenialsSpike`, `PortunJumpAgentTunnel*` | Portun Jump's own rules |
+| `PortunJumpGatewayDown`, `PortunJumpSpool*`, `PortunJumpRecording*`, `PortunJumpAgentCertExpiring`, `PortunJumpAgentRenewalsRefused`, `PortunJumpDenialsSpike`, `PortunJumpAgentTunnel*`, `PortunJumpConnectionsLimited`, `PortunJumpGatewayCAExpiring`, `PortunJumpGatewayCARotationOpen` | Portun Jump's own rules |
+| `PortunJumpAgentIdentityInTwoPlaces` | one agent's tunnels keep replacing each other from different addresses: two machines hold the same agent identity |
+| `PortunChatDown`, `PortunChatDatabaseDown`, `PortunChatBackupStale` (26 hours), `PortunChatPushFailing`, `PortunChatWebhookPostsRefused` | Portun Chat, from what its deploy guide says to alert on |
 
 ## Dashboards
 
-**Portun**: requests waiting, grants, a **map** (admins only), servers Portun
-Jump knows (connected or not, last seen), resources, audit events as
-received, SSH logins without a Jump Key ID.
+**Portun** shows the whole installation, one row per part:
+
+- **Components:** Core, the Jump gateway and Chat up or not, the secrets
+  store sealed, containers not running and their restarts.
+- **Core:** requests waiting and the oldest, approved requests not granted
+  yet, grants waiting to start, live sessions, the outbox; then access that
+  should have ended (overdue, removals waiting, removals stuck),
+  unreachable shards, broken recordings and dropped events.
+- **Jump:** servers connected and offline (from the tenant export, or the
+  gateways' own count without one), active grants, people connected, the
+  recording spool, SSH logins without a Jump Key ID.
+- **Chat:** its database, live connections, its last backup, refused
+  webhook posts.
+- **Versions** of each part, and **Containers** (`portun-*`, as Portun's kit
+  names them): running, restarts, CPU, memory.
+- Charts of requests, decisions, access that should have ended, HTTP
+  responses and time, streams, Jump connections, Chat's webhooks, the
+  containers' CPU and memory, and audit events by name; the **map** (admins
+  only); servers Portun Jump knows; audit events as received; and errors in
+  the containers' logs (TLS handshake errors, which on a public gateway are
+  the internet's scanners, left out).
+
+Tiles of a part that is not monitored stay empty: Chat's need
+`portun_chat`, the gateway's `portun_jump_gateway`.
 
 The map shows Portun, its gateways, the agents grouped by host group, and
 the servers and clusters they reach. A node is red when it is down or
@@ -212,8 +252,10 @@ offline, yellow when, say, its certificate has less than a week left; open
 sessions are links that move. The card of an agent shows its host name,
 tags, version, certificate time left and when it was last seen; a
 gateway's its recording spool; Portun's its waiting requests, outbox lag and
-whether its secrets store is sealed. See [Dashboards](dashboards.md#maps). **Portun Jump gateway**, **Portun Jump agents** and **SSH logins**
-come with their integrations.
+whether its secrets store is sealed. See [Dashboards](dashboards.md#maps). **Portun Jump gateway** (now also people connected, connections refused
+by a limit, sessions ended at the recording quota, the gateway CA's time
+left and rotation), **Portun Jump agents**, **Portun Chat** and **SSH
+logins** come with their integrations.
 
 Not built yet: session markers on charts, a request-access link on
 incidents, roles that decide who may see what (until then the map is for

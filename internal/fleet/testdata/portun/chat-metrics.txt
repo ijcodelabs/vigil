@@ -1,0 +1,2 @@
+# Metric names in Portun Chat's deploy guide (docs/deploy.md, Monitoring).
+portun_chat_up portun_chat_build_info portun_chat_database_up portun_chat_live_connections portun_chat_push_total portun_chat_webhook_posts_total portun_chat_backup_last_success_timestamp_seconds

@@ -1413,6 +1413,26 @@ store, tests, routing history); the order is in direction.md.
 - At phone width the Test column needs a sideways scroll: the page is
   wider than the screen (the known layout issue under Next).
 
+## Portun: one dashboard for the installation, Chat, newer Jump rules (built 2026-11-11)
+
+- The `portun` integration's dashboard has a row per part (components,
+  Core, access that should have ended, Jump, Chat), a versions table, the
+  `portun-*` containers (running, restarts, CPU, memory) and an error-log
+  panel that leaves out TLS handshake errors. Jump tiles fall back to the
+  gateways' `portun_jump_agents_connected` when there is no tenant export.
+- New integration `portun_chat` (job `portun-chat`, default
+  `127.0.0.1:9470`): five alerts, a small dashboard. Chat is not in
+  contract v1; `testdata/portun/chat-metrics.txt` holds the names from
+  Chat's deploy guide and the contract test allows them.
+- `portun_jump_gateway` gained Portun Jump's rules from its rule file of
+  2026-11-07 (ConnectionsLimited, RecordingQuotaReached, GatewayCAExpiring,
+  GatewayCARotationOpen, AgentIdentityInTwoPlaces) and panels; four metric
+  names added to the contract list (Jump commit d1004a1).
+- Every query was run against a real Portun install (rc.16): all valid;
+  empty only where there is no tenant export or no traffic yet. The
+  container names come from Portun's kit (`portun-core`, `portun-gateway`,
+  …) and differ on older installs, hence `portun-.+` rather than names.
+
 ## Next
 
 - Foundations, build order in `direction.md`: step 1 on paper (data

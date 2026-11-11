@@ -70,6 +70,35 @@ rules:
         labels: {severity: info}
         annotations:
           summary: 'Many refused access attempts on {{ $labels.instance }} (reason {{ $labels.reason }})'
+      - alert: PortunJumpConnectionsLimited
+        expr: sum by (instance, limit) (portun_jump_limited_total - portun_jump_limited_total offset 10m) > 20
+        labels: {severity: warning}
+        annotations:
+          summary: 'Gateway {{ $labels.instance }} keeps refusing connections ({{ $labels.limit }} limit): an attack, or the limit is too low'
+      - alert: PortunJumpRecordingQuotaReached
+        expr: portun_jump_recording_quota_total - portun_jump_recording_quota_total offset 1h > 0
+        labels: {severity: info}
+        annotations:
+          summary: 'A session on {{ $labels.instance }} was ended at its recording limit (--recording-quota-mb): runaway output or someone filling the spool'
+      - alert: PortunJumpAgentIdentityInTwoPlaces
+        # Tunnels of one agent keep replacing each other from different
+        # addresses: two machines hold the same agent identity. One
+        # reconnect from a new address (DHCP, failover) stays quiet.
+        expr: sum by (instance, exported_agent) (portun_jump_agent_tunnel_replaced_total{remote="different"} - portun_jump_agent_tunnel_replaced_total{remote="different"} offset 30m) > 2
+        labels: {severity: warning}
+        annotations:
+          summary: 'Agent {{ $labels.exported_agent }} connects from two places at once (copied identity?): check the gateway log for "agent tunnel replaced"'
+      - alert: PortunJumpGatewayCAExpiring
+        expr: portun_jump_gateway_ca_expiry_seconds < 60 * 86400
+        labels: {severity: warning}
+        annotations:
+          summary: 'The gateway CA of {{ $labels.instance }} expires within 60 days: rotate it'
+      - alert: PortunJumpGatewayCARotationOpen
+        expr: portun_jump_gateway_ca_rotation_phase{phase!="no rotation"} == 1
+        for: 10d
+        labels: {severity: info}
+        annotations:
+          summary: 'A gateway CA rotation on {{ $labels.instance }} has been {{ $labels.phase }} for over 10 days: finish it'
       - alert: PortunJumpEventsDropped
         expr: sum by (instance) (portun_jump_events_dropped_total - portun_jump_events_dropped_total offset 15m) > 0
         labels: {severity: info}
@@ -86,6 +115,27 @@ dashboard:
     - {title: Spool used, type: stat, w: 2, h: 2, unit: percent, warn: 80, crit: 95, queries: [{expr: '100 * max(portun_jump_spool_bytes / portun_jump_spool_limit_bytes)'}]}
     - {title: Refused (range), type: stat, w: 2, h: 2, queries: [{expr: '(sum(portun_jump_denied_total - portun_jump_denied_total offset $__range) or vector(0))'}]}
     - {title: Upload failures (range), type: stat, w: 2, h: 2, warn: 1, queries: [{expr: '(sum(portun_jump_recording_upload_failures_total - portun_jump_recording_upload_failures_total offset $__range) or vector(0))'}]}
+    - {title: User connections, type: stat, w: 2, h: 2, queries: [{expr: 'sum(portun_jump_user_connections_open{phase="open"})'}]}
+    - {title: Waiting to sign in, type: stat, w: 2, h: 2, warn: 50, queries: [{expr: 'sum(portun_jump_user_connections_open{phase="pre_auth"})'}]}
+    - {title: Recordings live, type: stat, w: 2, h: 2, queries: [{expr: 'sum(portun_jump_recordings_live)'}]}
+    - {title: Kubernetes credentials, type: stat, w: 2, h: 2, queries: [{expr: 'sum(portun_jump_kube_credentials_active)'}]}
+    - {title: Limited (range), type: stat, w: 2, h: 2, warn: 1, queries: [{expr: '(sum(portun_jump_limited_total - portun_jump_limited_total offset $__range) or vector(0))'}]}
+    - {title: Ended at recording quota (range), type: stat, w: 2, h: 2, warn: 1, queries: [{expr: '(sum(portun_jump_recording_quota_total - portun_jump_recording_quota_total offset $__range) or vector(0))'}]}
+    - title: Gateway CA
+      type: table
+      w: 6
+      h: 2
+      columns: [instance, gateway]
+      queries:
+        - {expr: 'portun_jump_gateway_ca_expiry_seconds * on (instance) group_left (gateway) portun_jump_gateway_info', legend: Expires in, unit: seconds, warn: 5184000, crit: 1209600}
+        - {expr: '(1 - max by (instance) (portun_jump_gateway_ca_rotation_phase{phase="no rotation"})) * on (instance) group_left (gateway) portun_jump_gateway_info', legend: Rotation open, unit: yesno}
+    - title: Connections refused by a limit
+      type: timeseries
+      w: 6
+      h: 2
+      unit: ops/s
+      min: 0
+      queries: [{expr: 'sum by (limit) (rate(portun_jump_limited_total[5m]))', legend: '{{limit}}'}]
     - title: Agents
       type: table
       w: 12

@@ -78,7 +78,8 @@ large fleets. Expect rough edges, and please say what you find.
   captures of what happened around a detection.
 - **Access**: SSH logins from the journal, and with Portun (access requests
   and recorded server access) its health, its audit events and an alert for
-  every SSH login that did not come through it. [Portun](docs/portun.md)
+  every SSH login that did not come through it; one dashboard for the whole
+  installation (Core, Jump, Chat, containers, versions). [Portun](docs/portun.md)
 - **Secrets stay home**: the agent masks keys, tokens and passwords in logs
   and spans before anything leaves the host.
 
