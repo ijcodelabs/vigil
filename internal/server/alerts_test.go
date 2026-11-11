@@ -205,6 +205,45 @@ receivers:
 	if code, body := do("PUT", "/api/v1/alerting/config", "admin", alerting); code != http.StatusNoContent {
 		t.Fatalf("alerting config: %d %q", code, body)
 	}
+
+	// Contacts can be tried: a test message, and who an alert would reach.
+	if code, body := do("GET", "/api/v1/alerting/deliveries", "admin", ""); code != 200 || !strings.Contains(body, `"receiver":"hook"`) {
+		t.Errorf("an unused integration is not listed: %d %q", code, body)
+	}
+	if code, body := do("POST", "/api/v1/alerting/test", "admin", `{"receiver":"hook","integration":"webhook","index":0}`); code != 200 || !strings.Contains(body, `"ok":true`) {
+		t.Errorf("test message: %d %q", code, body)
+	}
+	for range 100 {
+		if got("VigilTest", "firing") != nil {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if got("VigilTest", "firing") == nil {
+		t.Error("the test message did not arrive")
+	}
+	for body, want := range map[string]int{
+		`{"receiver":"nobody","integration":"webhook","index":0}`:                   http.StatusNotFound,
+		`{"receiver":"hook","integration":"webhook","index":0}`:                     http.StatusTooManyRequests,
+		`{"receiver":"hook","integration":"webhook","index":0,"config":"route: ["}`: http.StatusBadRequest,
+		`not json`: http.StatusBadRequest,
+	} {
+		if code, b := do("POST", "/api/v1/alerting/test", "admin", body); code != want {
+			t.Errorf("test %s: %d %q, want %d", body, code, b, want)
+		}
+	}
+	if code, body := do("POST", "/api/v1/alerting/route", "admin", `{"labels":{"alertname":"X"}}`); code != 200 || !strings.Contains(body, `"receiver":"hook"`) {
+		t.Errorf("route: %d %q", code, body)
+	}
+	if code, _ := do("POST", "/api/v1/alerting/route", "admin", `{"labels":{}}`); code != http.StatusBadRequest {
+		t.Errorf("route without labels: %d", code)
+	}
+	for _, path := range []string{"/api/v1/alerting/test", "/api/v1/alerting/route"} {
+		if code, _ := do("POST", path, "ingest", `{"labels":{"alertname":"X"}}`); code != http.StatusUnauthorized {
+			t.Errorf("ingest token may use %s: %d", path, code)
+		}
+	}
+
 	rules := `
 groups:
   - name: host

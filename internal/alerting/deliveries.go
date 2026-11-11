@@ -82,14 +82,27 @@ func (d *deliveries) record(receiver, integration string, index int, err error, 
 	x.LastError = cleanError(err)
 }
 
-// Deliveries lists every integration that has tried to send since the
-// server started, by contact.
+// Deliveries lists every integration of the contacts in use, and any other
+// that has tried to send since the server started, by contact. One that has
+// not sent anything yet is listed with zeros, so it can be tested.
 func (a *Alertmanager) Deliveries() []Delivery {
 	a.sent.mu.Lock()
 	defer a.sent.mu.Unlock()
 	out := make([]Delivery, 0, len(a.sent.m))
-	for _, x := range a.sent.m {
+	seen := map[string]bool{}
+	for k, x := range a.sent.m {
 		out = append(out, *x)
+		seen[k] = true
+	}
+	if rt := a.routing.Load(); rt != nil {
+		for name, integrations := range rt.receivers {
+			for _, in := range integrations {
+				t := Target{Receiver: name, Integration: in.Name(), Index: in.Index()}
+				if !seen[t.key()] {
+					out = append(out, Delivery{Receiver: name, Integration: in.Name(), Index: in.Index()})
+				}
+			}
+		}
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Receiver != out[j].Receiver {

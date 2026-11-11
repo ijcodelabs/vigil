@@ -159,28 +159,103 @@ function SilenceForm({ labels, onClose }) {
   </form><//>`;
 }
 
+// TestButton sends one test message through one integration of a contact,
+// of the saved configuration or, with config, of the text in the editor.
+function TestButton({ target, config, onDone }) {
+  const [busy, setBusy] = useState(false);
+  const [res, setRes] = useState(null);
+  const send = async () => {
+    setBusy(true); setRes(null);
+    try {
+      const r = await api('/api/v1/alerting/test', { method: 'POST', body: JSON.stringify({ ...target, ...(config ? { config } : {}) }) });
+      setRes(r);
+    } catch (e) { setRes({ ok: false, error: e.message }); }
+    setBusy(false);
+    if (onDone) onDone();
+  };
+  return html`<span><button class="small" disabled=${busy} onClick=${send}
+      title="Sends a test message (VigilTest, severity info) through this integration only">${busy ? 'Sending…' : 'Send test'}</button>
+    ${res && (res.ok
+      ? html` <span class="muted" style="font-size: 12px">delivered (${res.ms} ms)</span>`
+      : html`<div class="error mono" style="font-size: 12px; white-space: normal; margin-top: 4px">${res.error}</div>`)}</span>`;
+}
+
+// parseLabels reads "alertname=X, severity=critical agent=web-1".
+function parseLabels(text) {
+  const out = {};
+  for (const part of text.split(/[,\s]+/).filter(Boolean)) {
+    const i = part.indexOf('=');
+    if (i <= 0) throw new Error(`"${part}" is not name=value`);
+    out[part.slice(0, i)] = part.slice(i + 1).replace(/^"(.*)"$/, '$1');
+  }
+  if (!Object.keys(out).length) throw new Error('give labels, such as alertname=HostDown severity=critical');
+  return out;
+}
+
+// RouteCheck: which contacts an alert with these labels would reach, with
+// a test button for each of their integrations. Sends nothing by itself.
+function RouteCheck({ config }) {
+  const [text, setText] = useState('alertname=HostDown severity=critical');
+  const [res, setRes] = useState(null);
+  const [error, setError] = useState(null);
+  const check = async e => {
+    e && e.preventDefault();
+    setError(null); setRes(null);
+    try {
+      const labels = parseLabels(text);
+      setRes(await api('/api/v1/alerting/route', { method: 'POST', body: JSON.stringify({ labels, ...(config ? { config } : {}) }) }));
+    } catch (err) { setError(err.message); }
+  };
+  return html`<div>
+    <form class="row" onSubmit=${check} style="gap: 8px; flex-wrap: wrap">
+      <input style="flex: 1; min-width: 220px" class="mono" value=${text} onInput=${e => setText(e.target.value)}
+        aria-label="Labels of an alert" placeholder="alertname=HostDown severity=critical agent=web-1" />
+      <button type="submit">Who would be told</button>
+    </form>
+    <${ErrorBox} error=${error} />
+    ${res && (res.matches.length === 0
+      ? html`<p class="muted">No contact: the routing sends this nowhere.</p>`
+      : html`<div style="overflow-x: auto"><table style="margin-top: 8px"><thead><tr><th>Contact</th><th>Route</th><th>Grouped by</th><th>Waits</th><th>Through</th></tr></thead>
+        <tbody>${res.matches.map(m => html`<tr>
+          <td><strong>${m.receiver}</strong></td>
+          <td class="mono" style="font-size: 12px; white-space: normal">${m.route === '{}' ? 'the top route' : m.route.split('/').filter(x => x !== '{}').map(x => x.replace(/^\{(.*)\}$/, '$1')).join(' → ')}
+            ${m.time_intervals && m.time_intervals.length > 0 && html`<div class="muted">only in/outside: ${m.time_intervals.join(', ')}</div>`}</td>
+          <td>${(m.group_by || []).map(l => html`<span class="chip">${l}</span>`)}</td>
+          <td class="muted" style="font-size: 12px">first ${m.group_wait}, then ${m.group_interval}, again after ${m.repeat_interval}</td>
+          <td>${m.integrations.length === 0 ? html`<span class="muted">nothing (no integration)</span>` : m.integrations.map(t => html`
+            <div style="margin-bottom: 4px">${t.integration}${t.index > 0 ? html` <span class="muted">#${t.index + 1}</span>` : ''}
+              <${TestButton} target=${t} config=${config} /></div>`)}</td>
+        </tr>`)}</tbody></table></div>`)}
+    ${res && res.silenced && html`<p class="muted">A silence in effect now covers these labels: such an alert would not be sent until it ends.</p>`}
+    ${res && html`<p class="muted" style="font-size: 12px">Inhibit rules are not considered here: they depend on which other alerts fire.</p>`}
+  </div>`;
+}
+
 // Deliveries: whether each contact's integrations got their messages
 // through since the server started, with the last error.
 function Deliveries() {
-  const { data, error } = useLoad(() => api('/api/v1/alerting/deliveries'), [], 30000);
+  const { data, error, reload } = useLoad(() => api('/api/v1/alerting/deliveries'), [], 30000);
   const when = t => (t ? html`<span title=${new Date(t).toLocaleString()}>${ago(t)}</span>` : html`<span class="muted">never</span>`);
   const state = d => (d.last_failure && (!d.last_ok || new Date(d.last_failure) > new Date(d.last_ok)) ? 'failing' : 'ok');
   return html`<div class="panel flush"><h2 style="padding: 14px 16px 0">Delivery</h2>
     <${ErrorBox} error=${error} />
     ${!data ? html`<div class="empty">Loading…</div>` : data.length === 0
-      ? html`<div class="empty">Nothing sent since the server started.</div>`
-      : html`<table><thead><tr><th>Contact</th><th>Through</th><th>State</th><th style="text-align: right">Sent</th>
-          <th style="text-align: right">Failed</th><th>Last sent</th><th>Last failure</th></tr></thead>
+      ? html`<div class="empty">No contact is in use yet.</div>`
+      : html`<div style="overflow-x: auto"><table><thead><tr><th>Contact</th><th>Through</th><th>State</th><th style="text-align: right">Sent</th>
+          <th style="text-align: right">Failed</th><th>Last sent</th><th>Last failure</th><th>Test</th></tr></thead>
         <tbody>${data.map(d => html`<tr>
           <td><strong>${d.receiver}</strong></td>
           <td>${d.integration}${d.index > 0 ? html` <span class="muted">#${d.index + 1}</span>` : ''}</td>
-          <td><${Badge} kind=${state(d) === 'ok' ? 'ok' : 'bad'}>${state(d) === 'ok' ? 'working' : 'failing'}<//></td>
+          <td>${d.sent === 0 && d.failed === 0 ? html`<span class="muted">not used yet</span>`
+            : html`<${Badge} kind=${state(d) === 'ok' ? 'ok' : 'bad'}>${state(d) === 'ok' ? 'working' : 'failing'}<//>`}</td>
           <td class="num">${fmtNum(d.sent)}</td><td class="num">${fmtNum(d.failed)}</td>
           <td>${when(d.last_ok)}</td>
           <td>${d.last_failure ? html`${when(d.last_failure)}<div class="muted mono" style="font-size: 12px; white-space: normal">${d.last_error}</div>` : html`<span class="muted">none</span>`}</td>
-        </tr>`)}</tbody></table>`}
-    <p class="muted" style="padding: 0 16px">Counted since the server last started. A contact that keeps failing
-      raises <code>NotificationsFailing</code>, sent to the contacts that work.</p></div>`;
+          <td><${TestButton} target=${{ receiver: d.receiver, integration: d.integration, index: d.index }} onDone=${reload} /></td>
+        </tr>`)}</tbody></table></div>`}
+    <p class="muted" style="padding: 0 16px">Counted since the server last started; a test counts too. A contact that keeps
+      failing raises <code>NotificationsFailing</code>, sent to the contacts that work. <strong>Send test</strong>${' '}reaches
+      only that integration, past routing and silences.</p></div>`;
 }
 
 function Contacts() {
@@ -198,8 +273,13 @@ function Contacts() {
         <p class="muted" style="margin-bottom: 0">Only the placeholder contact exists, so no notifications are sent yet.</p>`}
     </div>
     <${Deliveries} />
+    <div class="panel"><h2>Who would be told</h2>
+      <p class="muted" style="margin-top: 0">The labels of an alert, and the routing in use: which contacts it reaches, how it is grouped, and a test for each.</p>
+      <${RouteCheck} /></div>
     ${editing && html`<${YamlEditor} title="Contacts & routing"
       help="Routes, receivers (email, Slack, webhook, PagerDuty, …), inhibit rules and time intervals. Passwords and webhook URLs in here are stored on the server as written."
       load=${() => api('/api/v1/alerting/config')} save=${text => api('/api/v1/alerting/config', { method: 'PUT', body: text })}
+      tools=${text => html`<details style="margin-top: 10px"><summary class="muted" style="cursor: pointer">Try this text before saving: who would be told, and a test message</summary>
+        <div style="margin-top: 8px"><${RouteCheck} config=${text} /></div></details>`}
       onClose=${saved => { setEditing(false); if (saved) reload(); }} />`}`;
 }
