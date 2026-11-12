@@ -105,6 +105,10 @@ func (s *Server) alertingRoutes(mux *http.ServeMux) {
 	}))
 	mux.HandleFunc("GET /api/v1/alerting/config", s.admin(s.getSetting(settingAlerting, alerting.DefaultConfig)))
 	mux.HandleFunc("PUT /api/v1/alerting/config", s.admin(s.putAlerting))
+	// The alerting config's history carries its webhook addresses and
+	// passwords, so admins only; the rule file's is as open as the file.
+	s.docVersionRoutes(mux, "/api/v1/alerting/config", settingAlerting, s.admin)
+	s.docVersionRoutes(mux, "/api/v1/rules/config", settingRules, s.viewer)
 
 	mux.HandleFunc("GET /api/v1/rules", s.viewer(func(w http.ResponseWriter, _ *http.Request) {
 		groups := s.rules.Status()
@@ -256,7 +260,7 @@ func (s *Server) saveRules(w http.ResponseWriter, r *http.Request, text string) 
 		http.Error(w, "rules not saved, their expressions could not be checked: "+err.Error(), http.StatusServiceUnavailable)
 		return false
 	}
-	if err := s.store.SetSetting(settingRules, text); err != nil {
+	if err := s.store.SaveDocument(settingRules, text, origin(r), author(r)); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return false
 	}
@@ -278,7 +282,7 @@ func (s *Server) putAlerting(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid alerting config: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	if err := s.store.SetSetting(settingAlerting, text); err != nil {
+	if err := s.store.SaveDocument(settingAlerting, text, origin(r), author(r)); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

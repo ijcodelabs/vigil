@@ -63,7 +63,7 @@ Reviewed with Codex. Small PRs, in this order:
 
 1. Done: the routing config compiled without starting anything; Send test
    per integration; "Who would be told" (dry run); both on unsaved text.
-2. Version history of the routing config, like profiles (author, time,
+2. Done (2026-11-12, with the rule file too): version history of the routing config, like profiles (author, time,
    restore as a new version), before secrets make a bad config harder to
    recover.
 3. Receiver secrets by reference: `api_url_secret: <use>` (and the other

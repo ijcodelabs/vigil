@@ -144,6 +144,7 @@ func TestUsersAndSessions(t *testing.T) {
 		t.Errorf("viewer reads rules: %d", code)
 	}
 	for _, req := range [][2]string{{"PUT", "/api/v1/rules/config"}, {"GET", "/api/v1/users"}, {"GET", "/api/v1/alerting/config"},
+		{"GET", "/api/v1/alerting/config/versions"}, {"GET", "/api/v1/alerting/config/versions/1"},
 		{"POST", "/alertmanager/api/v2/silences"}, {"PUT", "/api/v1/fleet/profiles/x"}, {"POST", "/api/v1/agents/x/token"}} {
 		if code, _, _ := v.do(req[0], req[1], "{}"); code != 403 {
 			t.Errorf("viewer %s %s: %d, want 403", req[0], req[1], code)

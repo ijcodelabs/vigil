@@ -87,6 +87,7 @@ function Rules({ admin }) {
     ${editing && html`<${YamlEditor} title="Rule file"
       help="Saving replaces all rules. Every expression is run once against its store first; if anything is wrong, nothing changes and the reason is shown."
       load=${() => api('/api/v1/rules/config')} save=${text => api('/api/v1/rules/config', { method: 'PUT', body: text })}
+      history="/api/v1/rules/config/versions"
       onClose=${saved => { setEditing(false); if (saved) reload(); }} />`}`;
 }
 
@@ -304,6 +305,7 @@ function Contacts() {
     ${editing && html`<${YamlEditor} title="Contacts & routing"
       help="Routes, receivers (email, Slack, webhook, PagerDuty, …), inhibit rules and time intervals. Passwords and webhook URLs in here are stored on the server as written."
       load=${() => api('/api/v1/alerting/config')} save=${text => api('/api/v1/alerting/config', { method: 'PUT', body: text })}
+      history="/api/v1/alerting/config/versions"
       tools=${text => html`<details style="margin-top: 10px"><summary class="muted" style="cursor: pointer">Try this text before saving: who would be told, and a test message</summary>
         <div style="margin-top: 8px"><${RouteCheck} config=${text} /></div></details>`}
       onClose=${saved => { setEditing(false); if (saved) reload(); }} />`}`;

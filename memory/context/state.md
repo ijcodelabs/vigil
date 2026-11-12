@@ -1580,6 +1580,27 @@ handshake failure" lines are scanners, not a certificate problem (not a
 pattern any more), and the host-wide error lines gathered for incidents of
 no particular kind score 1 at most.
 
+## History of the rule file and the routing config (built 2026-11-12)
+
+Step 2 of "Contacts: secrets from the store, tests, history" in
+direction.md, with the rule file added because it has the same problem.
+- Table `setting_versions (key, version, doc, origin, author, time)`;
+  `Store.SaveDocument` writes the setting and a version in one
+  transaction, keeps the text from before the history as version 1
+  (`before-history`), adds nothing when the text equals the newest, keeps
+  200. `putAlerting` and `saveRules` (so also "alert from this query") use
+  it; other settings still use `SetSetting`.
+- `GET …/alerting/config/versions[/{n}]` admin only (the text holds webhook
+  URLs and passwords), `…/rules/config/versions[/{n}]` viewer.
+- UI: `YamlEditor` got `history` (list, Compare with the editor's text,
+  put back; saving goes through the normal checks); `diffLines` moved to
+  lib.js from fleet.js.
+- Verified: store test (before-history, no duplicate, pruning), viewers
+  refused the routing history; in the browser on a local server: v1 from
+  before, compare showed the one changed line, put back and saved as v3.
+  The rule file editor was not tried in the browser (saving it needs the
+  stores).
+
 ## Next
 
 - Foundations, build order in `direction.md`: step 1 on paper (data
