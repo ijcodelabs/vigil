@@ -14,6 +14,8 @@ after. How a release is made: [releasing.md](memory/context/releasing.md).
 
 ## Unreleased
 
+## v0.3.0 (2026-11-12)
+
 ### Fixed
 
 - **Runtime events: file opens are seen as the kernel resolved them.** An
@@ -108,6 +110,8 @@ after. How a release is made: [releasing.md](memory/context/releasing.md).
 
 ### Changed
 
+- **A third look, "tempest"** (teal on deep navy) besides light and dark,
+  and a sidebar that collapses to icons; both are remembered per browser.
 - **Boop is Portun now:** the integrations `boop`, `boop_jump_gateway` and
   `boop_jump_agent` are `portun`, `portun_jump_gateway` and
   `portun_jump_agent`, and read Portun's names: metrics `portun_*`, audit
@@ -130,6 +134,19 @@ after. How a release is made: [releasing.md](memory/context/releasing.md).
 2. Dashboards installed from the old integrations stay as they were;
    delete them once the Portun ones are installed. Saved queries and rule
    files that name `boop_*` metrics or `boop.audit` need the new names too.
+3. **Delivery checks start on their own** after the server upgrade: every
+   contact in use is checked every 15 minutes without posting, and gets one
+   silent real message a week when nothing else reached it. Set
+   `delivery_checks.send_interval: 0s` in the server config if a contact
+   must never get a message that is not an alert, or `interval: 0s` to turn
+   the checks off.
+4. **Claude Code live state** needs the hook's `Notification` and `Stop`
+   events in Claude Code's settings (Claude Code docs, "Switch it on"); without
+   them sessions show as working or idle, never as waiting on you.
+5. **Runtime events:** upgrade the server before using the new `refused`
+   field in a profile's rules; an older server refuses the profile. The
+   agent chooses its probes by itself; a kernel without BPF trampolines
+   gets the old ones and says so in the log.
 
 ### Security
 
@@ -143,6 +160,8 @@ after. How a release is made: [releasing.md](memory/context/releasing.md).
   kernel on the host.
 - Built with **Go 1.27.4**, which fixes GO-2026-6859 in `net/http`, code
   vigil's server, agent and relay use.
+- `github.com/klauspost/compress` 1.20.2 fixes GO-2026-6865, a crash on
+  some zstd input, reached through the log and alerting libraries.
 
 ## v0.2.0 (2026-11-02)
 

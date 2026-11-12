@@ -17,7 +17,7 @@ checksums. What changed and what to do when upgrading is in its notes,
 which are also collected in `CHANGELOG.md` at the top of the repository.
 
 ```bash
-v=0.2.0
+v=0.3.0
 base=https://github.com/ijcodelabs/vigil/releases/download/v$v
 curl -fLO $base/vigil-agent-$v-linux-amd64.tar.gz
 curl -fL -O $base/SHA256SUMS -O $base/SHA256SUMS.sigstore.json
@@ -43,7 +43,7 @@ install -m 755 vigil-agent-$v-linux-amd64/vigil-agent /usr/local/bin/
 ```
 
 Container images are `ghcr.io/ijcodelabs/vigil-agent`, `vigil-server` and
-`vigil-relay`, tagged with the version (`0.2.0`) and its minor (`0.2`),
+`vigil-relay`, tagged with the version (`0.3.0`) and its minor (`0.3`),
 for linux/amd64 and linux/arm64, signed the same way:
 
 ```bash
@@ -387,7 +387,7 @@ docker run -d --name vigil-agent --pid host --network host \
   -v /proc:/host/proc:ro -v /sys:/host/sys:ro -v /etc:/host/etc:ro -v /:/host/root:ro \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v /etc/vigil:/etc/vigil:ro -v /var/lib/vigil:/var/lib/vigil \
-  ghcr.io/ijcodelabs/vigil-agent:0.2.0 -config /etc/vigil/agent.yaml
+  ghcr.io/ijcodelabs/vigil-agent:0.3.0 -config /etc/vigil/agent.yaml
 ```
 
 That is the released image (see [Download a release](#download-a-release)
