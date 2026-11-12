@@ -14,8 +14,31 @@ after. How a release is made: [releasing.md](memory/context/releasing.md).
 
 ## Unreleased
 
+### Fixed
+
+- **Runtime events: file opens are seen as the kernel resolved them.** An
+  open by relative path (`cd /etc && cat shadow`), through `..` or through
+  a symlink was not reported; now the real path is, on kernels that can
+  attach BPF programs to kernel functions (x86-64 from Linux 5.5, arm64
+  from 6.0). Older kernels keep the previous probes, with a line in the
+  agent's log.
+- **Runtime events: running a setuid program** (`sudo`, `su`, …) and other
+  changes of the effective user made outside the set*uid calls are now
+  `setuid` events.
+- **Runtime events: a multi-threaded process** is reported as ended when
+  its last thread ends, with the process's exit code, not when its main
+  thread does, and once even when two of its threads end at the same moment.
+- **Runtime events: an open the kernel refuses** (a user without the rights
+  running `cat /etc/shadow`) is reported again, as an `open` with `refused`
+  true, so a rule can tell an attempt from a read. The example rules say
+  `refused` in their summary, and `system_config_changed` leaves refused
+  writes out.
+
 ### Added
 
+- **Captures: Detected and Errors.** A capture marks every event a rule
+  fired on, not only the first, and can be narrowed to those, or to the
+  errors: refused opens and processes that failed or were killed.
 - **Portun dashboard** for the whole installation, one row per part: Core
   (also removals waiting or stuck, approved but not granted, shards,
   broken recordings), Jump (from the gateways when there is no tenant

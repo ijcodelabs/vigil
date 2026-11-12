@@ -178,7 +178,7 @@ security:
   #   comm, exe, args, cmdline, pid, ppid, uid, euid
   #   parent_comm, parent_exe
   #   container, container_id      ("" for processes on the host itself)
-  #   path, write                  (open)      addr, port     (connect, listen)
+  #   path, write, refused         (open)      addr, port     (connect, listen)
   #   old_euid, new_euid           (setuid)    exit_code, signal  (exit)
   # `summary` may use {field} placeholders. A rule reports at most
   # `max_per_minute` detections (default 10).
@@ -193,11 +193,11 @@ security:
     - name: sensitive_file_read
       when: type == "open" && path.startsWith("/etc/shadow") && !(comm in ["sshd", "sshd-session", "login", "su", "sudo", "passwd", "unix_chkpwd", "systemd-userwor", "cron"])
       severity: critical
-      summary: "{comm} (uid {uid}) opened {path}"
+      summary: "{comm} (uid {uid}) opened {path} (refused: {refused})"
       capture: true
 
     - name: system_config_changed
-      when: type == "open" && write && (path.startsWith("/etc/sudoers") || path.startsWith("/etc/ssh/") || path.startsWith("/root/.ssh/") || path.startsWith("/etc/ld.so.preload"))
+      when: type == "open" && write && !refused && (path.startsWith("/etc/sudoers") || path.startsWith("/etc/ssh/") || path.startsWith("/root/.ssh/") || path.startsWith("/etc/ld.so.preload"))
       severity: critical
       summary: "{comm} opened {path} for writing"
       capture: true

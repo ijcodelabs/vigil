@@ -6,6 +6,18 @@
 // against the running kernel's BTF. No vmlinux.h, no kernel headers.
 //
 // Needs: BTF (CONFIG_DEBUG_INFO_BTF) and the BPF ring buffer (Linux 5.8).
+//
+// Opens and privilege changes come in two versions. The fentry ones
+// (on_file_open, on_open_refused, on_commit_creds) see what the kernel
+// resolved and decided: the real path of the file opened, also for a
+// relative name, "..", a symlink or a name changed in memory after the call
+// began; opens the kernel refused, marked as such; and every change of the
+// effective uid, also by running a setuid program or from inside the
+// kernel. They need BPF trampolines (x86-64 from Linux 5.5, arm64 from
+// 6.0). Where those cannot load, the loader falls back to the system-call
+// probes (on_sys_enter, on_sys_exit), which read the name the program
+// passed, see only absolute ones, and report every attempt without knowing
+// whether it was refused. One of the two sets is loaded, never both.
 // Rebuild with `make bpf` after changing this file. It is compiled once per
 // CPU architecture, because system-call numbers and the registers holding
 // their arguments differ.
@@ -28,8 +40,10 @@ typedef _Bool bool;
 #define BPF_MAP_TYPE_HASH 1
 #define BPF_MAP_TYPE_ARRAY 2
 #define BPF_MAP_TYPE_PERCPU_ARRAY 6
+#define BPF_MAP_TYPE_LRU_HASH 9
 #define BPF_MAP_TYPE_RINGBUF 27
 #define BPF_ANY 0
+#define BPF_NOEXIST 1
 
 // Tells libbpf's headers that kernel-style register names (di, si, ...) are
 // in use, as they would be with a generated vmlinux.h.
@@ -42,16 +56,25 @@ typedef _Bool bool;
 
 #pragma clang attribute push(__attribute__((preserve_access_index)), apply_to = record)
 typedef struct { __u32 val; } kuid_t;
+typedef struct { int counter; } atomic_t;
 struct cred { kuid_t uid; kuid_t euid; };
 struct mm_struct { unsigned long arg_start; unsigned long arg_end; };
+struct signal_struct { atomic_t live; };
 struct task_struct {
 	int pid;
 	int tgid;
 	struct task_struct *real_parent;
+	struct task_struct *group_leader;
+	__u64 start_time;
 	struct mm_struct *mm;
 	const struct cred *cred;
+	struct signal_struct *signal;
 	int exit_code;
 };
+struct path { void *mnt; void *dentry; };
+struct file { struct path f_path; unsigned int f_flags; unsigned int f_mode; };
+struct filename { const char *name; };
+struct open_flags { int open_flag; };
 struct linux_binprm { const char *filename; };
 struct in6_addr { union { __u8 u6_addr8[16]; } in6_u; };
 struct sock_common {
@@ -96,6 +119,10 @@ struct pt_regs { struct user_pt_regs user_regs; };
 
 #define AF_INET 2
 #define AF_INET6 10
+#define O_CREAT 0100
+#define FMODE_CREATED 0x100000
+#define EPERM 1
+#define EACCES 13
 #define TCP_SYN_SENT 2
 #define TCP_CLOSE 7
 #define TCP_LISTEN 10
@@ -117,7 +144,8 @@ struct hdr {
 struct exec_event { struct hdr h; __u32 args_len; __u32 pad; char filename[PATH_LEN]; char args[ARGS_LEN]; };
 struct exit_event { struct hdr h; __s32 code; __u32 pad; };
 struct net_event { struct hdr h; __u16 family; __u16 sport; __u16 dport; __u16 pad; __u8 saddr[16]; __u8 daddr[16]; };
-struct open_event { struct hdr h; __s32 flags; __u32 pad; char path[PATH_LEN]; };
+// err is 0 for an open that happened, else the error it was refused with.
+struct open_event { struct hdr h; __s32 flags; __s32 err; char path[PATH_LEN]; };
 struct cred_event { struct hdr h; __u32 old_euid; __u32 new_euid; };
 
 struct { __uint(type, BPF_MAP_TYPE_RINGBUF); __uint(max_entries, 8 << 20); } events SEC(".maps");
@@ -132,6 +160,13 @@ struct { __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY); __uint(max_entries, 1); __type
 
 // Effective uid of a thread on entry to a set*uid call.
 struct { __uint(type, BPF_MAP_TYPE_HASH); __uint(max_entries, 4096); __type(key, __u64); __type(value, __u32); } cred_before SEC(".maps");
+
+// Processes whose end was reported: two threads ending at the same moment
+// can both see the process's last thread gone (see on_exit), and only the
+// first to add the process here reports it. The start time keeps a reused
+// pid apart; old entries simply age out.
+struct exit_key { __u32 tgid; __u32 pad; __u64 start; };
+struct { __uint(type, BPF_MAP_TYPE_LRU_HASH); __uint(max_entries, 4096); __type(key, struct exit_key); __type(value, __u8); } exited SEC(".maps");
 
 // Records dropped because the ring buffer was full.
 __u64 lost = 0;
@@ -191,13 +226,20 @@ int BPF_PROG(on_exec, struct task_struct *p, int old_pid, struct linux_binprm *b
 	return 0;
 }
 
-// A process ended (reported once, for its main thread).
+// A process ended: reported once, when its last thread exits. That is not
+// always the main thread, which can end first while the others run on.
+// do_exit counts the thread off signal->live before this tracepoint, so
+// live reads 0 for the last one, but also for a thread that counted itself
+// off just before the last one did and reaches the tracepoint after it.
 SEC("tp_btf/sched_process_exit")
 int BPF_PROG(on_exit, struct task_struct *p)
 {
-	__u64 id = bpf_get_current_pid_tgid();
-	if ((id >> 32) != (__u32)id)
+	if (BPF_CORE_READ(p, signal, live.counter) != 0)
 		return 0;
+	struct exit_key k = {.tgid = BPF_CORE_READ(p, tgid), .start = BPF_CORE_READ(p, group_leader, start_time)};
+	__u8 one = 1;
+	if (bpf_map_update_elem(&exited, &k, &one, BPF_NOEXIST) != 0)
+		return 0; // already reported
 	struct exit_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
 	if (!e) {
 		__sync_fetch_and_add(&lost, 1);
@@ -273,8 +315,91 @@ static __always_inline bool watched(const char *path)
 	return false;
 }
 
-// A file under a watched path is opened. Only absolute paths are matched:
-// an open relative to a directory is not seen here.
+// A file under a watched path is opened, as the kernel resolved it: the
+// path is built from the opened file itself (bpf_d_path), relative to the
+// process's root, so a container sees its own paths. Called for every open
+// on the host, so everything else leaves after the prefix comparison.
+// It runs on the way out, so an open a security module (AppArmor, SELinux)
+// refuses here is not reported as opened; on_open_refused reports it.
+SEC("fexit/security_file_open")
+int BPF_PROG(on_file_open, struct file *file, int ret)
+{
+	if (ret != 0)
+		return 0;
+	__u32 zero = 0;
+	struct open_event *e = bpf_map_lookup_elem(&scratch, &zero);
+	if (!e)
+		return 0;
+	long n = bpf_d_path(&file->f_path, e->path, sizeof(e->path));
+	if (n <= 1 || e->path[0] != '/' || !watched(e->path))
+		return 0; // too long, not a path (pipe:, anon_inode:), or not watched
+	fill(&e->h, EV_OPEN);
+	// The kernel clears O_CREAT from f_flags once the file exists; f_mode
+	// says it was made by this open.
+	int flags = file->f_flags;
+	if (file->f_mode & FMODE_CREATED)
+		flags |= O_CREAT;
+	e->flags = flags;
+	e->err = 0;
+	if (bpf_ringbuf_output(&events, e, sizeof(*e), 0))
+		__sync_fetch_and_add(&lost, 1);
+	return 0;
+}
+
+// An open the kernel refused for lack of permission: a user without the
+// rights trying to read /etc/shadow never gets as far as security_file_open,
+// because the permission check comes first. do_filp_open is where every
+// open by name ends (open, openat, openat2, io_uring), and it returns the
+// error. There is no opened file to resolve, so the name is the one the
+// program gave, copied into the kernel when the call began; a relative name
+// is not matched. Other errors (no such file, ...) are not reported.
+SEC("fexit/do_filp_open")
+int BPF_PROG(on_open_refused, int dfd, struct filename *pathname, const struct open_flags *op, struct file *ret)
+{
+	long err = (long)ret;
+	if (err != -EACCES && err != -EPERM)
+		return 0; // opened (a pointer), or another error
+	__u32 zero = 0;
+	struct open_event *e = bpf_map_lookup_elem(&scratch, &zero);
+	if (!e)
+		return 0;
+	long n = bpf_probe_read_kernel_str(e->path, sizeof(e->path), BPF_CORE_READ(pathname, name));
+	if (n <= 1 || e->path[0] != '/' || !watched(e->path))
+		return 0;
+	fill(&e->h, EV_OPEN);
+	e->flags = BPF_CORE_READ(op, open_flag);
+	e->err = -err;
+	if (bpf_ringbuf_output(&events, e, sizeof(*e), 0))
+		__sync_fetch_and_add(&lost, 1);
+	return 0;
+}
+
+// The effective uid of a task changes: every set*uid call, running a setuid
+// program, and a kernel exploit that hands itself root all go through
+// commit_creds. Only a change of the effective uid is reported. The header
+// still carries the old credentials; for a setuid program its name is still
+// the old program's, the exec event follows.
+SEC("fentry/commit_creds")
+int BPF_PROG(on_commit_creds, struct cred *new)
+{
+	__u32 old = current_euid();
+	__u32 now = BPF_CORE_READ(new, euid.val);
+	if (now == old)
+		return 0;
+	struct cred_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+	if (!e) {
+		__sync_fetch_and_add(&lost, 1);
+		return 0;
+	}
+	fill(&e->h, EV_SETUID);
+	e->old_euid = old;
+	e->new_euid = now;
+	bpf_ringbuf_submit(e, 0);
+	return 0;
+}
+
+// The fallback for opens: the name the program passed. Only absolute paths
+// are matched, so an open relative to a directory is not seen here.
 static __always_inline int handle_open(const char *filename, int flags)
 {
 	__u32 zero = 0;
@@ -286,12 +411,13 @@ static __always_inline int handle_open(const char *filename, int flags)
 		return 0;
 	fill(&e->h, EV_OPEN);
 	e->flags = flags;
-	e->pad = 0;
+	e->err = 0;
 	if (bpf_ringbuf_output(&events, e, sizeof(*e), 0))
 		__sync_fetch_and_add(&lost, 1);
 	return 0;
 }
 
+// The fallback probes, loaded only where the fentry ones cannot be.
 // Every system call passes through here, so everything that is not an open
 // or a set*uid leaves on the first comparison. Raw tracepoints are used
 // rather than the per-call syscalls:* ones: they need no tracefs, and they

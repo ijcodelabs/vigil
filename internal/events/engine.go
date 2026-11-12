@@ -56,27 +56,32 @@ func (c *Capture) Encode() []byte {
 }
 
 // recorder is the flight recorder: the events of the last `window`.
+// evs[head:] are kept; head moves forward as events age out, so each add
+// looks only at the events that just aged out. (It used to walk the whole
+// aged-out part again on every event, which was half of the monitor's CPU.)
 type recorder struct {
 	window time.Duration
 	evs    []*Event
+	head   int
 }
 
 func (r *recorder) add(ev *Event) {
 	r.evs = append(r.evs, ev)
-	cut := 0
 	limit := ev.Time.Add(-r.window)
-	for cut < len(r.evs) && (r.evs[cut].Time.Before(limit) || len(r.evs)-cut > maxRecorded) {
-		cut++
+	for r.head < len(r.evs) && (r.evs[r.head].Time.Before(limit) || len(r.evs)-r.head > maxRecorded) {
+		r.evs[r.head] = nil // let the event go
+		r.head++
 	}
 	// Drop the old part only once it is worth copying the rest down.
-	if cut > 1024 && cut > len(r.evs)/2 {
-		r.evs = append(r.evs[:0:0], r.evs[cut:]...)
+	if r.head > 1024 && r.head > len(r.evs)/2 {
+		r.evs = append(r.evs[:0:0], r.evs[r.head:]...)
+		r.head = 0
 	}
 }
 
 func (r *recorder) between(from, until time.Time) []*Event {
 	var out []*Event
-	for _, ev := range r.evs {
+	for _, ev := range r.evs[r.head:] {
 		if !ev.Time.Before(from) && !ev.Time.After(until) {
 			out = append(out, ev)
 		}

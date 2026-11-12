@@ -1,8 +1,17 @@
 import { html, useState, useMemo, api, useLoad, Badge, ErrorBox, ago } from './lib.js';
+import { parseLines } from './explore.js';
 
 const SEVERITY = { critical: 'bad', warning: 'warn', info: 'info' };
 const TYPES = ['exec', 'exit', 'connect', 'listen', 'open', 'setuid'];
 const PAGE = 2000;
+const SHOW = [['all', 'All events'], ['detected', 'Detected'], ['errors', 'Errors']];
+
+// An event is matched to a detection by type, pid and time to the
+// millisecond: the detection's log time is the event's own.
+const evKey = (type, pid, time) => `${type}|${pid}|${Date.parse(time)}`;
+
+// What went wrong: an open the kernel refused, a process that failed or was killed.
+export const failed = ev => (ev.type === 'open' && !!ev.refused) || (ev.type === 'exit' && !!(ev.signal || ev.exit_code));
 
 export function Captures({ route, admin }) {
   return route.parts[1]
@@ -49,15 +58,35 @@ function CaptureView({ id, admin }) {
   const [types, setTypes] = useState(() => new Set(TYPES.filter(t => t !== 'exit')));
   const [open, setOpen] = useState(null);
   const [limit, setLimit] = useState(PAGE);
+  const [show, setShow] = useState('all');
+  // Every detection tied to this capture, not only the one that started it.
+  const { data: dets } = useLoad(async () => {
+    if (!cap) return null;
+    const from = Math.floor(Date.parse(cap.meta.from) / 1000) - 60, to = Math.ceil(Date.parse(cap.meta.until) / 1000) + 3600;
+    const text = await api('/api/v1/logs/query', { method: 'POST', body: new URLSearchParams({
+      query: `source:security capture_id:${JSON.stringify(id)}`, start: from, end: to, limit: 1000 }) });
+    const m = new Map();
+    for (const l of parseLines(text)) {
+      const k = evKey(l.type, Number(l.pid), l._time);
+      m.set(k, [...(m.get(k) || []), l.rule]);
+    }
+    return m;
+  }, [cap]);
 
   const t0 = cap ? new Date(cap.meta.time).getTime() : 0;
+  const isTrigger = ev => ev.time === cap.trigger.time && ev.pid === cap.trigger.pid && ev.type === cap.trigger.type;
+  const rulesOf = ev => {
+    const r = (dets && dets.get(evKey(ev.type, ev.pid, ev.time))) || [];
+    return isTrigger(ev) && !r.includes(cap.meta.rule) ? [cap.meta.rule, ...r] : r;
+  };
   const rows = useMemo(() => {
     if (!cap) return [];
     const needle = text.trim().toLowerCase();
-    return cap.events.filter(ev => types.has(ev.type) && (!needle ||
+    // Detected and Errors look at every event, whatever the type ticks say.
+    const keep = show === 'detected' ? ev => rulesOf(ev).length > 0 : show === 'errors' ? failed : ev => types.has(ev.type);
+    return cap.events.filter(ev => keep(ev) && (!needle ||
       `${ev.comm} ${ev.exe || ''} ${ev.pid} ${ev.container || ''} ${describe(ev)} ${ev.parent_comm || ''}`.toLowerCase().includes(needle)));
-  }, [cap, text, types]);
-  const isTrigger = ev => ev.time === cap.trigger.time && ev.pid === cap.trigger.pid && ev.type === cap.trigger.type;
+  }, [cap, text, types, show, dets]);
   const toggle = t => { const s = new Set(types); s.has(t) ? s.delete(t) : s.add(t); setTypes(s); };
   const remove = async () => {
     if (!confirm('Delete this capture? This cannot be undone.')) return;
@@ -81,7 +110,11 @@ function CaptureView({ id, admin }) {
     <div class="row" style="margin-bottom: 12px">
       <input style="flex: 1; min-width: 200px" placeholder="Filter by process, path, address, container, pid…" aria-label="Filter events"
         value=${text} onInput=${e => { setText(e.target.value); setLimit(PAGE); }} />
-      ${TYPES.map(t => html`<label style="margin: 0; white-space: nowrap"><input type="checkbox" checked=${types.has(t)} onChange=${() => toggle(t)} /> ${t}</label>`)}
+      <select aria-label="Which events" value=${show} onChange=${e => { setShow(e.target.value); setLimit(PAGE); }}
+        title="Detected: events a rule fired on. Errors: opens the kernel refused, processes that failed or were killed.">
+        ${SHOW.map(([v, label]) => html`<option value=${v}>${label}</option>`)}</select>
+      ${TYPES.map(t => html`<label style="margin: 0; white-space: nowrap; ${show !== 'all' ? 'opacity: .5' : ''}"><input type="checkbox" disabled=${show !== 'all'}
+        checked=${types.has(t)} onChange=${() => toggle(t)} /> ${t}</label>`)}
     </div>
     <div class="panel flush"><table class="fixed events">
       <thead><tr><th style="width: 96px">Time</th><th style="width: 82px">Event</th><th style="width: 24%">Process</th>
@@ -94,12 +127,13 @@ function CaptureView({ id, admin }) {
           <td class="mono"><strong>${ev.comm}</strong> <span class="muted">${ev.pid}</span>
             ${ev.parent_comm && html`<div class="muted">from ${ev.parent_comm}</div>`}</td>
           <td class="mono">${ev.container || html`<span class="muted">host</span>`}</td>
-          <td class="mono">${isTrigger(ev) && html`<${Badge} kind=${SEVERITY[m.severity] || 'off'}>detected<//> `}${describe(ev)}</td>
+          <td class="mono">${rulesOf(ev).length > 0 && html`<span title=${rulesOf(ev).join(', ')}><${Badge} kind=${SEVERITY[m.severity] || 'off'}>detected<//></span> `}${failed(ev) && ev.type === 'open' && html`<${Badge} kind="warn">refused<//> `}${describe(ev)}</td>
         </tr>
         ${open === i && html`<tr><td colspan="5"><pre class="mono" style="margin: 0; white-space: pre-wrap; overflow-wrap: anywhere">${JSON.stringify(ev, null, 2)}</pre></td></tr>`}`)}
       </tbody></table>
       ${rows.length > limit && html`<div class="empty" style="padding: 10px">Showing ${limit} of ${rows.length} events.${' '}
         <button class="small" onClick=${() => setLimit(limit + PAGE * 5)}>Show more</button></div>`}
     </div>
-    <p class="muted">Times are relative to the detected event. Process-exit events are hidden until you tick “exit”. Click a row for every field.</p>`;
+    <p class="muted">Times are relative to the detected event. Process-exit events are hidden until you tick “exit”. Detected shows every event a rule fired on during the capture;
+      Errors shows refused opens and processes that ended with an error or a signal. Click a row for every field.</p>`;
 }

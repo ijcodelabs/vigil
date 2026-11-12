@@ -35,6 +35,7 @@ var ruleVars = []cel.EnvOption{
 	cel.Variable("container_id", cel.StringType),
 	cel.Variable("path", cel.StringType),   // open
 	cel.Variable("write", cel.BoolType),    // open
+	cel.Variable("refused", cel.BoolType),  // open: the kernel denied it
 	cel.Variable("addr", cel.StringType),   // connect, listen
 	cel.Variable("port", cel.IntType),      // connect, listen
 	cel.Variable("old_euid", cel.IntType),  // setuid
@@ -49,7 +50,7 @@ func (ev *Event) vars() map[string]any {
 		"comm": ev.Comm, "exe": ev.Exe, "args": ev.Args, "cmdline": strings.Join(ev.Args, " "),
 		"parent_comm": ev.ParentComm, "parent_exe": ev.ParentExe,
 		"container": ev.Container, "container_id": ev.ContainerID,
-		"path": ev.Path, "write": ev.Write, "addr": ev.Addr, "port": int64(ev.Port),
+		"path": ev.Path, "write": ev.Write, "refused": ev.Refused, "addr": ev.Addr, "port": int64(ev.Port),
 		"old_euid": int64(0), "new_euid": int64(0), "exit_code": int64(0), "signal": int64(ev.Signal),
 	}
 	if ev.Args == nil {

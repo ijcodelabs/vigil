@@ -13,6 +13,13 @@ import (
 	"github.com/cilium/ebpf"
 )
 
+type eventsExitKey struct {
+	_     structs.HostLayout
+	Tgid  uint32
+	Pad   uint32
+	Start uint64
+}
+
 type eventsOpenEvent struct {
 	_ structs.HostLayout
 	H struct {
@@ -28,7 +35,7 @@ type eventsOpenEvent struct {
 		Comm   [16]int8
 	}
 	Flags int32
-	Pad   uint32
+	Err   int32
 	Path  [256]int8
 }
 
@@ -42,17 +49,21 @@ type eventsPrefix struct {
 //
 // Used for safe lookups in a Collection or CollectionSpec.
 const (
-	eventsMapCredBefore   = "cred_before"
-	eventsMapEvents       = "events"
-	eventsMapScratch      = "scratch"
-	eventsMapWatch        = "watch"
-	eventsProgOnExec      = "on_exec"
-	eventsProgOnExit      = "on_exit"
-	eventsProgOnSockState = "on_sock_state"
-	eventsProgOnSysEnter  = "on_sys_enter"
-	eventsProgOnSysExit   = "on_sys_exit"
-	eventsVarInSetuid     = "in_setuid"
-	eventsVarLost         = "lost"
+	eventsMapCredBefore     = "cred_before"
+	eventsMapEvents         = "events"
+	eventsMapExited         = "exited"
+	eventsMapScratch        = "scratch"
+	eventsMapWatch          = "watch"
+	eventsProgOnCommitCreds = "on_commit_creds"
+	eventsProgOnExec        = "on_exec"
+	eventsProgOnExit        = "on_exit"
+	eventsProgOnFileOpen    = "on_file_open"
+	eventsProgOnOpenRefused = "on_open_refused"
+	eventsProgOnSockState   = "on_sock_state"
+	eventsProgOnSysEnter    = "on_sys_enter"
+	eventsProgOnSysExit     = "on_sys_exit"
+	eventsVarInSetuid       = "in_setuid"
+	eventsVarLost           = "lost"
 )
 
 // loadEvents returns the embedded CollectionSpec for events.
@@ -97,11 +108,14 @@ type eventsSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type eventsProgramSpecs struct {
-	OnExec      *ebpf.ProgramSpec `ebpf:"on_exec"`
-	OnExit      *ebpf.ProgramSpec `ebpf:"on_exit"`
-	OnSockState *ebpf.ProgramSpec `ebpf:"on_sock_state"`
-	OnSysEnter  *ebpf.ProgramSpec `ebpf:"on_sys_enter"`
-	OnSysExit   *ebpf.ProgramSpec `ebpf:"on_sys_exit"`
+	OnCommitCreds *ebpf.ProgramSpec `ebpf:"on_commit_creds"`
+	OnExec        *ebpf.ProgramSpec `ebpf:"on_exec"`
+	OnExit        *ebpf.ProgramSpec `ebpf:"on_exit"`
+	OnFileOpen    *ebpf.ProgramSpec `ebpf:"on_file_open"`
+	OnOpenRefused *ebpf.ProgramSpec `ebpf:"on_open_refused"`
+	OnSockState   *ebpf.ProgramSpec `ebpf:"on_sock_state"`
+	OnSysEnter    *ebpf.ProgramSpec `ebpf:"on_sys_enter"`
+	OnSysExit     *ebpf.ProgramSpec `ebpf:"on_sys_exit"`
 }
 
 // eventsMapSpecs contains maps before they are loaded into the kernel.
@@ -110,6 +124,7 @@ type eventsProgramSpecs struct {
 type eventsMapSpecs struct {
 	CredBefore *ebpf.MapSpec `ebpf:"cred_before"`
 	Events     *ebpf.MapSpec `ebpf:"events"`
+	Exited     *ebpf.MapSpec `ebpf:"exited"`
 	Scratch    *ebpf.MapSpec `ebpf:"scratch"`
 	Watch      *ebpf.MapSpec `ebpf:"watch"`
 }
@@ -144,6 +159,7 @@ func (o *eventsObjects) Close() error {
 type eventsMaps struct {
 	CredBefore *ebpf.Map `ebpf:"cred_before"`
 	Events     *ebpf.Map `ebpf:"events"`
+	Exited     *ebpf.Map `ebpf:"exited"`
 	Scratch    *ebpf.Map `ebpf:"scratch"`
 	Watch      *ebpf.Map `ebpf:"watch"`
 }
@@ -152,6 +168,7 @@ func (m *eventsMaps) Close() error {
 	return _EventsClose(
 		m.CredBefore,
 		m.Events,
+		m.Exited,
 		m.Scratch,
 		m.Watch,
 	)
@@ -169,17 +186,23 @@ type eventsVariables struct {
 //
 // It can be passed to loadEventsObjects or ebpf.CollectionSpec.LoadAndAssign.
 type eventsPrograms struct {
-	OnExec      *ebpf.Program `ebpf:"on_exec"`
-	OnExit      *ebpf.Program `ebpf:"on_exit"`
-	OnSockState *ebpf.Program `ebpf:"on_sock_state"`
-	OnSysEnter  *ebpf.Program `ebpf:"on_sys_enter"`
-	OnSysExit   *ebpf.Program `ebpf:"on_sys_exit"`
+	OnCommitCreds *ebpf.Program `ebpf:"on_commit_creds"`
+	OnExec        *ebpf.Program `ebpf:"on_exec"`
+	OnExit        *ebpf.Program `ebpf:"on_exit"`
+	OnFileOpen    *ebpf.Program `ebpf:"on_file_open"`
+	OnOpenRefused *ebpf.Program `ebpf:"on_open_refused"`
+	OnSockState   *ebpf.Program `ebpf:"on_sock_state"`
+	OnSysEnter    *ebpf.Program `ebpf:"on_sys_enter"`
+	OnSysExit     *ebpf.Program `ebpf:"on_sys_exit"`
 }
 
 func (p *eventsPrograms) Close() error {
 	return _EventsClose(
+		p.OnCommitCreds,
 		p.OnExec,
 		p.OnExit,
+		p.OnFileOpen,
+		p.OnOpenRefused,
 		p.OnSockState,
 		p.OnSysEnter,
 		p.OnSysExit,

@@ -10,11 +10,24 @@ shortly after.
 | Event | When | Fields besides the common ones |
 |---|---|---|
 | `exec` | a program is started | `args`, `cmdline` |
-| `exit` | a process ends | `exit_code`, `signal` |
+| `exit` | a process ends (once, when its last thread ends) | `exit_code`, `signal` |
 | `connect` | an outbound TCP connection is attempted | `addr`, `port` |
 | `listen` | a TCP socket starts listening | `addr`, `port` |
-| `open` | a file under a watched path is opened | `path`, `write` |
-| `setuid` | a process changes its effective user | `old_euid`, `new_euid` |
+| `open` | a file under a watched path is opened, or the kernel refused to open it | `path`, `write`, `refused` |
+| `setuid` | a process's effective user changes: a set*uid call, running a setuid program (`sudo`, `su`, …), or from inside the kernel | `old_euid`, `new_euid` |
+
+`path` is the file the kernel opened, whatever name the program gave:
+`cd /etc && cat shadow`, `/etc/../etc/shadow` and a symlink to it all report
+`/etc/shadow`. Inside a container it is the path as the container sees it.
+`refused` is true when the kernel denied the open for lack of permission:
+a user outside the `shadow` group running `cat /etc/shadow`, or a write to
+`/etc/sudoers` by someone other than root. Such an open has no file behind
+it, so `path` is the name the program gave, and only an absolute name is
+matched. An open of a name that does not exist is not reported. A rule on
+a path sees both kinds; add `!refused` for what was actually opened, or
+`refused` for attempts only.
+For a setuid program the `setuid` event comes with the old program's
+`comm`; the `exec` event of the new one follows.
 
 Common to all: `type`, `pid`, `ppid`, `uid`, `euid`, `comm` (short process
 name), `exe` (program file), `parent_comm`, `parent_exe`, `container`,
@@ -48,12 +61,23 @@ security:
 Measured on a busy Docker host (18 cores, 41 containers, x86-64, Linux
 6.12): about 28 events a second, none lost; the agent went from 5% to 8% of
 one core, and the host's own CPU use did not change measurably. The probes
-look at every system call but return at once for all but a handful.
+run on every file open, and resolve its path before comparing it with
+`watch_paths`; on an arm64 test machine (Linux 6.8) that added about 65 ns
+to an open of 700 ns.
 
 ### Requirements
 
 Linux 5.8 or newer with BTF, and root: a host install as root, or a
-privileged container with the host's process namespace. The agent reports
+privileged container with the host's process namespace. Opens and changes
+of user are watched where the kernel can attach BPF programs to kernel
+functions (fentry: x86-64 from Linux 5.5, arm64 from 6.0; no BPF security
+module needed). Where it cannot, the agent uses its system-call probes
+instead and logs `fentry probes unavailable` with the reason: they see
+only opens by absolute path and only the set*uid calls, and they report
+every attempt to open a watched name without knowing whether it was
+refused (`refused` is always false there).
+`VIGIL_EVENTS_PROBES=syscalls` in the agent's environment chooses those
+probes anyway. The agent reports
 the fact `ebpf` as `true` where it can work, so a profile can select on it:
 
 ```yaml
@@ -119,6 +143,10 @@ recorder). When a capturing rule fires, it saves everything from
 On the **Captures** page a capture shows as a timeline relative to the
 detected event: what ran, what was opened, where connections went. Filter by
 text or by event type; click a row for every field; download it as JSON.
+Every event a rule fired on during the capture is marked **detected**, not
+only the first. The list next to the filter narrows it to **Detected** (those
+events) or **Errors** (opens the kernel refused, and processes that ended
+with an error code or a signal), whatever event types are ticked.
 
 - A host records one capture at a time. Detections during a capture are
   linked to it.
@@ -127,13 +155,16 @@ text or by event type; click a row for every field; download it as JSON.
 
 ## Limits to know
 
-- **File opens are matched on absolute paths.** An open relative to a
-  directory (`cd /etc && cat shadow`) is not seen.
+- **With the system-call probes** (older kernels, see Requirements), file
+  opens are matched on the name as given: an open relative to a directory
+  (`cd /etc && cat shadow`), through `..` or through a symlink is not seen,
+  and running a setuid program is not a `setuid` event. Every attempt is
+  reported as an open, refused or not, also of a name that does not exist.
 - **Network events are TCP only**: connections made and sockets listening.
   Accepted connections, UDP and DNS are not reported.
-- Every system call passes a small check in the kernel. The cost has not
-  been measured on a busy host.
-- Loaded so far only on arm64 with kernel 7.1. The x86-64 build of the probe
-  exists but has not run; there is no fallback below Linux 5.8.
+- The open probe resolves the path of every open on the host. Measured on
+  a test machine, not yet on a busy host.
+- Run so far on arm64 (Linux 6.8 and 7.1) and x86-64 (Linux 6.8, and 6.12
+  before the fentry probes). There is no fallback below Linux 5.8.
 - If the host produces events faster than the agent reads them, some are
   dropped and counted in `vigil_events_lost_total`.

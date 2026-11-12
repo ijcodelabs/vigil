@@ -1433,6 +1433,64 @@ store, tests, routing history); the order is in direction.md.
   container names come from Portun's kit (`portun-core`, `portun-gateway`,
   …) and differ on older installs, hence `portun-.+` rather than names.
 
+## Runtime events: resolved paths, every user change, last-thread exit (built 2026-11-12)
+
+- `bpf/events.c`: `on_file_open` (`fentry/security_file_open`, path from
+  `bpf_d_path`, O_CREAT put back from `FMODE_CREATED`), `on_commit_creds`
+  (`fentry/commit_creds`, effective uid before and after), and `on_exit`
+  now fires when `signal->live` is 0 (the last thread) instead of for the
+  main thread. The system-call pair stays as the fallback.
+- `source_linux.go`: loads `fentryProbes` or `syscallProbes` (LoadAndAssign
+  loads only what the struct names), logs the mode and, on fallback, the
+  reason; `VIGIL_EVENTS_PROBES=syscalls` forces the fallback.
+- Live on the Lima machine `vigil-docker` (arm64, Ubuntu, Linux 6.8, no
+  BPF LSM): with fentry, `cd /etc && cat passwd`, `/etc/../etc/passwd` and
+  a symlink each reported `/etc/passwd`; a file made by relative name in
+  `/root/.ssh/` came with `write`; `sudo` gave 501→0; a program whose main
+  thread ends first gave one exit with the real code 3. The fallback saw
+  none of the three opens nor the sudo change, as expected. Cost: 700 ns per
+  open without the agent, +65 ns fentry, +90 ns system-call probes.
+- The same on x86-64: Lima machine `vigil-x86` (QEMU, emulated, Ubuntu,
+  Linux 6.8, no BPF LSM), every case alike in both modes. Under emulation
+  an open is about 18 µs; fentry adds about 10%, the system-call probes
+  about 14%. The test scripts are not in the repository (the leader-exit
+  program: a thread that ends the process after the main thread ended).
+- An hour on the production Docker host (x86-64, Debian 13, Linux 6.12),
+  2026-11-12 09:21–10:23 UTC: fentry mode loaded, about 43 events/s
+  (14 connect, 9.4 exec, 14.5 exit, 0.6 watched opens, 4 setuid), nothing
+  lost, no detections, agent memory flat at 54–57 MiB. The agent's CPU
+  rose steadily from 7% to 10% of a core at a steady event rate, where the
+  three days before stayed at 5–6% in the same hours with the host as busy;
+  back to 5% minutes after switching off. Not reproduced in the arm64 VM
+  (30 minutes, flat at 0.5–0.7%); a profiling run on the host itself is
+  under way.
+- The flight recorder walked the whole aged-out part of its buffer again
+  on every event: half of the monitor's CPU in the VM profile. It keeps a
+  head index now (`BenchmarkRecorderAdd`: 2.8 µs → 78 ns an event at
+  50/s and a 70 s window). Too small to explain the climb on its own.
+- Refused opens (2026-11-12): the fentry probe did not see a user's
+  denied `cat /etc/shadow` on the trial host (root's read was detected),
+  because the permission check comes before `security_file_open`. Now
+  `on_file_open` is `fexit/security_file_open` (only opens let through)
+  and `on_open_refused` (`fexit/do_filp_open`, -EACCES/-EPERM) reports the
+  given absolute name with `refused` (open_event's pad is now `err`). Live
+  on both Lima machines: a user's `cat /etc/shadow` and write to
+  `/etc/sudoers` came as refused, root's `cat` as a plain open, a missing
+  name not at all; the fallback reports all of them unmarked.
+- The same run on x86-64 showed a process's end reported twice: two
+  threads that end together can both read `signal->live` as 0. `on_exit`
+  now claims the process in an LRU map (`exited`, keyed by pid and the
+  leader's start time, BPF_NOEXIST) first; 5 of 5 runs gave one exit. The
+  QEMU machine's shared folder kept serving the old agent binary after a
+  rebuild: copy it in with `limactl copy`.
+- Captures page: every detection linked to the capture is marked (the page
+  asks the log store for `source:security capture_id:<id>` and matches by
+  type, pid and time to the millisecond), and a list narrows the events to
+  Detected or Errors (refused opens, exits with a code or signal). Checked
+  in the browser against a local server with a stand-in log store.
+- `sudo` alone makes about 30 `setuid` events (it switches between root
+  and its own users while it works); it did with the old probe too.
+
 ## Next
 
 - Foundations, build order in `direction.md`: step 1 on paper (data

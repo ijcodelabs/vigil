@@ -115,6 +115,9 @@ func (s *Server) handleDetections(w http.ResponseWriter, r *http.Request) {
 		if ev.Write {
 			fields["write"] = "true"
 		}
+		if ev.Refused {
+			fields["refused"] = "true"
+		}
 		if ev.NewEUID != nil {
 			fields["old_euid"], fields["new_euid"] = strconv.Itoa(int(*ev.OldEUID)), strconv.Itoa(int(*ev.NewEUID))
 		}
