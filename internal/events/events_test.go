@@ -68,9 +68,14 @@ func TestDecode(t *testing.T) {
 	// open: read-only, then for writing
 	o := make([]byte, 8+256)
 	copy(o[8:], "/etc/shadow")
-	if ev, _ = decode(record(5, 0, 1, 1, 0, 0, "cat", o), boot); ev.Path != "/etc/shadow" || ev.Write {
+	if ev, _ = decode(record(5, 0, 1, 1, 0, 0, "cat", o), boot); ev.Path != "/etc/shadow" || ev.Write || ev.Refused {
 		t.Errorf("open: %+v", ev)
 	}
+	le.PutUint32(o[4:], 13) // refused with EACCES
+	if ev, _ = decode(record(5, 0, 1, 1, 1000, 1000, "cat", o), boot); !ev.Refused || ev.Write {
+		t.Errorf("refused open: %+v", ev)
+	}
+	le.PutUint32(o[4:], 0)
 	le.PutUint32(o, 0x241) // O_WRONLY|O_CREAT|O_TRUNC
 	if ev, _ = decode(record(5, 0, 1, 1, 0, 0, "sh", o), boot); !ev.Write {
 		t.Errorf("open for write: %+v", ev)
@@ -231,6 +236,16 @@ func TestRecorderTrims(t *testing.T) {
 	}
 }
 
+// The cost of one event in the flight recorder, at 50 events a second and
+// a 70-second window (the default buffer): about 3,500 events kept.
+func BenchmarkRecorderAdd(b *testing.B) {
+	r := recorder{window: 70 * time.Second}
+	t0 := time.Now()
+	for i := range b.N {
+		r.add(&Event{Time: t0.Add(time.Duration(i) * 20 * time.Millisecond)})
+	}
+}
+
 func TestValidate(t *testing.T) {
 	for want, r := range map[string]config.SecurityRule{
 		"name must be":           {Name: "bad name", When: "true"},
@@ -256,5 +271,25 @@ func TestValidate(t *testing.T) {
 	c.WatchPaths = make([]string, 17)
 	if err := Validate(c); err == nil {
 		t.Error("17 watch paths accepted")
+	}
+}
+
+// A refused open is still an open, so a rule on the path sees both; refused
+// tells them apart.
+func TestRefusedOpenRule(t *testing.T) {
+	e, err := NewEngine(security(t,
+		config.SecurityRule{Name: "shadow_tried", When: `type == "open" && path == "/etc/shadow" && refused`,
+			Summary: "{comm} (uid {uid}) was refused {path}"},
+		config.SecurityRule{Name: "shadow_read", When: `type == "open" && path == "/etc/shadow" && !refused`}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	e.OnDetection = func(d Detection) { got = append(got, d.Rule+": "+d.Summary) }
+	now := time.Now()
+	e.Handle(&Event{Time: now, Type: TypeOpen, Path: "/etc/shadow", Comm: "cat", UID: 1000, Refused: true})
+	e.Handle(&Event{Time: now, Type: TypeOpen, Path: "/etc/shadow", Comm: "cat"})
+	if strings.Join(got, "|") != "shadow_tried: cat (uid 1000) was refused /etc/shadow|shadow_read: open by cat" {
+		t.Errorf("detections: %q", got)
 	}
 }

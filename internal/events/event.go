@@ -43,6 +43,7 @@ type Event struct {
 
 	Path     string  `json:"path,omitempty"`      // open
 	Write    bool    `json:"write,omitempty"`     // open: for writing or creating
+	Refused  bool    `json:"refused,omitempty"`   // open: denied by the kernel (no permission)
 	Addr     string  `json:"addr,omitempty"`      // connect: remote; listen: local
 	Port     uint16  `json:"port,omitempty"`      // connect: remote; listen: local
 	OldEUID  *uint32 `json:"old_euid,omitempty"`  // setuid
@@ -129,6 +130,7 @@ func decode(raw []byte, bootTime time.Time) (*Event, error) {
 		}
 	case TypeOpen:
 		ev.Write = int32(le.Uint32(p))&oWriteMask != 0
+		ev.Refused = le.Uint32(p[4:]) != 0
 		ev.Path = cstr(p[8 : 8+256])
 	case TypeSetuid:
 		old, now := le.Uint32(p), le.Uint32(p[4:])

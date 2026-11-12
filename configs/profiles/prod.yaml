@@ -18,5 +18,5 @@ config:
       - name: sensitive_file_read
         when: type == "open" && container == "" && path.startsWith("/etc/shadow") && !(comm in ["sshd", "sshd-session", "login", "su", "sudo", "passwd", "unix_chkpwd", "systemd-userwor", "cron", "chage", "(systemd)"])
         severity: critical
-        summary: "{comm} (uid {uid}) opened {path}"
+        summary: "{comm} (uid {uid}) opened {path} (refused: {refused})"
         capture: true

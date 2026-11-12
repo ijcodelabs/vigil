@@ -325,7 +325,7 @@ func (bb *bundler) detections(agent, rule string, at time.Time) {
 	fmt.Fprintf(&b, "%d latest detections of rule %s (command lines left out):\n", len(lines), rule)
 	for _, l := range lines {
 		var parts []string
-		for _, k := range []string{"type", "comm", "exe", "parent_comm", "parent_exe", "uid", "euid", "container", "path", "addr", "port", "write", "old_euid", "new_euid"} {
+		for _, k := range []string{"type", "comm", "exe", "parent_comm", "parent_exe", "uid", "euid", "container", "path", "addr", "port", "write", "refused", "old_euid", "new_euid"} {
 			if v := l[k]; v != "" {
 				parts = append(parts, k+"="+strconv.Quote(v))
 			}

@@ -204,7 +204,9 @@ The Fleet page shows the reason next to the agent:
   cannot run it. Select only capable hosts with `ebpf="true"`.
 - A rule does not fire: run `sudo vigil-agent events -config …` on the host, do
   the thing, and compare the event's fields with the rule. File opens are
-  only seen for absolute paths under `watch_paths`.
+  only seen under `watch_paths`. If the agent's log says `fentry probes
+  unavailable`, it runs the older probes, which see only opens by absolute
+  path (see Runtime events, Requirements).
 
 ## Kubernetes
 

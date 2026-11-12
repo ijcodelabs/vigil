@@ -37,7 +37,31 @@ CEL expressions.
 through perf, were silently not called for many processes on kernel 7.1
 arm64. See [testing.md](testing.md).
 
-**No reduced mode for old kernels.** Runtime events need 5.8 and BTF;
+**Opens and user changes from fentry, with the system-call probes as the
+fallback** (2026-11-12). `fentry/security_file_open` with `bpf_d_path`
+gives the path the kernel opened, so a relative name, `..`, a symlink or a
+name rewritten in memory after the call began cannot hide an open of a
+watched file; the system-call probe read the program's own string and saw
+none of those. `fentry/commit_creds` sees every change of the effective
+uid, setuid programs and kernel exploits included, where the probe saw only
+set*uid calls. fentry needs BPF trampolines (x86-64 5.5, arm64 6.0) but
+not the BPF LSM, which most distributions leave off; the LSM hooks
+(`lsm/file_open`) were not used for that reason. The loader tries fentry
+and loads the old pair only if that fails: never both, so nothing is
+reported twice. Measured: about 65 ns more per open (arm64, 6.8), less
+than the system-call probe, which also ran on every other call.
+The open probe runs on the way out of `security_file_open` (fexit) and
+reports only opens it let through; opens refused for lack of permission
+come from `fexit/do_filp_open` with -EACCES or -EPERM, as `refused`. The
+permission check comes before `security_file_open`, so the fentry probe
+alone missed exactly the attempt worth knowing about (a user reading
+`/etc/shadow`), which the system-call probe had seen; found on the trial
+host. `do_filp_open` is where every open by name ends and is not static,
+so it is in BTF on every kernel; the name there is the kernel's copy, not
+the program's memory. Not-found errors are left out: every lookup of a
+missing config file would be one.
+
+**No reduced mode below 5.8.** Runtime events need 5.8 and BTF;
 elsewhere the agent says so and carries on. A fallback was not written
 because there was no old kernel to test it on.
 
