@@ -67,6 +67,11 @@ type input struct {
 	Source         string          `json:"source"`
 	Model          string          `json:"model"`
 	Prompt         *string         `json:"prompt"`
+	// Notification: permission_prompt, idle_prompt, elicitation_dialog, …
+	// The type says whose turn it is (agentsessions.go on the server); the
+	// message can quote a question, so it is content.
+	NotificationType string `json:"notification_type"`
+	Message          string `json:"message"`
 }
 
 // toolFields are the parts of a tool's input worth an audit line, by the
@@ -103,6 +108,10 @@ func Record(raw []byte, now time.Time, o Options) (*otlpwire.LogsRequest, error)
 	add("reason", in.Reason)
 	add("start_source", in.Source) // "source" is a stream label in vigil
 	add("model", in.Model)
+	add("notification_type", in.NotificationType)
+	if o.Content {
+		add("message", in.Message)
+	}
 	if in.DurationMs != nil {
 		add("duration_ms", strconv.FormatFloat(*in.DurationMs, 'f', -1, 64))
 	}

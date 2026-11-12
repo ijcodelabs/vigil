@@ -1491,6 +1491,95 @@ store, tests, routing history); the order is in direction.md.
 - `sudo` alone makes about 30 `setuid` events (it switches between root
   and its own users while it works); it did with the old probe too.
 
+## Contacts checked on a schedule (built 2026-11-12)
+
+Item 4 of "Agent sessions, context cost and alert checks" (direction.md, proposed 2026-11-12).
+- `internal/alerting/checks.go`: `RunChecks` walks every integration in
+  use. The check that posts nothing: Telegram `getChat` (token and chat
+  read from the config or its `_file`, through the integration's
+  http_config), DNS + TCP + TLS handshake for slack, webhook, discord,
+  msteams(v2), mattermost (through the proxy when one is set; a templated
+  URL cannot be checked), TCP to an email smarthost. Every other kind is
+  `cannot_check`; after a start every row is `not_checked` until the first
+  round. Neither counts as working.
+- The real message (`VigilDeliveryCheck`, info) goes out when the last
+  proof is older than `send_interval`. Proof is any accepted send
+  (Deliveries' LastOK: alerts, tests) or the check message itself, kept in
+  `<data>/alertmanager/delivery-checks.json` with when each integration was
+  first seen, so a restart or an upgrade sends nothing and a new contact's
+  first message is due a week later. The integration is built afresh from
+  the receiver (Telegram with `disable_notifications`), so the send is
+  recorded once, by `RunChecks`, and counts in Delivery. A failed one is
+  retried after an hour, not at every check.
+- Server: `delivery_checks.{interval,send_interval}` (15m, 168h; `0s`
+  off), `checkLoop` (first round a minute after the start),
+  `vigil_notification_check{…, state}` written with the delivery counts,
+  built-in `NotificationCheckFailing` (failing for 20m = two checks).
+- UI: Check and Proved columns in Delivery.
+- Verified: unit tests (a fake Bot API and webhooks: ok, chat not found,
+  refused, no silent check, the token never in an error, no message from
+  the silent check, the first message only after the interval and silent,
+  proof across a restart, an alert counts as proof, one retry an hour);
+  live against a local server with a fake Bot API and webhooks (`interval:
+  1m`, `send_interval: 3m`) and in the browser. Not tried against the real
+  Telegram or Portun Chat.
+- Not built: anything that tells you when the server itself is down (an
+  outside check on `/healthz`, documented).
+
+## Claude Code sessions live (built 2026-11-12)
+
+Item 1 of the same list.
+- `internal/server/agentsessions.go`: every 30 s two LogsQL queries over
+  the hook's lines of the last 12 h (the newest state-changing event per
+  session, and each session's newest line), worked into working, waiting,
+  idle, quiet (working but silent for 10 min) or ended (kept an hour). A
+  waiting event (PermissionRequest; Notification permission_prompt or
+  elicitation_dialog) counts as answered once any line follows it by more
+  than 2 s. `GET /api/v1/sessions/live`; for waiting sessions the metric
+  `vigil_ai_session_waiting_seconds{tool, agent, session_id, os_user,
+  project, waiting_for}`, and `ClaudeCodeWaitingOnYou` (severity info,
+  parameter `waiting_minutes`, 10) in `ai_module_claude`.
+- The hook keeps `notification_type` (its message only with `-content`);
+  docs register `Notification` and `Stop` too.
+- Telemetry cannot do this: it reports a permission only once decided.
+- Sessions page: Live now panel on top.
+- Verified: unit tests of the state rules; the panel and the API in the
+  browser against a local server without stores (error shown). On the
+  trial both queries are accepted by its VictoriaLogs and the rule is
+  healthy; the trial's Mac has no hooks registered, so the list is empty
+  there until they are.
+
+## Context cost per tool (built 2026-11-12)
+
+Item 2. Dashboard panels and two saved queries in `ai_module_claude`, no
+server code: per tool calls, failed, empty, median, p90 and total size of
+results in tokens as bytes / 4, from telemetry's `tool_result_size_bytes`
+(failed and empty kept out of the sizes); files read more than once in a
+session and the share of tool output that was such a re-read, from the
+hook's `tool_file_path` and `tool_response_bytes`. Not built: telling cut
+results apart (Claude Code does not say), and the optional limit on the
+re-read share. On the trial the per-tool table gives real rows (Read's
+median result is about 37k tokens there, as Claude Code reports the
+size); the re-read share had to drop empty input (`filter all:>0`), which
+gave NaN without hook lines.
+
+## Likely causes on an incident (built 2026-11-12)
+
+Item 3. `internal/server/causes.go`: fixed patterns over the explanation's
+evidence bundle, built with `local` so log lines are read whatever ai.data
+allows: measured signs (OOM events, memory near the limit, exit codes,
+restarts, pressure, certificate days, a check's HTTP status, DNS and
+connect times, profile changes) score 2–4, log words (timeouts, refused,
+DNS, auth, x509, OOM, disk, crash, limits) 1 or 2 (three lines or more).
+Up to five, each with what was seen (evidence id) and one check. `GET
+/api/v1/incidents/{id}/causes` (viewer); the incident dialog shows them;
+the explanation bundle gets them as its last item. Verified: unit test;
+the dialog in the browser (empty case, no stores); on a real trial
+incident. That incident showed two traps, now handled: a proxy's "SSL
+handshake failure" lines are scanners, not a certificate problem (not a
+pattern any more), and the host-wide error lines gathered for incidents of
+no particular kind score 1 at most.
+
 ## Next
 
 - Foundations, build order in `direction.md`: step 1 on paper (data

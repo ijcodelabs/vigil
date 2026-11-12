@@ -66,3 +66,13 @@ groups:
         labels: {severity: warning}
         annotations:
           summary: 'Notifications to {{ $labels.receiver }} ({{ $labels.integration }}) fail; see Alerts > Contacts & routing'
+
+      # The scheduled check that posts nothing (delivery_checks) failed twice
+      # in a row: a wrong token, a chat the bot left, an address that no
+      # longer answers. Found before an alert has to go there.
+      - alert: NotificationCheckFailing
+        expr: vigil_notification_check{state="failing"} == 1
+        for: 20m
+        labels: {severity: warning}
+        annotations:
+          summary: 'The delivery check of {{ $labels.receiver }} ({{ $labels.integration }}) fails; see Alerts > Contacts & routing'

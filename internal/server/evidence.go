@@ -69,6 +69,9 @@ type bundler struct {
 	ctx   context.Context
 	b     bundle
 	total int
+	// local: the bundle stays on the server (likely causes), so log lines
+	// are read whatever ai.data allows to be sent.
+	local bool
 }
 
 func (bb *bundler) add(class, title, text string) {
@@ -84,9 +87,23 @@ func (bb *bundler) add(class, title, text string) {
 	bb.b.Items = append(bb.b.Items, Evidence{ID: fmt.Sprintf("E%d", len(bb.b.Items)+1), Class: class, Title: title, Text: text})
 }
 
-// buildBundle gathers the evidence for one incident.
+// buildBundle gathers the evidence for one incident, to be sent for an
+// explanation. Its last item is what vigil's own patterns make of the rest
+// (causes.go), for the model to confirm, rule out or add to.
 func (s *Server) buildBundle(ctx context.Context, in incidents.Incident, events []incidents.Event) bundle {
-	bb := &bundler{s: s, ctx: ctx}
+	b := s.bundleFor(ctx, in, events, false)
+	b.Items = append(b.Items, Evidence{ID: fmt.Sprintf("E%d", len(b.Items)+1), Class: "metadata",
+		Title: "Likely causes by vigil's patterns", Text: clean(causesText(likelyCauses(b)), itemChars)})
+	data, _ := json.Marshal(b.Items)
+	sum := sha256.Sum256(data)
+	b.Hash, b.Bytes = hex.EncodeToString(sum[:8]), len(data)
+	return b
+}
+
+// bundleFor gathers the evidence for one incident; local says it stays on
+// the server.
+func (s *Server) bundleFor(ctx context.Context, in incidents.Incident, events []incidents.Event, local bool) bundle {
+	bb := &bundler{s: s, ctx: ctx, local: local}
 	l := in.Labels
 	agent := in.Agent
 	at := in.FirstSeen // what happened around the start matters most
@@ -178,7 +195,7 @@ func (s *Server) buildBundle(ctx context.Context, in incidents.Incident, events 
 		bb.detections(agent, l["alertname"], at)
 	default:
 		if agent != "" {
-			bb.logs(fmt.Sprintf(`agent:=%s (error OR fail OR fatal OR panic OR killed)`, q(agent)), "Error-looking log lines of the host around the start", at, 30)
+			bb.logs(fmt.Sprintf(`agent:=%s (error OR fail OR fatal OR panic OR killed)`, q(agent)), hostErrorLines, at, 30)
 		}
 	}
 
@@ -298,7 +315,7 @@ func num(v float64) string { return strconv.FormatFloat(v, 'g', 6, 64) }
 // logs adds the last lines before (and just after) the start, when log
 // excerpts may be sent at all.
 func (bb *bundler) logs(query, title string, at time.Time, limit int) {
-	if !bb.s.cfg.AI.Allows("logs") {
+	if !bb.local && !bb.s.cfg.AI.Allows("logs") {
 		bb.b.Withheld = append(bb.b.Withheld, title+" (log excerpts are not allowed: ai.data)")
 		return
 	}

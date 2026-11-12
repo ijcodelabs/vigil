@@ -52,6 +52,10 @@ large fleets. Expect rough edges, and please say what you find.
 - **Long-term history** (optional): hourly rollups of AI cost, SLOs,
   hosts and site checks kept for years in a second metric store, next to
   the main store's short retention.
+- **Likely causes** on every incident, without any AI: out of memory,
+  restarts, pressure, certificates, timeouts, refused credentials, full
+  disks, crashes, recent changes, strongest first, each with the one check
+  that settles it.
 - **AI explanations, if you want them**: an admin previews exactly what
   would be sent about an incident, then asks a language model why it
   happened. vigil picks and masks the evidence, every claim in the answer
@@ -92,7 +96,10 @@ large fleets. Expect rough edges, and please say what you find.
   the contacts when someone silences an alert.
 - **Contacts you can check**: whether each one's messages get through and
   its last error, a **Send test** button per contact, and **Who would be
-  told** for any alert's labels, also for routing not saved yet.
+  told** for any alert's labels, also for routing not saved yet. Every
+  contact is also checked on a schedule: every 15 minutes without posting
+  (is the Telegram bot still in the chat, does the webhook answer) and
+  once a week with a silent real message when nothing else got through.
 - **Service level objectives** over site checks, spans or any counters:
   good and total events counted once a minute, error budgets,
   multi-window burn-rate alerts, a page with each SLO's budget, burn
@@ -105,7 +112,9 @@ large fleets. Expect rough edges, and please say what you find.
 - **Claude Code**: its own telemetry shows cost and tokens by person, model
   and subagent; a **Sessions** page shows each session's prompts and cost;
   `vigil-agent claude-hook` keeps an audit trail of what it ran and what was
-  refused. [Claude Code](docs/claude-code.md)
+  refused, and shows which sessions on which machines are working, idle or
+  waiting on you, with an alert when one has waited too long.
+  [Claude Code](docs/claude-code.md)
 - **Applications that call language models**: their OpenTelemetry spans are
   counted by model and priced with the prices you give.
 - **GPUs**: utilisation, memory, temperature, and what idle GPU time costs.

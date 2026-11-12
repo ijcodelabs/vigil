@@ -192,7 +192,10 @@ The message says why. Common ones:
 - **Delivery** on the same tab: the last error of each contact (wrong SMTP
   password, unreachable webhook, a 403 from a firewall in front of a chat).
   **Send test** on the row sends one message to that contact alone and
-  shows the answer. The errors are also in the server's log.
+  shows the answer. The errors are also in the server's log. **Check**
+  says whether the scheduled check that posts nothing still gets through
+  (for Telegram: whether the bot still sees the chat), and **Proved** when
+  a message last got through.
 
 ## Runtime events are off
 

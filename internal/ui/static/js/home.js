@@ -82,6 +82,7 @@ function History({ id, onClose, admin, ai, explain }) {
     <${ErrorBox} error=${error} />
     ${inc && html`
       <p class="muted">${inc.resource} · ${inc.state} · first seen ${new Date(inc.first_seen).toLocaleString()}</p>
+      <${LikelyCauses} id=${id} />
       <${Explanations} id=${id} admin=${admin} ai=${ai} start=${explain} />
       <${PortunWork} id=${id} since=${inc.first_seen} />
       <details style="margin-top: 10px"><summary class="muted" style="cursor: pointer">History (${data.events.length})</summary>
@@ -105,6 +106,26 @@ function PortunWork({ id, since }) {
   return html`<details open style="margin-top: 10px"><summary class="muted" style="cursor: pointer">In Portun: ${data.work_item} (${data.markers.length})</summary>
     <div class="panel flush" style="margin-top: 6px"><table><tbody>${data.markers.map(m => html`<tr>
       <td style="white-space: nowrap">${new Date(m.time).toLocaleString()}</td><td>${m.title}</td></tr>`)}</tbody></table></div></details>`;
+}
+
+// LikelyCauses: vigil's own patterns over the incident's evidence (a
+// timeout, refused credentials, memory running out, …), strongest first,
+// each with the one check that settles it. No model is involved.
+function LikelyCauses({ id }) {
+  const { data, error } = useLoad(() => api(`/api/v1/incidents/${id}/causes`), [id]);
+  if (error) return html`<${ErrorBox} error=${error} />`;
+  if (!data) return null;
+  const list = data.causes || [];
+  return html`<div class="panel" style="margin: 0 0 6px">
+    <h3 style="margin: 0 0 6px">Likely causes</h3>
+    ${list.length === 0 ? html`<p class="muted" style="margin: 0">No known pattern in the evidence (timeouts, refused
+        credentials, memory, disks, crashes, certificates, recent changes).</p>`
+      : html`<ol style="margin: 0; padding-left: 20px">${list.map(c => html`<li style="margin-bottom: 6px">
+        <strong>${c.title}</strong> ${c.score >= 3 ? html`<${Badge} kind="warn">measured<//>` : html`<${Badge}>from log lines<//>`}
+        <div class="muted" style="font-size: 13px">${c.seen.map(s => html`<div>${s}</div>`)}</div>
+        <div style="font-size: 13px"><span class="muted">Check:</span> ${c.check}</div></li>`)}</ol>`}
+    <p class="muted" style="font-size: 12px; margin: 4px 0 0">Found by fixed patterns in the evidence vigil gathers for an explanation; the AI explanation is given this list and may disagree.</p>
+  </div>`;
 }
 
 // Explanations: the latest one, or a preview of what would be sent and a

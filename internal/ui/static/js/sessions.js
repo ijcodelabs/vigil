@@ -89,6 +89,7 @@ function SessionList({ params }) {
       <${RangePicker} range=${range} setRange=${setRange} />
       <a class="btn" href="/docs/claude-code" target="_blank" rel="noopener">Help</a></div>
     <${ErrorBox} error=${error} />
+    <${LiveNow} />
     ${data && shown.length > 0 && html`<p class="muted">${shown.length} sessions, ${usd(total)} at API prices.</p>`}
     <div class="panel flush">${!data ? html`<div class="empty">Loading…</div>` : shown.length === 0
       ? html`<div class="empty">No sessions in this time range. Claude Code reports to the agent on its machine once the
@@ -108,6 +109,42 @@ function SessionList({ params }) {
           <td>${s.errors > 0 && html`<${Badge} kind="warn">${s.errors} API errors<//>`}</td></tr>`)}</tbody></table>`}</div>
     <p class="muted">Cost is what Claude Code computes at API prices; on a subscription it is what the same use would cost through the API.
       Sessions that made no API call in the shown time are not listed.</p>`;
+}
+
+// Live now: which sessions work, wait on their owner or sit idle, on every
+// machine, from the hook's lines (the server works the states out, and the
+// same states raise ClaudeCodeWaitingOnYou).
+const LIVE = {
+  waiting: ['warn', 'waiting on you'], working: ['info', 'working'], idle: ['off', 'idle'],
+  quiet: ['off', 'quiet'], ended: ['off', 'ended'],
+};
+function LiveNow() {
+  const { data, error } = useLoad(() => api('/api/v1/sessions/live'), [], 15000);
+  const list = data?.sessions || [];
+  const since = t => { const s = Math.max(0, (Date.now() - Date.parse(t)) / 1000); return fmtUnit(s, 'seconds'); };
+  const open = s => {
+    const to = Math.ceil(Date.now() / 1000) + 60;
+    location.hash = '#/sessions/' + encodeURIComponent(s.session_id) + '?' + new URLSearchParams({ from: to - 43200, to });
+  };
+  if (error) return html`<${ErrorBox} error=${error} />`;
+  if (!data) return null;
+  const waiting = list.filter(s => s.state === 'waiting').length;
+  return html`<div class="panel flush" style="margin-bottom: 14px"><h2 style="padding: 14px 16px 0">Live now
+      ${waiting > 0 && html` <${Badge} kind="warn">${waiting} waiting on you<//>`}</h2>
+    ${data.error && html`<div class="muted" style="padding: 0 16px">Not refreshed: ${data.error}</div>`}
+    ${list.length === 0 && data.error ? ''
+      : list.length === 0
+      ? html`<div class="empty">No session in the last 12 hours has sent hook lines. Whether a session works, sits idle or waits
+          for you comes from <code>vigil-agent claude-hook</code> with the PermissionRequest, Notification and Stop hooks.
+          <a href="/docs/claude-code#live-state" target="_blank" rel="noopener">How</a></div>`
+      : html`<table><thead><tr><th>State</th><th>For</th><th>Machine</th><th>Project</th><th>Account</th><th>Waiting for</th><th>Last line</th></tr></thead>
+        <tbody>${list.map(s => html`<tr class="click" onClick=${() => open(s)}>
+          <td><${Badge} kind=${(LIVE[s.state] || LIVE.idle)[0]}>${(LIVE[s.state] || [0, s.state])[1]}<//></td>
+          <td class="muted" title=${new Date(s.since).toLocaleString()}>${since(s.since)}</td>
+          <td>${s.agent}</td><td title=${s.cwd || ''}>${s.project || ''}</td><td class="muted">${s.os_user || ''}</td>
+          <td>${s.waiting_for || ''}${s.subagent ? html` <span class="muted">(subagent ${s.subagent})</span>` : ''}</td>
+          <td class="muted" title=${new Date(s.last_seen).toLocaleString()}>${since(s.last_seen)} ago</td></tr>`)}</tbody></table>`}
+  </div>`;
 }
 
 function SessionView({ id, params }) {

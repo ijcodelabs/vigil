@@ -242,7 +242,7 @@ function Deliveries() {
     ${!data ? html`<div class="empty">Loading…</div>` : data.length === 0
       ? html`<div class="empty">No contact is in use yet.</div>`
       : html`<div style="overflow-x: auto"><table><thead><tr><th>Contact</th><th>Through</th><th>State</th><th style="text-align: right">Sent</th>
-          <th style="text-align: right">Failed</th><th>Last sent</th><th>Last failure</th><th>Test</th></tr></thead>
+          <th style="text-align: right">Failed</th><th>Last sent</th><th>Last failure</th><th>Check</th><th>Proved</th><th>Test</th></tr></thead>
         <tbody>${data.map(d => html`<tr>
           <td><strong>${d.receiver}</strong></td>
           <td>${d.integration}${d.index > 0 ? html` <span class="muted">#${d.index + 1}</span>` : ''}</td>
@@ -251,11 +251,36 @@ function Deliveries() {
           <td class="num">${fmtNum(d.sent)}</td><td class="num">${fmtNum(d.failed)}</td>
           <td>${when(d.last_ok)}</td>
           <td>${d.last_failure ? html`${when(d.last_failure)}<div class="muted mono" style="font-size: 12px; white-space: normal">${d.last_error}</div>` : html`<span class="muted">none</span>`}</td>
+          <td><${CheckCell} c=${d.check} /></td>
+          <td><${ProofCell} c=${d.check} /></td>
           <td><${TestButton} target=${{ receiver: d.receiver, integration: d.integration, index: d.index }} onDone=${reload} /></td>
         </tr>`)}</tbody></table></div>`}
     <p class="muted" style="padding: 0 16px">Counted since the server last started; a test counts too. A contact that keeps
       failing raises <code>NotificationsFailing</code>, sent to the contacts that work. <strong>Send test</strong>${' '}reaches
-      only that integration, past routing and silences.</p></div>`;
+      only that integration, past routing and silences.</p>
+    <p class="muted" style="padding: 0 16px"><strong>Check</strong>${' '}runs on a schedule and posts nothing (Telegram is asked whether
+      the bot sees the chat, an address is reached); when it fails twice, <code>NotificationCheckFailing</code>${' '}fires.
+      <strong>Proved</strong>${' '}is the last message the integration accepted: an alert, a test, or the scheduled check message,
+      which goes out (silently on Telegram) only when nothing else got through for a while.</p></div>`;
+}
+
+// The scheduled check that posts nothing; "not checked" and "cannot be
+// checked" are never shown as working.
+function CheckCell({ c }) {
+  if (!c) return html`<span class="muted">off</span>`;
+  const label = { ok: 'reachable', failing: 'failing', cannot_check: 'no silent check', not_checked: 'not checked yet' }[c.state] || c.state;
+  const kind = { ok: 'ok', failing: 'bad' }[c.state] || 'off';
+  const title = [c.method, c.last_check && `checked ${ago(c.last_check)}`].filter(Boolean).join(', ');
+  return html`<span title=${title}><${Badge} kind=${kind}>${label}<//></span>
+    ${c.error && html`<div class="muted mono" style="font-size: 12px; white-space: normal">${c.error}</div>`}`;
+}
+
+function ProofCell({ c }) {
+  if (!c) return html`<span class="muted">—</span>`;
+  const next = c.next_send && new Date(c.next_send) > new Date()
+    ? html`<div class="muted" style="font-size: 12px" title=${new Date(c.next_send).toLocaleString()}>next check message in ${until(c.next_send).replace(' left', '')}</div>` : '';
+  return html`${c.last_proof ? html`<span title=${new Date(c.last_proof).toLocaleString()}>${ago(c.last_proof)}</span>` : html`<span class="muted">not yet</span>`}
+    ${c.send_error ? html`<div class="mono" style="font-size: 12px; white-space: normal; color: var(--bad)">check message failed: ${c.send_error}</div>` : next}`;
 }
 
 function Contacts() {

@@ -162,6 +162,7 @@ func (s *Server) explainRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/incidents/{id}/explain", s.admin(s.handleExplainPreview))
 	mux.HandleFunc("POST /api/v1/incidents/{id}/explain", s.admin(s.handleExplain))
 	mux.HandleFunc("GET /api/v1/incidents/{id}/explanations", s.viewer(s.handleExplanations))
+	mux.HandleFunc("GET /api/v1/incidents/{id}/causes", s.viewer(s.handleIncidentCauses))
 	mux.HandleFunc("POST /api/v1/explanations/{id}/verdict", s.viewer(s.handleVerdict))
 }
 

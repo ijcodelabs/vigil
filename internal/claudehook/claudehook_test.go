@@ -129,6 +129,25 @@ func TestContent(t *testing.T) {
 	}
 }
 
+// A notification says whose turn it is; its message, which can quote a
+// question, only with -content.
+func TestNotification(t *testing.T) {
+	raw := []byte(`{"hook_event_name":"Notification","session_id":"s","notification_type":"elicitation_dialog","message":"Which database should I use?"}`)
+	for _, content := range []bool{false, true} {
+		req, err := Record(raw, time.Now(), Options{Content: content})
+		if err != nil {
+			t.Fatal(err)
+		}
+		a := attrs(req.GetResourceLogs()[0].GetScopeLogs()[0].GetLogRecords()[0])
+		if a["notification_type"] != "elicitation_dialog" {
+			t.Errorf("type: %q", a["notification_type"])
+		}
+		if got := a["message"] != ""; got != content {
+			t.Errorf("content %v: message %q", content, a["message"])
+		}
+	}
+}
+
 func TestBadInput(t *testing.T) {
 	for _, raw := range []string{"", "not json", `{"session_id":"s"}`} {
 		if _, err := Record([]byte(raw), time.Now(), Options{}); err == nil {

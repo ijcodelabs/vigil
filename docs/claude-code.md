@@ -164,6 +164,7 @@ agent on the same machine:
 | `SubagentStart`, `SubagentStop` | which subagent ran |
 | `UserPromptSubmit` | that a prompt came, and its length |
 | `SessionStart`, `SessionEnd` | how a session began and ended |
+| `Notification`, `Stop` | that Claude Code waits for a permission or an answer, or finished its turn (for [Live state](#live-state)) |
 
 Every line carries the session and prompt, the folder, the operating-system
 account, and the subagent a call came from. A tool's output is never sent,
@@ -184,6 +185,8 @@ it cannot be removed:
     "SubagentStop":       [{"hooks": [{"type": "command", "command": "vigil-agent claude-hook", "async": true}]}],
     "UserPromptSubmit":   [{"hooks": [{"type": "command", "command": "vigil-agent claude-hook", "async": true}]}],
     "SessionStart":       [{"hooks": [{"type": "command", "command": "vigil-agent claude-hook", "async": true}]}],
+    "Notification":       [{"hooks": [{"type": "command", "command": "vigil-agent claude-hook", "async": true}]}],
+    "Stop":               [{"hooks": [{"type": "command", "command": "vigil-agent claude-hook", "async": true}]}],
     "SessionEnd":         [{"hooks": [{"type": "command", "command": "vigil-agent claude-hook"}]}]
   }
 }
@@ -198,8 +201,9 @@ Code would hand its output to the model, and exit code 2 would block a
 prompt. A line that cannot be sent is lost.
 
 Options: `-endpoint` (default `http://127.0.0.1:4318`, or
-`VIGIL_OTLP_ENDPOINT`) and `-content`, which adds the text of prompts and
-the full instructions given to subagents. Telemetry cuts those
+`VIGIL_OTLP_ENDPOINT`) and `-content`, which adds the text of prompts, the
+full instructions given to subagents and the message of a notification
+(which can quote Claude's question). Telemetry cuts those
 instructions off after a couple of hundred characters; with `-content` the
 hook has all of them (up to 2,000 characters a value). The same caution as
 for Claude Code's content settings applies.
@@ -208,6 +212,54 @@ The lines arrive as `service="claude-code-hook"`, as events named
 `claude_code.hook.<Hook>`. The dashboard's "Audit" panels show tool calls
 by account, denied permissions and the latest shell commands, and a
 session's page puts them in line with Claude Code's own events.
+
+## Context cost per tool
+
+Every tool result goes into the conversation and is paid for again on
+every later call of the session (mostly as cache reads). The Claude Code
+dashboard shows what each kind of tool adds:
+
+- **Context added by tool**: per tool, the calls, how many failed and how
+  many returned nothing, and the median, 90th percentile and total size of
+  what it returned, in tokens estimated as bytes / 4. Failed and empty
+  results are counted apart and left out of the sizes, so a broken tool
+  never looks like the cheapest one. From Claude Code's own
+  `tool_result` events (`tool_result_size_bytes`); nothing extra to set up.
+- **Tool output that was a file read again** and **Files read again in a
+  session**: the same file read more than once in one session, and how
+  many tokens the extra reads added. From the hook's `PostToolUse` lines,
+  which always name the file. A read after the file was changed is counted
+  too, so a high number is a hint, not a verdict.
+
+Claude Code does not say when it cut a tool's output short, so cut
+results are not counted apart.
+
+## Live state
+
+The Sessions page starts with **Live now**: every session of the last 12
+hours on every machine, and whether it is
+
+| State | From the hook's lines |
+|---|---|
+| **waiting on you** | the newest was a permission request or a question (`PermissionRequest`, or a `Notification` of type `permission_prompt` or `elicitation_dialog`), and nothing came after it |
+| **working** | a prompt came, or a permission was answered, and lines keep coming |
+| **idle** | the turn ended (`Stop`), or the session started and no prompt came yet |
+| **quiet** | working, but nothing came for 10 minutes: a long command, or a terminal closed without `SessionEnd` |
+| **ended** | `SessionEnd`; listed for an hour |
+
+It needs the hook with at least `PermissionRequest`, `Notification`, `Stop`
+and `UserPromptSubmit` registered (the settings above have them). Claude
+Code's telemetry cannot do this: it reports a permission only once it was
+decided.
+
+A session that has waited on its owner for more than `waiting_minutes`
+(parameter of `ai_module_claude`, default 10) raises
+`ClaudeCodeWaitingOnYou` with severity `info`, naming the machine, the
+project folder and what it waits for, so it reaches you through your
+contacts, for example on Telegram. The server writes
+`vigil_ai_session_waiting_seconds{tool, agent, session_id, os_user,
+project, waiting_for}` for each waiting session; a rule of your own can use
+it too. API: `GET /api/v1/sessions/live`.
 
 ## Not yet
 

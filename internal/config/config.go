@@ -714,7 +714,14 @@ type Server struct {
 	// silence is made, and when an alert they were told about ends while
 	// silenced. On unless set to false.
 	NotifySilences *bool `yaml:"notify_silences"`
-	Storage        struct {
+	// DeliveryChecks check every contact on a schedule: a check that posts
+	// nothing every Interval (15m), and a real message every SendInterval
+	// (168h) when nothing else got through. "0s" turns either off.
+	DeliveryChecks struct {
+		Interval     *Duration `yaml:"interval"`
+		SendInterval *Duration `yaml:"send_interval"`
+	} `yaml:"delivery_checks"`
+	Storage struct {
 		MetricsURL string `yaml:"metrics_url"`
 		LogsURL    string `yaml:"logs_url"`
 		// TracesURL is a VictoriaTraces instance; optional. Without it,
