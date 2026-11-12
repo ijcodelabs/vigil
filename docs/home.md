@@ -55,6 +55,30 @@ on the stores; the links lead to the pages that do.
 Clicking an incident shows its history: when it opened, was resolved,
 came back, was acknowledged or silenced.
 
+## Likely causes
+
+The same dialog lists up to five **likely causes**, strongest first, each
+with what points to it and the one check that would confirm or rule it
+out. vigil finds them itself, with fixed patterns and no language model,
+in the evidence it would gather for an explanation (below):
+
+- measured signs, which rank highest (**measured**): out-of-memory events
+  or a container near its memory limit, exit code 137 or another failure
+  code, two or more restarts in the hour, pressure on the host, an expired
+  or nearly expired certificate, a check answering 401, 403 or 5xx, slow
+  DNS or connects, a configuration change in the six hours before;
+- words in the log lines before the start (**from log lines**): timeouts,
+  refused connections, names that do not resolve, refused credentials,
+  certificate errors, out of memory, full disks, crashes and stack traces,
+  rate and file limits. One line is a hint; three or more count more, but
+  never as much as a measurement.
+
+The log lines are read on the server for this, also when `ai.data` does
+not allow them to be sent. Without any sign the list says so. With a
+language model set up, the list is the last item of the evidence an
+explanation gets, so the model can confirm it, rule causes out or add
+others. API: `GET /api/v1/incidents/{id}/causes`.
+
 ## AI explanations
 
 With a language model set up, an admin can press **Explain** on an

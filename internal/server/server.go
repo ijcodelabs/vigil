@@ -75,6 +75,7 @@ type Server struct {
 	traces  *url.URL // nil: no trace store
 	vault   vault    // the secret store set up in the interface (secrets.go)
 	am      *alerting.Alertmanager
+	live    liveSessions // AI coding sessions now (agentsessions.go)
 	rules   *rules.Manager
 	runCtx  context.Context // lifetime of the rule loops
 	logins  loginLimiter
@@ -282,6 +283,7 @@ func (s *Server) Handler() http.Handler {
 	s.tokenRoutes(mux)
 	s.evidenceGrantRoutes(mux)
 	s.deliveryRoutes(mux)
+	s.agentSessionRoutes(mux)
 	s.contactRoutes(mux)
 	s.verifyRoutes(mux)
 	s.spanCostRoutes(mux)
@@ -413,6 +415,8 @@ func (s *Server) Run(ctx context.Context) error {
 	go s.spendLoop(ctx)
 	go s.vaultLoop(ctx)
 	go s.deliveryLoop(ctx)
+	go s.checkLoop(ctx)
+	go s.liveSessionLoop(ctx)
 	go func() { // rollouts move on by themselves
 		t := time.NewTicker(10 * time.Second)
 		defer t.Stop()

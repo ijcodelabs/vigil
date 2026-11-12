@@ -57,7 +57,9 @@ API) and `GET` `POST /api/v1/traces/query` (LogsQL over spans); see
 | `GET /api/v1/rules/builtin` | the rules that come with vigil (YAML), as they are in the running version |
 | `GET /api/v1/alerts` | pending and firing alerts |
 | `GET` `PUT /api/v1/alerting/config` | the Alertmanager configuration (YAML); admin only |
-| `GET /api/v1/alerting/deliveries` | every integration of the contacts in use and how it did since the server started: sent, failed, last success, last error (addresses cut to their host); admin only |
+| `GET /api/v1/incidents/{id}/causes` | likely causes of an incident from vigil's own patterns, strongest first, each with what points to it and the check that settles it; viewer |
+| `GET /api/v1/sessions/live` | the AI coding sessions of the last 12 hours and their state now (working, waiting, idle, quiet, ended), from the Claude Code hook's lines; viewer |
+| `GET /api/v1/alerting/deliveries` | every integration of the contacts in use and how it did since the server started: sent, failed, last success, last error (addresses cut to their host), and `check`, the scheduled delivery check (state, method, last check, last proof, next check message); admin only |
 | `POST /api/v1/alerting/test` | `{"receiver", "integration", "index", "config"?}`: one test message (`VigilTest`, severity `info`) through that integration only; answers `{"ok", "error"?, "ms"}`, 404 for an integration the configuration does not have, 429 within ten seconds of the last test of it. With `config` (unsaved YAML) that configuration is used and nothing is counted; admin only |
 | `POST /api/v1/alerting/route` | `{"labels": {…}, "config"?}`: which contacts an alert with these labels reaches (`matches`: receiver, route, group_by, waits, integrations) and whether a silence covers it now (`silenced`); sends nothing; admin only |
 | `/alertmanager/api/v2/…` | Alertmanager's own API: silences, alert groups, receivers, status |

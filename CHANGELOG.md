@@ -39,6 +39,36 @@ after. How a release is made: [releasing.md](memory/context/releasing.md).
 - **Captures: Detected and Errors.** A capture marks every event a rule
   fired on, not only the first, and can be narrowed to those, or to the
   errors: refused opens and processes that failed or were killed.
+
+- **Likely causes** on an incident: up to five candidates, strongest
+  first, found without a language model (out-of-memory events, restarts,
+  exit codes, pressure, certificates, check answers, recent changes, and
+  timeouts, refused credentials, full disks, crashes in the log lines),
+  each with the one check that settles it. The AI explanation gets the
+  list and may disagree.
+
+- **Context cost per tool** on the Claude Code dashboard: what each kind
+  of tool call adds to the context (median, 90th percentile, total, in
+  tokens estimated from bytes), with failed and empty results counted
+  apart, and the files read more than once in a session.
+
+- **Claude Code sessions live:** the Sessions page starts with Live now,
+  every session of the last 12 hours on every machine as working, waiting
+  on you (a permission prompt or a question), idle, quiet or ended, from
+  the hook's lines. A session waiting longer than `waiting_minutes`
+  (default 10) raises `ClaudeCodeWaitingOnYou`, so it reaches you on
+  Telegram or wherever your contacts are. Register the hook's new
+  `Notification` and `Stop` events (docs: Claude Code).
+
+- **Delivery checks:** every contact is checked on a schedule. Every 15
+  minutes without posting anything (Telegram: is the token valid and does
+  the bot see the chat; webhooks and chats: DNS, connection, TLS; email:
+  the mail server answers), and once a week a real message, silent on
+  Telegram, only when nothing else got through that week. New Check and
+  Proved columns under Alerts → Contacts & routing → Delivery, the metric
+  `vigil_notification_check` and the built-in alert
+  `NotificationCheckFailing`. Server setting `delivery_checks`.
+
 - **Portun dashboard** for the whole installation, one row per part: Core
   (also removals waiting or stuck, approved but not granted, shards,
   broken recordings), Jump (from the gateways when there is no tenant

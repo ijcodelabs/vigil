@@ -12,6 +12,9 @@ params:
   error_burst:
     default: "10"
     description: More API errors than this from one machine in 5 minutes (rate limits, overload) raise a warning.
+  waiting_minutes:
+    default: "10"
+    description: A Claude Code session that has waited this many minutes for its owner (a permission prompt or a question) raises an alert, so it reaches them where they are. Needs the PermissionRequest and Notification hooks (docs, Claude Code).
   billing:
     default: api
     description: "How this Claude Code use is paid: api (an API key, paid per token) or subscription (Pro, Max, Team or Enterprise seats). Subscription use is shown on the AI costs dashboard apart from what is billed, as what it would cost through the API."
@@ -31,6 +34,12 @@ rules:
         labels: {severity: warning}
         annotations:
           summary: 'Claude Code use of {{ $labels.user_email }} cost {{ $value | printf "%.2f" }} USD in the last 24 hours (budget ${daily_budget})'
+      # Written by the server from the hook's lines (Sessions page, Live now).
+      - alert: ClaudeCodeWaitingOnYou
+        expr: max by (agent, session_id, os_user, project, waiting_for) (vigil_ai_session_waiting_seconds{tool="claude_code"}) > ${waiting_minutes} * 60
+        labels: {severity: info}
+        annotations:
+          summary: 'Claude Code on {{ $labels.agent }} ({{ $labels.project }}) has waited {{ $value | humanizeDuration }} for {{ $labels.waiting_for }}'
   # Claude Code's share of the common cost metric (see the AI costs dashboard).
   - name: costs
     interval: 1m
@@ -129,6 +138,31 @@ dashboard:
       w: 4
       h: 4
       queries: [{expr: 'service:~"claude-code" _msg:"claude_code.tool_result" user_email:~"$person" | stats by (tool_name) count() as calls, count() if (success:false) as failed, avg(duration_ms) as avg_ms | sort by (calls desc) | limit 15'}]
+    # What each kind of tool call adds to the context, in tokens estimated as
+    # bytes / 4. Failed and empty results are counted apart and left out of
+    # the sizes, so a broken tool never looks like the cheapest one.
+    - title: Context added by tool (tokens, about bytes / 4)
+      type: table
+      source: logs
+      w: 8
+      h: 4
+      queries: [{expr: 'service:~"claude-code" _msg:"claude_code.tool_result" user_email:~"$person" | stats by (tool_name) count() as calls, count() if (success:false) as failed, count() if (success:true tool_result_size_bytes:0) as empty, quantile(0.5, tool_result_size_bytes) if (success:true tool_result_size_bytes:>0) as p50_bytes, quantile(0.9, tool_result_size_bytes) if (success:true tool_result_size_bytes:>0) as p90_bytes, sum(tool_result_size_bytes) as bytes | math round(p50_bytes / 4) as median, round(p90_bytes / 4) as p90, round(bytes / 4) as total | fields tool_name, calls, failed, empty, median, p90, total | sort by (total desc) | limit 20'}]
+    # Repeat waste, from the hook (it always has the file): the same file read
+    # more than once in a session. A read after the file was edited is
+    # counted too.
+    - title: Tool output that was a file read again
+      type: stat
+      source: logs
+      w: 4
+      h: 2
+      unit: ratio
+      queries: [{expr: 'service:"claude-code-hook" _msg:~"PostToolUse" | stats by (session_id, tool_name, tool_file_path) count() as n, sum(tool_response_bytes) as b | math (b - b / n) as again | stats sum(b) as all, sum(again) if (tool_name:Read n:>1) as again | filter all:>0 | math again / all as share | fields share'}]
+    - title: Files read again in a session
+      type: table
+      source: logs
+      w: 4
+      h: 2
+      queries: [{expr: 'service:"claude-code-hook" _msg:"claude_code.hook.PostToolUse" tool_name:Read | stats by (session_id, tool_file_path) count() as reads, sum(tool_response_bytes) as bytes | filter reads:>1 | math round((bytes - bytes / reads) / 4) as tokens_again | fields tool_file_path, reads, tokens_again, session_id | sort by (tokens_again desc) | limit 15'}]
     - title: Subagent runs
       type: table
       source: logs
@@ -170,6 +204,12 @@ queries:
   - name: Claude Code tool calls
     type: logs
     query: service:~"claude-code" _msg:"claude_code.tool_result" | stats by (tool_name) count() as calls, count() if (success:false) as failed, avg(duration_ms) as avg_ms | sort by (calls desc)
+  - name: Claude Code context added by tool (tokens, about bytes / 4)
+    type: logs
+    query: service:~"claude-code" _msg:"claude_code.tool_result" | stats by (tool_name) count() as calls, count() if (success:false) as failed, count() if (success:true tool_result_size_bytes:0) as empty, quantile(0.5, tool_result_size_bytes) if (success:true tool_result_size_bytes:>0) as p50_bytes, quantile(0.9, tool_result_size_bytes) if (success:true tool_result_size_bytes:>0) as p90_bytes, sum(tool_result_size_bytes) as bytes | sort by (bytes desc)
+  - name: Claude Code files read again in a session
+    type: logs
+    query: service:"claude-code-hook" _msg:"claude_code.hook.PostToolUse" tool_name:Read | stats by (session_id, tool_file_path) count() as reads, sum(tool_response_bytes) as bytes | filter reads:>1 | sort by (bytes desc)
   - name: Claude Code shell commands (audit)
     type: logs
     query: service:"claude-code-hook" _msg:~"PostToolUse" tool_name:Bash

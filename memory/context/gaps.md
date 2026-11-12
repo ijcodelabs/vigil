@@ -87,6 +87,61 @@ below run beside them where they do not.
     eBPF HTTP/gRPC instrumentation, LLM evals on sampled GenAI spans,
     cloud metrics (CloudWatch first), checks from several regions.
 
+## Comparison of 2026-11-12 (proposed, not agreed)
+
+Against a young open-source, self-hosted platform (MIT, Rust on a
+columnar database behind a message queue) that takes another vendor's
+agents and tracers unchanged. Read from its site and repository; features
+it only names are not counted. What it has that matters for vigil, in
+order:
+
+1. **Pull connectors described in YAML.** Over two hundred: each a file
+   saying which SaaS API to poll (identity providers, source hosting,
+   office suites, CDNs, AI providers' usage and cost reports), how to page
+   through it and how to map the answer into logs, metrics or cost rows,
+   with fixtures and the expected output as its test. For vigil this is
+   the cheap way to the audit sources in direction.md, and an AI
+   provider's usage and cost report settles "comparing with the bill"
+   (docs, Claude Code, Not yet). Runs on the server or a gateway agent;
+   secrets through `*_file` or the secret store; every connector tested
+   against its fixtures in CI.
+2. **On-call**: schedules with layers, overrides and time zones,
+   escalation with repeats, paging a team from a rule. vigil routes
+   through Alertmanager and nothing more. Notifying is vigil's side of the
+   split; acknowledging from a chat stays with Boop.
+3. **Incidents worked by people**: declared by hand as well as from
+   alerts, severity and responders, a timeline, a postmortem drafted from
+   it, follow-ups, analytics. Postmortems and the confirmed DORA link are
+   already in direction.md ("Around incidents and changes"); this raises
+   them.
+4. **Error tracking**: errors from logs and failed spans grouped into
+   issues (first seen, last seen, count, new since a release). Close to
+   item 5, log patterns over a range; the same template mining can feed
+   it.
+5. **Backtesting a rule**: how often it would have fired over the last
+   days, before saving it. Cheap for vigil: the rule editor and Explore's
+   alert form can run the expression as a range query.
+6. **Status pages**, public or internal, from components and notices.
+7. **Security posture**: vulnerabilities from SBOMs, misconfigurations,
+   code-scanning findings. vigil's inventory has the packages; matching
+   them against an advisory feed is the first step.
+
+Already planned here, and confirmed by it: log indexes with their own
+retention and archives in the owner's bucket (direction.md, Storage),
+metrics from logs (item 8), DORA on the change ledger, LLM evals and
+continuous profiling with the module system.
+
+Not taken: accepting another vendor's agents and APIs (a large surface to
+keep compatible; plain StatsD at most), session replay, feature flags, a
+developer portal, workflow and app builders (Boop's side), notebooks and
+an SQL editor over every signal.
+
+Where vigil is ahead: eBPF runtime security, fleet profiles with staged
+rollout, the relay, its own authority, the Claude Code module, AI
+explanations citing evidence, delivery checks and likely causes, and a
+footprint of a few binaries against a queue, a columnar cluster, a SQL
+database and a cache.
+
 ## Parked (owner, 2026-11-01)
 
 - **Read-only MCP server.** Not now: it is not clear yet whether AI tools

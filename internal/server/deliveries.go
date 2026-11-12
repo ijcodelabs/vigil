@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/ijcodelabs/vigil/internal/alerting"
 	"github.com/ijcodelabs/vigil/internal/model"
 	"github.com/ijcodelabs/vigil/internal/promwire"
 )
@@ -14,6 +15,9 @@ import (
 // server started (alerting/deliveries.go), for the Contacts tab, and as
 // vigil_notifications_total{receiver, integration, index, result} so the
 // built-in NotificationsFailing rule can tell the contacts that still work.
+// The scheduled checks (alerting/checks.go) run here too, and their state
+// is written as vigil_notification_check{receiver, integration, index,
+// state} = 1 for the built-in NotificationCheckFailing rule.
 
 func (s *Server) deliveryRoutes(mux *http.ServeMux) {
 	// Admins only, like the configuration the errors come from.
@@ -34,7 +38,7 @@ func (s *Server) deliveryLoop(ctx context.Context) {
 			if len(list) == 0 {
 				continue
 			}
-			samples := make([]model.Sample, 0, 2*len(list))
+			samples := make([]model.Sample, 0, 3*len(list))
 			for _, d := range list {
 				l := map[string]string{"receiver": d.Receiver, "integration": d.Integration, "index": strconv.Itoa(d.Index)}
 				ok, failed := map[string]string{"result": "ok"}, map[string]string{"result": "failed"}
@@ -44,10 +48,55 @@ func (s *Server) deliveryLoop(ctx context.Context) {
 				samples = append(samples,
 					model.Sample{Name: "vigil_notifications_total", Labels: ok, Value: float64(d.Sent), TS: now.UnixMilli()},
 					model.Sample{Name: "vigil_notifications_total", Labels: failed, Value: float64(d.Failed), TS: now.UnixMilli()})
+				if d.Check != nil {
+					st := map[string]string{"state": d.Check.State}
+					for k, v := range l {
+						st[k] = v
+					}
+					samples = append(samples, model.Sample{Name: "vigil_notification_check", Labels: st, Value: 1, TS: now.UnixMilli()})
+				}
 			}
 			if err := s.forward(ctx, "", promwire.Encode(samples)); err != nil && ctx.Err() == nil {
 				s.log.Warn("writing notification counts failed", "err", err)
 			}
 		}
+	}
+}
+
+// checkOptions are the delivery_checks settings with their defaults.
+func (s *Server) checkOptions() alerting.CheckOptions {
+	o := alerting.DefaultCheckOptions
+	if d := s.cfg.DeliveryChecks.Interval; d != nil {
+		o.Interval = d.Std()
+	}
+	if d := s.cfg.DeliveryChecks.SendInterval; d != nil {
+		o.SendInterval = d.Std()
+	}
+	return o
+}
+
+// checkLoop runs the scheduled delivery checks: the first a minute after
+// the start (the contacts are loaded by then and a restart loop does not
+// hammer anyone), then every Interval, or every 15 minutes when only the
+// real messages are on, so a due one is not late by more than that.
+func (s *Server) checkLoop(ctx context.Context) {
+	o := s.checkOptions()
+	if o.Interval <= 0 && o.SendInterval <= 0 {
+		return
+	}
+	s.am.ChecksOn()
+	every := o.Interval
+	if every <= 0 {
+		every = alerting.DefaultCheckOptions.Interval
+	}
+	wait := time.Minute
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(wait):
+		}
+		s.am.RunChecks(ctx, o)
+		wait = every
 	}
 }

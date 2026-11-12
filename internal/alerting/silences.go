@@ -8,11 +8,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/prometheus/alertmanager/config"
 	"github.com/prometheus/alertmanager/dispatch"
 	"github.com/prometheus/alertmanager/notify"
 	"github.com/prometheus/alertmanager/pkg/labels"
 	"github.com/prometheus/alertmanager/silence"
 	pb "github.com/prometheus/alertmanager/silence/silencepb"
+	"github.com/prometheus/alertmanager/template"
 	"github.com/prometheus/alertmanager/types"
 	"github.com/prometheus/common/model"
 )
@@ -39,6 +41,8 @@ const (
 type routing struct {
 	routes    *dispatch.Route
 	receivers map[string][]notify.Integration
+	conf      *config.Config     // for the scheduled checks (checks.go)
+	tmpl      *template.Template // to build a check's integration afresh
 }
 
 // told remembers which contacts were told that an alert fires, so that its

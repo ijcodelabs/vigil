@@ -28,6 +28,8 @@ type Delivery struct {
 	LastOK      time.Time `json:"last_ok,omitzero"`
 	LastFailure time.Time `json:"last_failure,omitzero"`
 	LastError   string    `json:"last_error,omitempty"`
+	// Check is the scheduled check (checks.go); nil while checks are off.
+	Check *CheckResult `json:"check,omitempty"`
 }
 
 type deliveries struct {
@@ -102,6 +104,17 @@ func (a *Alertmanager) Deliveries() []Delivery {
 					out = append(out, Delivery{Receiver: name, Integration: in.Name(), Index: in.Index()})
 				}
 			}
+		}
+	}
+	if a.checksOn.Load() {
+		checked := a.checkResults()
+		for i := range out {
+			k := Target{out[i].Receiver, out[i].Integration, out[i].Index}.key()
+			r, ok := checked[k]
+			if !ok { // after a restart, or a contact added since the last round
+				r = CheckResult{State: CheckPending, LastProof: a.checks.proofOf(k)}
+			}
+			out[i].Check = &r
 		}
 	}
 	sort.Slice(out, func(i, j int) bool {

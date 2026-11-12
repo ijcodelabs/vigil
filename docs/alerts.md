@@ -124,6 +124,7 @@ The group **builtin** always runs:
 | `SecretStoreDown` | the secret store set up under [Secrets](secrets.md) has not answered for five minutes (sealed, down, or vigil's login refused); vigil goes on with the values it read last |
 | `SecretStoreLoginExpiring` | vigil's token for the secret store cannot be renewed and expires within three days |
 | `NotificationsFailing` | a contact's sends (one Telegram, one webhook, …) failed in the last 15 minutes and none succeeded; sent to the contacts that still work |
+| `NotificationCheckFailing` | the scheduled delivery check of a contact (see [Checked on a schedule](#checked-on-a-schedule)) failed twice in a row |
 
 #### Laptops and other hosts that sleep
 
@@ -294,6 +295,47 @@ sent it, past routing, grouping and silences, so testing the chat does not
 also message the pager. The answer shows next to the button (delivered, or
 the error the other side gave), and the attempt is counted like any other.
 One integration can be tested once every ten seconds.
+
+### Checked on a schedule
+
+A contact that broke weeks ago is otherwise found when an alert does not
+arrive. So vigil checks every integration of the contacts in use by itself,
+in two ways, shown in the **Check** and **Proved** columns:
+
+- **A check that posts nothing**, every 15 minutes. For Telegram, vigil
+  asks the Bot API whether the token is valid and the bot can see the chat
+  (`getChat`), so a revoked token or a bot removed from the group shows up.
+  For Slack-style, webhook, Discord, Teams and Mattermost contacts it
+  reaches the address: DNS, a connection and the TLS handshake, without
+  sending a request. Email connects to the mail server. Kinds where nothing
+  can be checked without sending (PagerDuty, Opsgenie, a webhook whose URL is
+  a template, …) say **no silent check**; after a restart every row says
+  **not checked yet** until the first round, a minute after the start.
+  Neither is ever shown as working. Two failed checks in a row raise
+  `NotificationCheckFailing`.
+- **A real message**, once a week by default: an alert `VigilDeliveryCheck`
+  with severity `info` through that integration alone, without sound on
+  Telegram. It is sent only when nothing else got through that
+  integration for the whole week: a delivered alert or a **Send test**
+  proves the path just as well and moves the next one back. A new contact
+  gets its first one a week after it appears, not at once. When it fails,
+  the error shows under **Proved**, it counts as a failed send (so
+  `NotificationsFailing` fires), and it is tried again an hour later.
+  When each integration was last proved is kept on disk, so a restart does
+  not send a round of messages.
+
+```yaml
+# server config; "0s" turns either part off
+delivery_checks:
+  interval: 15m       # the check that posts nothing
+  send_interval: 168h # the real message, when nothing else got through
+```
+
+The state is also the metric `vigil_notification_check{receiver,
+integration, index, state}` (`ok`, `failing`, `cannot_check`,
+`not_checked`). These checks run inside the server: if the server itself is
+down, nothing can tell you. For that, have an outside uptime check watch the
+server's `/healthz`.
 
 ### Who would be told?
 

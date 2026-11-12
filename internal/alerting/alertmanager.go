@@ -83,6 +83,8 @@ type Alertmanager struct {
 	told           told
 	sent           deliveries  // how each contact's integrations did (deliveries.go)
 	tests          testLimiter // one test per integration at a time (contacts.go)
+	checks         checks      // scheduled checks of every integration (checks.go)
+	checksOn       atomic.Bool // the server runs them (ChecksOn)
 	notifySilences atomic.Bool
 
 	mu         sync.Mutex // serialises Apply
@@ -120,6 +122,8 @@ func New(dataDir, serverURL string, log *slog.Logger) (*Alertmanager, error) {
 
 	a := &Alertmanager{log: log, externalURL: ext, started: time.Now(), stopc: make(chan struct{}),
 		groupMarker: marker.NewGroupMarker()}
+	a.checks.file, a.checks.results, a.checks.tried = checksFile(dataDir), map[string]*CheckResult{}, map[string]time.Time{}
+	a.checks.load()
 
 	nflogFile, silFile := filepath.Join(dataDir, "nflog"), filepath.Join(dataDir, "silences")
 	if a.nflog, err = nflog.New(nflog.Options{SnapshotFile: nflogFile, Retention: retention,
@@ -208,7 +212,7 @@ func (a *Alertmanager) Apply(yaml string) error {
 	go dispatcher.Run(a.started)
 	dispatcher.WaitForLoading()
 	a.dispatcher.Store(dispatcher)
-	a.routing.Store(&routing{routes: routes, receivers: receivers})
+	a.routing.Store(&routing{routes: routes, receivers: receivers, conf: conf, tmpl: tmpl})
 	return nil
 }
 
