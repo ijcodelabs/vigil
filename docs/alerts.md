@@ -213,6 +213,21 @@ version of vigil you run.
 `configs/rules.example.yaml` has more rules for hosts, services, logs and
 the agents themselves.
 
+### History: going back to an earlier version
+
+Every save of the rule file and of the contacts & routing config is kept,
+with who saved it, when, and whether it was uploaded (`X-Vigil-Origin:
+files`) or saved in the interface. Saving the same text again adds no
+version; the last 200 are kept. The first save after an upgrade keeps the
+text that was there before as version 1.
+
+In either editor, **History** lists the versions. **Compare** shows what
+the editor has that a version does not, and the reverse; **Put vN back
+into the editor** loads it, and **Save** then uses it, checked like any
+other save, so a version that no longer passes the checks is refused with
+the reason. The history of contacts & routing holds webhook addresses and
+passwords as written, so like the config itself only admins can read it.
+
 ## Who is told: contacts and routing
 
 **Alerts → Contacts & routing → Edit.** This is Alertmanager's configuration

@@ -100,6 +100,7 @@ large fleets. Expect rough edges, and please say what you find.
   contact is also checked on a schedule: every 15 minutes without posting
   (is the Telegram bot still in the chat, does the webhook answer) and
   once a week with a silent real message when nothing else got through.
+  The rule file and the routing keep every saved version, to compare and go back to.
 - **Service level objectives** over site checks, spans or any counters:
   good and total events counted once a minute, error budgets,
   multi-window burn-rate alerts, a page with each SLO's budget, burn

@@ -1,4 +1,4 @@
-import { html, useState, useEffect, useRef, api, useLoad, Tabs, Badge, Chips, ErrorBox, Dialog, YamlEditor, ago } from './lib.js';
+import { html, useState, useEffect, useRef, api, useLoad, Tabs, Badge, Chips, ErrorBox, Dialog, YamlEditor, ago, diffLines } from './lib.js';
 
 const STARTER = `# Which agents this applies to. All conditions must hold; leave the list
 # empty to apply to every agent. Labels come from each agent's own file;
@@ -311,22 +311,6 @@ function IntegrationEditor({ name, admin, onClose }) {
 function ReadOnly({ load }) {
   const { data, error } = useLoad(load);
   return html`<${ErrorBox} error=${error} /><pre class="secret" style="user-select: text; max-height: 60vh; overflow: auto">${data ?? 'Loading…'}</pre>`;
-}
-
-// diffLines marks which lines of b are new relative to a, and which of a are gone.
-function diffLines(a, b) {
-  const A = a.split('\n'), B = b.split('\n');
-  const lcs = Array.from({ length: A.length + 1 }, () => new Uint16Array(B.length + 1));
-  for (let i = A.length - 1; i >= 0; i--) for (let j = B.length - 1; j >= 0; j--)
-    lcs[i][j] = A[i] === B[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
-  const out = [];
-  let i = 0, j = 0;
-  while (i < A.length || j < B.length) {
-    if (i < A.length && j < B.length && A[i] === B[j]) { out.push([' ', A[i]]); i++; j++; }
-    else if (j < B.length && (i === A.length || lcs[i][j + 1] >= lcs[i + 1][j])) out.push(['+', B[j++]]);
-    else out.push(['-', A[i++]]);
-  }
-  return out;
 }
 
 function ProfileEditor({ name, initial, readOnly, onClose }) {

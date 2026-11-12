@@ -69,6 +69,11 @@ after. How a release is made: [releasing.md](memory/context/releasing.md).
   `vigil_notification_check` and the built-in alert
   `NotificationCheckFailing`. Server setting `delivery_checks`.
 
+- **History of the rule file and of contacts & routing:** every save is
+  kept with who made it and when; the editors list the versions, compare
+  one with the text being edited and put it back to be saved again. API
+  `…/config/versions`.
+
 - **Portun dashboard** for the whole installation, one row per part: Core
   (also removals waiting or stuck, approved but not granted, shards,
   broken recordings), Jump (from the gateways when there is no tenant

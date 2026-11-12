@@ -44,6 +44,10 @@ func OpenStore(dataDir string) (*Store, error) {
 	for _, ddl := range []string{
 		// settings holds whole documents: the rule file, the alerting config.
 		`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
+		// Every saved version of the whole documents in settings that people
+		// edit: the alerting config and the rule file (docversions.go).
+		`CREATE TABLE IF NOT EXISTS setting_versions (key TEXT NOT NULL, version INTEGER NOT NULL, doc TEXT NOT NULL,
+			origin TEXT NOT NULL, author TEXT NOT NULL, time INTEGER NOT NULL, PRIMARY KEY (key, version))`,
 		`CREATE TABLE IF NOT EXISTS alert_state (rule_key TEXT PRIMARY KEY, data BLOB NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS users (name TEXT PRIMARY KEY, pass_hash TEXT NOT NULL, role TEXT NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, user TEXT NOT NULL, expires INTEGER NOT NULL)`,

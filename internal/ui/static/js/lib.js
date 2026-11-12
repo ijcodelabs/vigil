@@ -114,11 +114,30 @@ export function Dialog({ title, wide, onClose, children }) {
     </div></div>`;
 }
 
+// diffLines marks which lines of b are new relative to a, and which of a are gone.
+export function diffLines(a, b) {
+  const A = a.split('\n'), B = b.split('\n');
+  const lcs = Array.from({ length: A.length + 1 }, () => new Uint16Array(B.length + 1));
+  for (let i = A.length - 1; i >= 0; i--) for (let j = B.length - 1; j >= 0; j--)
+    lcs[i][j] = A[i] === B[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+  const out = [];
+  let i = 0, j = 0;
+  while (i < A.length || j < B.length) {
+    if (i < A.length && j < B.length && A[i] === B[j]) { out.push([' ', A[i]]); i++; j++; }
+    else if (j < B.length && (i === A.length || lcs[i][j + 1] >= lcs[i + 1][j])) out.push(['+', B[j++]]);
+    else out.push(['-', A[i++]]);
+  }
+  return out;
+}
+
 // YamlEditor edits one YAML document: load() fetches it, save(text) stores
 // it. The server validates on save; its reason is shown and nothing changes
 // when it refuses. tools, when given, is called with the text being edited
-// and shown under it, for checks on what is not saved yet.
-export function YamlEditor({ title, help, load, save, onClose, extra, tools }) {
+// and shown under it, for checks on what is not saved yet. history, when
+// given, is the URL of the document's saved versions (base/versions): they
+// are listed, compared with the editor's text, and one can be put back into
+// the editor, to be saved through the same checks.
+export function YamlEditor({ title, help, load, save, onClose, extra, tools, history }) {
   const [text, setText] = useState(null);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -140,6 +159,7 @@ export function YamlEditor({ title, help, load, save, onClose, extra, tools }) {
       <textarea rows="24" spellcheck="false" value=${text || ''} onInput=${e => setText(e.target.value)} onKeyDown=${tab}
         aria-label=${title}></textarea>`}
     ${tools && text !== null && tools(text)}
+    ${history && text !== null && html`<${History} url=${history} text=${text} onPick=${setText} />`}
     <${ErrorBox} error=${error} />
     <div class="actions">
       ${extra}<span class="spacer"></span>
@@ -147,6 +167,34 @@ export function YamlEditor({ title, help, load, save, onClose, extra, tools }) {
       <button class="primary" disabled=${busy || text === null} onClick=${submit}>${busy ? 'Checking…' : 'Save'}</button>
     </div>
   <//>`;
+}
+
+// History lists a document's saved versions, newest first, and compares one
+// with the text being edited.
+function History({ url, text, onPick }) {
+  const { data: versions, error } = useLoad(() => api(url), [url]);
+  const [compare, setCompare] = useState(null); // {version, doc}
+  const [err, setErr] = useState(null);
+  const show = async v => {
+    setErr(null);
+    try { setCompare({ version: v, doc: await api(`${url}/${v}`) }); } catch (e) { setErr(e.message); }
+  };
+  if (error) return html`<${ErrorBox} error=${error} />`;
+  if (!versions || versions.length === 0) return null;
+  const how = v => v.origin === 'before-history' ? 'as it was before history was kept'
+    : `${v.origin === 'files' ? 'applied from files' : 'saved'} by ${v.author}, ${ago(v.time)}`;
+  return html`<details style="margin-top: 12px"><summary class="muted" style="cursor: pointer">History (${versions.length} versions)</summary>
+    <div class="panel flush" style="margin: 8px 0 0; max-height: 180px; overflow: auto"><table><tbody>${versions.map((v, i) => html`<tr>
+      <td style="white-space: nowrap">v${v.version}${i === 0 ? ' (saved now)' : ''}</td>
+      <td class="muted" title=${new Date(v.time).toLocaleString()}>${how(v)}</td>
+      <td style="text-align: right"><button class="small" onClick=${() => show(v.version)}>Compare</button></td></tr>`)}</tbody></table></div>
+    <${ErrorBox} error=${err} />
+    ${compare && html`<p class="muted" style="margin: 10px 0 4px">What the editor has that v${compare.version} does not (green), and the reverse (red):</p>
+      <pre class="secret diff" style="user-select: text; margin: 0; max-height: 260px; overflow: auto">${diffLines(compare.doc, text || '').map(([op, line]) =>
+        html`<div class=${op === '+' ? 'add' : op === '-' ? 'del' : ''}>${op} ${line}</div>`)}</pre>
+      <button class="small" style="margin-top: 6px" onClick=${() => { onPick(compare.doc); setCompare(null); }}>Put v${compare.version} back into the editor</button>
+      <span class="muted" style="font-size: 12px"> then Save to use it; it is checked like any other save.</span>`}
+  </details>`;
 }
 
 // fmtUnit shows a number in a panel's unit.
