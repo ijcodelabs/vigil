@@ -36,7 +36,7 @@ A cluster gets two things:
    both, if the server has a shared `ingest_token`.)
 
 3. Both manifests use the released image,
-   `ghcr.io/ijcodelabs/vigil-agent:0.2.0`. To run your own build instead,
+   `ghcr.io/ijcodelabs/vigil-agent:0.3.0`. To run your own build instead,
    push it to your registry and put its name in both:
 
    ```bash
