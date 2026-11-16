@@ -16,7 +16,7 @@ services:
 
   # Storage is reachable only on the compose network; all access goes through vigil.
   victoriametrics:
-    image: docker.io/victoriametrics/victoria-metrics:v1.155.0@sha256:f60dc268b54ecf87f6e09d740c2b732838aa9193090cc741417c9f6386a130df
+    image: docker.io/victoriametrics/victoria-metrics:v1.156.0@sha256:da8a90ac0912f16589be2b96a6441a2fca4bca415c83783d972d92e3b5b66970
     command: ["-storageDataPath=/storage", "-retentionPeriod=30d"]
     volumes: ["vm:/storage"]
     restart: unless-stopped
@@ -28,7 +28,7 @@ services:
     restart: unless-stopped
 
   victoriatraces:
-    image: docker.io/victoriametrics/victoria-traces:v0.12.1@sha256:609abddf298c9642496045296f30a3968b5a4b79b678373e2e7ef29c844f5578
+    image: docker.io/victoriametrics/victoria-traces:v0.13.0@sha256:3018df8f99429d7d3029167ab9f70848bf0a778c31c49dff16c86c7e34759fbd
     command: ["-storageDataPath=/vtraces", "-retentionPeriod=7d"]
     volumes: ["vtraces:/vtraces"]
     restart: unless-stopped
