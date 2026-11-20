@@ -227,16 +227,29 @@ td.lvl-bad { color: var(--bad); background: color-mix(in srgb, var(--bad) 16%, t
 .login button { width: 100%; margin-top: 6px; }
 
 @media (max-width: 760px) {
-  .shell { grid-template-columns: 1fr; }
-  .side { position: static; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 10px; }
+  /* The bar stacked above the page, no grid: a grid sized the bar's row as
+     if every item wrapped onto its own line. */
+  .shell { display: block; }
+  /* A top bar: brand, Docs and the buttons on one row, the page links on a
+     second row that scrolls sideways instead of widening the page. */
+  .side { position: static; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 10px; min-width: 0; }
   .brand { padding: 0 8px 0 4px; }
   .nav { display: flex; }
-  .side .who { border: none; padding: 0; margin-left: auto; }
+  .side > .nav:first-of-type { order: 1; flex: 1 0 100%; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .side > .nav:first-of-type::-webkit-scrollbar { display: none; }
+  .nav a { flex: none; margin-bottom: 0; }
+  .side .spacer { display: none; }
+  .side .who { border: none; padding: 0; margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .side .who .version { display: none; }
   .side .sidebtns { flex-direction: row; margin-top: 0; }
   .side .sidebtns button { width: auto; }
+  .side .sidebtns button .lbl { display: none; }
+  /* Collapsing is a desktop feature; on a phone the bar is already small. */
+  .side .sidebtns .collapse-btn { display: none; }
   .main { padding: 14px 14px 50px; }
   .log { grid-template-columns: 1fr; gap: 0; }
   .panel.flush { overflow-x: auto; }
+  .tabs { flex-wrap: wrap; }
 }
 
 /* Dashboards */

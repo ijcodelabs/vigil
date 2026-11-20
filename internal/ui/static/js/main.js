@@ -104,7 +104,7 @@ function App() {
           ${!me.bootstrap && html`<button class="small" title="Change password" onClick=${() => setDialog('password')}><span class="ic">${icon.key}</span><span class="lbl">Password</span></button>`}
           <button class="small" title="Switch theme (dark / light / tempest)" onClick=${cycleTheme}><span class="ic">${icon.theme}</span><span class="lbl">Theme</span></button>
           <button class="small" title="Sign out" onClick=${logout}><span class="ic">${icon.signout}</span><span class="lbl">Sign out</span></button>
-          <button class="small" title=${collapsed ? 'Expand sidebar' : 'Collapse sidebar'} onClick=${toggleCollapsed}><span class="ic">${collapsed ? icon.expand : icon.collapse}</span><span class="lbl">Collapse</span></button>
+          <button class="small collapse-btn" title=${collapsed ? 'Expand sidebar' : 'Collapse sidebar'} onClick=${toggleCollapsed}><span class="ic">${collapsed ? icon.expand : icon.collapse}</span><span class="lbl">Collapse</span></button>
         </div>
       </div>
     </aside>
