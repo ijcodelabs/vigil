@@ -64,6 +64,9 @@ after. How a release is made: [releasing.md](memory/context/releasing.md).
 - **UI: the sidebar stays in place when the page scrolls.** With the
   tempest theme or the collapsed sidebar, the menu scrolled away with the
   page.
+- **UI: pages fit a phone's screen.** At phone width the menu is a bar
+  whose page links scroll sideways, and page tabs wrap, so the page is no
+  longer wider than the screen.
 
 ### Security
 

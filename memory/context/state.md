@@ -1410,8 +1410,8 @@ store, tests, routing history); the order is in direction.md.
   and a local webhook sink (delivered, a refused one shows its 403 without
   the token in the path, the unsaved config's test arrived and saved
   nothing). Not tried with Telegram, Slack or mail.
-- At phone width the Test column needs a sideways scroll: the page is
-  wider than the screen (the known layout issue under Next).
+- At phone width the Test column needs a sideways scroll inside its table
+  (the page itself fits since 2026-11-20).
 
 ## Portun: one dashboard for the installation, Chat, newer Jump rules (built 2026-11-11)
 
@@ -1768,13 +1768,25 @@ Step 1 of "Runtime security" in direction.md.
   `dockerd` out like `docker-proxy` would quiet it on every Docker host;
   first see how often it comes up.
 
+## Phone width and a sticky sidebar (2026-11-20)
+
+- The sidebar stays in place on scroll in every theme and when collapsed
+  (the tempest theme and the collapsed rail had set `position: relative`
+  over its `sticky`).
+- At 760 px and less the shell is a block, not a grid: a bar with the
+  brand, Docs and icon-only buttons (no Collapse), and the page links on a
+  second row that scrolls sideways. Page tabs wrap. Checked at 375 px on
+  every page with no data: none is wider than the screen. With data, wide
+  tables scroll inside their panel as before.
+- Not done: the page links row does not scroll the current page's link
+  into view.
+
 ## Next
 
 - Foundations, build order in `direction.md`: step 1 on paper (data
   classes, tenant model, envelope, retention, integrity claims), reviewed
   by a second model; step 3 (CI budgets) can run beside it; step 4 (mTLS,
   envelope, spools) waits for step 1.
-- At phone width the page is wider than the screen (637 px at 375 px).
 - Open from the original plan: AI investigator and MCP server (Claude API
   or local models?), and the watched eBPF window on the trial host.
 
