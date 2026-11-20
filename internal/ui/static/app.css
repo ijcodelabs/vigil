@@ -46,7 +46,9 @@
     repeating-linear-gradient(135deg, transparent 0 42px, rgba(47, 255, 210, .022) 42px 43px, transparent 43px 86px);
   background-size: 50px 50px, 50px 50px, auto;
 }
-:root[data-theme="tempest"] .side,
+/* .side is already positioned (sticky); position: relative here would make
+   it scroll away with the page. */
+:root[data-theme="tempest"] .side { z-index: 1; }
 :root[data-theme="tempest"] .main { position: relative; z-index: 1; }
 :root[data-theme="tempest"] .side { background: linear-gradient(180deg, #081621, var(--panel) 42%, #071017); }
 /* The active nav item glows. */
@@ -94,8 +96,9 @@ code, .mono { font-family: var(--mono); font-size: 12.5px; }
 @media (min-width: 761px) {
   .shell.collapsed { grid-template-columns: 56px 1fr; }
   /* Sit above .main so hover labels, which overflow the rail, are not
-     painted over (the tempest theme gives .side and .main a z-index). */
-  .shell.collapsed .side { padding: 14px 8px; position: relative; z-index: 30; }
+     painted over (the tempest theme gives .side and .main a z-index).
+     The rail stays sticky, so it does not scroll with the page. */
+  .shell.collapsed .side { padding: 14px 8px; z-index: 30; }
   .shell.collapsed .brand { justify-content: center; padding: 2px 0 16px; }
   .shell.collapsed .brandname { display: none; }
   .shell.collapsed .nav a { justify-content: center; padding: 8px 0; }
