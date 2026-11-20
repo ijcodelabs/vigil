@@ -61,6 +61,9 @@ after. How a release is made: [releasing.md](memory/context/releasing.md).
   ran: container rules missed it, and host rules could fire on it. The
   agent now looks again for a cgroup it does not know, at most twice a
   second.
+- **UI: the sidebar stays in place when the page scrolls.** With the
+  tempest theme or the collapsed sidebar, the menu scrolled away with the
+  page.
 
 ### Security
 
