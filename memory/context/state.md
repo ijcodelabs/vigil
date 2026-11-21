@@ -1743,6 +1743,14 @@ Step 1 of "Runtime security" in direction.md.
   summaries, one series each.
 - With this the runtime security plan (direction.md) is built; vulnerabilities
   are the next plan.
+- On a busy Docker host (about 60 containers, x86-64, 6.12) with the pack
+  on: a dry run first (`vigil-agent events -config` with a copy of the
+  host's config) showed Docker health checks tripping two rules (curl/wget
+  to localhost; `sh -c` whose runc parent is gone, so parent_comm is
+  empty) and, once on, a cron daemon in a container running its jobs via
+  sh: all three left out in the pack. Then 0 detections, 0 lost, about 55
+  events/s (12/s namespace changes from health checks), agent about 8% of
+  a core. Escape probes all loaded on 6.12.
 
 ## Next
 
