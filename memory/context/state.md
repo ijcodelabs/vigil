@@ -1661,6 +1661,40 @@ Step 1 of "Runtime security" in direction.md.
   tests only. (The VM's old `boop-live` profile was renamed to the Portun
   integrations: the server refused every profile while it was stale.)
 
+## Runtime security, step 2: built-in rule pack (built 2026-11-21)
+
+- `internal/events/builtin_rules.yaml` (embedded): 17 rules, list and
+  reasons in docs/security.md. On with `security.enabled`; config
+  `builtin_rules` (default true) and `disable_rules` (names must be
+  built-in ones). A configured rule of the same name replaces a built-in
+  one (profiles merge `security.rules` by name, so a profile can too).
+- Built-in watch paths added after the configured ones, skipping those a
+  configured prefix covers, up to 16; the rest logged. `/etc/passwd` left
+  out (read by every user lookup); home folders' authorized_keys not
+  watched (a `/home/` prefix reports every open there).
+- Container rules skip images containing `vigil-agent`.
+- `configs/agent.example.yaml` no longer carries the starter rules: one
+  override (shell_in_container with capture) and one custom rule.
+- Engine tests turn the pack off; `builtin_test.go` checks each rule on a
+  firing case and a near miss.
+- Live on the Lima Docker VM (arm64, 6.8), pack only (17 rules, 8 paths):
+  quiet minute 0 detections; then privileged + `/` mounted container,
+  cron.d and root authorized_keys writes (tee), useradd, `sudo cat
+  /etc/shadow`, a program from /tmp, a setuid bash copy run by the normal
+  user (`became_root` + `run_from_temp_dir`), and in a new container a
+  shell started by a shell, wget and apk: each fired its rule, and
+  `cat /etc/shadow` inside a container did not. Noise found and fixed:
+  apt's `_apt` sandbox taking root back (now `uid != 0`), debconf reading
+  /etc/shadow, systemd's "(name)" service children. After the fixes two
+  minutes with unattended-upgrade, dpkg-reconfigure and a service start:
+  0 detections.
+- Bug found there and fixed (`enrich.go`): an unknown cgroup was cached as
+  "not a container" for good, so a container whose first process ran
+  within 2 s of the last scan counted as the host for its whole life. Now
+  an unknown cgroup triggers a scan, at most every 500 ms.
+- Not tried: Kubernetes, a busy host (event cost of the extra paths), a
+  host without eBPF.
+
 ## Next
 
 - Foundations, build order in `direction.md`: step 1 on paper (data

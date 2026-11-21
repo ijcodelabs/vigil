@@ -3,8 +3,11 @@ package events
 import (
 	"context"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -127,5 +130,32 @@ func TestMonitorWithoutProbes(t *testing.T) {
 		}
 	case <-ctx.Done():
 		t.Fatal("no detection from a container event without kernel probes")
+	}
+}
+
+// A container whose first process runs before the next cgroup scan is
+// still recognised once a scan has seen its cgroup.
+func TestNewContainerCgroup(t *testing.T) {
+	root := t.TempDir()
+	c := newContainers(nil)
+	c.root, c.rescan = root, 50*time.Millisecond
+	c.scan()
+	id := strings.Repeat("f", 64)
+	dir := filepath.Join(root, "system.slice", "docker-"+id+".scope")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	st, err := os.Stat(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ino := st.Sys().(*syscall.Stat_t).Ino
+	ev := &Event{cgroup: uint64(ino)}
+	c.apply(ev) // right after a scan: not looked up yet
+	time.Sleep(60 * time.Millisecond)
+	ev = &Event{cgroup: uint64(ino)}
+	c.apply(ev)
+	if ev.ContainerID != id[:12] {
+		t.Errorf("the new container's cgroup stayed unknown: %+v", ev)
 	}
 }

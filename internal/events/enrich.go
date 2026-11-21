@@ -93,6 +93,10 @@ type containers struct {
 	root     string
 	byCgroup map[uint64]string
 	scanned  time.Time
+	// rescan is how soon a cgroup not seen before may cause another scan.
+	// A new container's first processes arrive right after it starts,
+	// often before any scan could have seen its cgroup.
+	rescan time.Duration
 	// names resolves container ids to names (from Docker); may be nil.
 	names     func() map[string]string
 	byID      map[string]string
@@ -101,7 +105,7 @@ type containers struct {
 
 func newContainers(names func() map[string]string) *containers {
 	return &containers{root: filepath.Join(envOr("HOST_SYS", "/sys"), "fs", "cgroup"),
-		byCgroup: map[uint64]string{}, names: names, byID: map[string]string{}}
+		byCgroup: map[uint64]string{}, names: names, byID: map[string]string{}, rescan: 500 * time.Millisecond}
 }
 
 func (c *containers) scan() {
@@ -129,13 +133,14 @@ func (c *containers) scan() {
 // apply sets ev.Container and ev.ContainerID; both stay empty for a
 // process that is not in a container.
 func (c *containers) apply(ev *Event) {
+	// An unknown cgroup is not remembered as "no container": it used to be,
+	// and a container whose first process ran before the next scan stayed
+	// "on the host" for good. A cgroup that is gone just costs a scan, at
+	// most every c.rescan.
 	id, known := c.byCgroup[ev.cgroup]
-	if !known && time.Since(c.scanned) > 2*time.Second {
+	if !known && time.Since(c.scanned) > c.rescan {
 		c.scan()
-		id, known = c.byCgroup[ev.cgroup]
-	}
-	if !known {
-		c.byCgroup[ev.cgroup] = "" // gone before we looked; do not rescan for it
+		id = c.byCgroup[ev.cgroup]
 	}
 	if id == "" {
 		return

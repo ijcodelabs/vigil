@@ -34,7 +34,24 @@ after. How a release is made: [releasing.md](memory/context/releasing.md).
   privileged, host namespaces, added capabilities, host paths and the
   runtime's socket mounted, root user, read-only filesystem. Security rules
   run on it like on the kernel events, and also on hosts where the kernel
-  probes cannot. Two example rules in `configs/agent.example.yaml`.
+  probes cannot.
+- **Runtime events: a built-in rule pack.** Seventeen rules, on whenever
+  runtime events are: risky container setups, changes to sudoers, SSH keys,
+  cron, systemd units and `/etc/shadow`, account changes, reads of
+  `/etc/shadow`, unexpected root, programs from temporary folders, low
+  listening ports, and shells, download tools and package managers in
+  containers. Their files are added to `watch_paths`. A configured rule of
+  the same name replaces a built-in one; `disable_rules` and
+  `builtin_rules: false` turn them off. No captures by default.
+
+### Fixed
+
+- **Runtime events: processes of a new container counted as the host's.**
+  A container whose first process ran within two seconds of the agent's
+  last look at the cgroups was taken for a host process for as long as it
+  ran: container rules missed it, and host rules could fire on it. The
+  agent now looks again for a cgroup it does not know, at most twice a
+  second.
 
 ### Security
 
@@ -51,6 +68,10 @@ after. How a release is made: [releasing.md](memory/context/releasing.md).
 
 ### Upgrade notes
 
+- **Runtime events: the built-in rules start reporting** on hosts with
+  `security.enabled: true`. Rules in your config named like a built-in one
+  (the old example's `shell_in_container`, `became_root`, …) replace it.
+  To keep only your own rules, set `security.builtin_rules: false`.
 - `kind` is now a fact: a label of that name in an agent's file is dropped,
   as labels named like other facts already are.
 
