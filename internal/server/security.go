@@ -121,6 +121,22 @@ func (s *Server) handleDetections(w http.ResponseWriter, r *http.Request) {
 		if ev.NewEUID != nil {
 			fields["old_euid"], fields["new_euid"] = strconv.Itoa(int(*ev.OldEUID)), strconv.Itoa(int(*ev.NewEUID))
 		}
+		if ev.Type == events.TypeContainer {
+			for k, v := range map[string]string{"image": ev.Image, "cap_add": strings.Join(ev.CapAdd, ","),
+				"host_mounts": strings.Join(ev.HostMounts, ","), "host_mounts_rw": strings.Join(ev.HostMountsRW, ","),
+				"runtime_socket": ev.RuntimeSocket} {
+				if v != "" {
+					fields[k] = v
+				}
+			}
+			for k, v := range map[string]bool{"privileged": ev.Privileged, "host_pid": ev.HostPID,
+				"host_network": ev.HostNetwork, "host_ipc": ev.HostIPC, "runs_as_root": ev.RunsAsRoot,
+				"read_only_root": ev.ReadOnlyRoot} {
+				if v {
+					fields[k] = "true"
+				}
+			}
+		}
 		entries = append(entries, model.LogEntry{Time: d.Time.UnixNano(), Msg: d.Summary,
 			Stream: map[string]string{"source": "security", "rule": d.Rule, "severity": d.Severity}, Fields: fields})
 

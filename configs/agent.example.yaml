@@ -174,12 +174,15 @@ security:
   capture_cooldown: 5m              # per rule, between captures
 
   # `when` is a CEL expression (https://cel.dev) over the event:
-  #   type         exec, exit, connect, listen, open, setuid
+  #   type         exec, exit, connect, listen, open, setuid, container
   #   comm, exe, args, cmdline, pid, ppid, uid, euid
   #   parent_comm, parent_exe
   #   container, container_id      ("" for processes on the host itself)
   #   path, write, refused         (open)      addr, port     (connect, listen)
   #   old_euid, new_euid           (setuid)    exit_code, signal  (exit)
+  #   container events (a container seen starting, from Docker or the pod list):
+  #   image, privileged, host_pid, host_network, host_ipc, cap_add, host_mounts,
+  #   host_mounts_rw, runtime_socket, runs_as_root, read_only_root
   # `summary` may use {field} placeholders. A rule reports at most
   # `max_per_minute` detections (default 10).
   rules:
@@ -222,3 +225,13 @@ security:
       when: type == "listen" && port < 1024 && !(comm in ["sshd", "nginx", "haproxy", "systemd", "named", "chronyd"])
       severity: warning
       summary: "{comm} started listening on port {port}"
+
+    - name: privileged_container
+      when: type == "container" && (privileged || host_pid || "SYS_ADMIN" in cap_add)
+      severity: warning
+      summary: "{container} ({image}) can reach the host: privileged, host PIDs or SYS_ADMIN"
+
+    - name: runtime_socket_in_container
+      when: type == "container" && runtime_socket != ""
+      severity: critical
+      summary: "{container} ({image}) has the container runtime's socket {runtime_socket} mounted"

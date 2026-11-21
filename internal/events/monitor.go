@@ -34,11 +34,18 @@ type Monitor struct {
 
 	// ContainerNames resolves container ids to names; optional.
 	ContainerNames func() map[string]string
+	// Containers lists containers and how they were started, for the
+	// `container` events; optional. With it, the rules run on those events
+	// even where the kernel probes cannot.
+	Containers ContainerSource
+	// Unavailable is told why the kernel probes cannot run when the monitor
+	// carries on with container events alone.
+	Unavailable func(error)
 	// SendDetections and SendCapture hand results to the agent's shippers.
 	SendDetections func([]Detection) error
 	SendCapture    func(*Capture) error
 
-	seen       [7]atomic.Uint64 // events by type index
+	seen       [8]atomic.Uint64 // events by type index
 	detections atomic.Uint64
 	suppressed atomic.Uint64
 	lost       atomic.Uint64
@@ -49,7 +56,8 @@ func NewMonitor(cfg *config.Security, log *slog.Logger) *Monitor {
 	return &Monitor{cfg: cfg, log: log}
 }
 
-var typeIndex = map[string]int{TypeExec: 1, TypeExit: 2, TypeConnect: 3, TypeListen: 4, TypeOpen: 5, TypeSetuid: 6}
+var typeIndex = map[string]int{TypeExec: 1, TypeExit: 2, TypeConnect: 3, TypeListen: 4, TypeOpen: 5, TypeSetuid: 6,
+	TypeContainer: 7}
 
 // Run blocks until ctx is cancelled. It returns ErrUnsupported (wrapped
 // with the reason) when the kernel cannot run the probes.
@@ -59,7 +67,11 @@ func (m *Monitor) Run(ctx context.Context) error {
 		return err
 	}
 	src, err := openSource(m.cfg, m.log)
-	if err != nil {
+	if errors.Is(err, ErrUnsupported) && m.Containers != nil {
+		// Container setups need no kernel support: keep the rules for them.
+		m.Unavailable(err)
+		src = nil
+	} else if err != nil {
 		return err
 	}
 	return m.run(ctx, engine, src)
@@ -68,24 +80,34 @@ func (m *Monitor) Run(ctx context.Context) error {
 func (m *Monitor) run(ctx context.Context, engine *Engine, src source) error {
 	m.running.Store(true)
 	defer m.running.Store(false)
-	m.log.Info("runtime events on", "rules", len(m.cfg.Rules), "watch_paths", len(m.cfg.WatchPaths))
-
-	raw := make(chan []byte, 8192)
-	go func() {
-		defer close(raw)
-		for {
-			b, err := src.Read()
-			if err != nil {
-				return
+	// raw stays nil without kernel probes: that case never fires.
+	var raw chan []byte
+	if src != nil {
+		m.log.Info("runtime events on", "rules", len(m.cfg.Rules), "watch_paths", len(m.cfg.WatchPaths))
+		raw = make(chan []byte, 8192)
+		go func() {
+			defer close(raw)
+			for {
+				b, err := src.Read()
+				if err != nil {
+					return
+				}
+				select {
+				case raw <- b:
+				case <-ctx.Done():
+					return
+				}
 			}
-			select {
-			case raw <- b:
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-	defer src.Close()
+		}()
+		defer src.Close()
+	} else {
+		m.log.Info("container setup checks on, without kernel events", "rules", len(m.cfg.Rules))
+	}
+	var setups chan []*Event
+	if m.Containers != nil {
+		setups = make(chan []*Event, 4)
+		go watchContainers(ctx, m.Containers, setups)
+	}
 
 	var batch []Detection
 	engine.OnDetection = func(d Detection) {
@@ -108,7 +130,10 @@ func (m *Monitor) run(ctx context.Context, engine *Engine, src source) error {
 	}
 
 	procs, conts := newProcCache(), newContainers(m.ContainerNames)
-	boot := src.BootTime()
+	var boot time.Time
+	if src != nil {
+		boot = src.BootTime()
+	}
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
 	for {
@@ -135,11 +160,18 @@ func (m *Monitor) run(ctx context.Context, engine *Engine, src source) error {
 			if len(batch) >= 200 {
 				flush()
 			}
+		case evs := <-setups:
+			for _, ev := range evs {
+				m.seen[typeIndex[ev.Type]].Add(1)
+				engine.Handle(ev)
+			}
 		case now := <-tick.C:
 			engine.Tick(now)
 			flush()
 			m.suppressed.Store(engine.Suppressed)
-			m.lost.Store(src.Lost())
+			if src != nil {
+				m.lost.Store(src.Lost())
+			}
 		}
 	}
 }

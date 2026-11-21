@@ -55,6 +55,51 @@ not commitments, and most are not started.
   Step 1 (SLO objects and their per-minute counts) is built; the spec is
   [slo.md](slo.md).
 
+## Runtime security: container setup, a rule pack, escapes (agreed 2026-11-21)
+
+What vigil watches for on servers, containers and pods beyond the runtime
+events it has: risky container setups, unauthorized access, and a
+container reaching for its host. Vulnerabilities (packages matched against
+an advisory feed) are a separate plan after this one. Four PRs, in order:
+
+1. **Container setup.** A `container` event when the agent first sees a
+   container, from what it already asks Docker (inspect) and Kubernetes
+   (the pod list): `privileged`, `host_pid`, `host_network`, `host_ipc`,
+   `cap_add`, `host_mounts` (`/`, `/etc`, `/proc`, `/sys`, the runtime's
+   data), `runtime_socket` (a Docker, containerd, CRI-O or Podman socket
+   inside), `runs_as_root`, `read_only_root`. Evaluated by the same rules;
+   no eBPF needed. About one API call per new container.
+2. **A built-in rule pack.** Shipped in the agent, on with
+   `security.enabled`; a configured rule with the same name replaces a
+   built-in one, `security.disable_rules` turns some off. Setup rules
+   (privileged, host namespaces, runtime socket, sensitive host mounts,
+   SYS_ADMIN/SYS_PTRACE/SYS_MODULE), access rules (writes to
+   authorized_keys, passwd/shadow/sudoers, cron, systemd units,
+   ld.so.preload; becoming root outside the usual programs; any user change
+   in a container; programs run from /tmp or /dev/shm), and inside
+   containers (shell, download tool, package manager in a running one).
+   Each rule with its known-good exceptions; no captures at first.
+3. **Escape probes** (fentry on rarely called kernel functions):
+   `namespace` (`commit_nsset`, `ksys_unshare`; `to_host` when the new
+   namespace is init's), `mount` (`path_mount`), `ptrace`
+   (`ptrace_attach`), `module` (`do_init_module`, `bpf_prog_load`), and
+   unix `connect` (`unix_stream_connect`) only to runtime sockets, filtered
+   in the kernel. Critical from inside a container, info from root on the
+   host; runc's own setns for `docker exec` excluded. A probe whose
+   function is inlined or missing is off alone, and the Fleet page says so.
+   Check the names against BTF on 6.8 and 6.12 first.
+4. **Access from logs:** rule-file alerts over the `sshd` logs: a burst of
+   failed logins by address, a root login, a password login where keys
+   are expected. "From an address never seen" needs state: later.
+
+Tests on the Lima Docker VM with real attempts (privileged run, nsenter
+into PID 1, host disk mount, Docker socket from inside, strace, modprobe);
+on the trial only without alerts to the chat. Kubernetes: unit tests from
+pod JSON, and k3s on Lima if possible.
+
+Not in this plan: Kubernetes API audit (Foundations step 7), blocking or
+killing (Portun's side), file integrity as a module (build order step 9).
+
 ## Contacts: secrets from the store, tests, history (agreed 2026-11-11)
 
 Asked after a webhook change on the trial was not picked up (a single-file

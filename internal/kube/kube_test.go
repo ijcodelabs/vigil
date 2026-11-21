@@ -109,3 +109,42 @@ func TestKubelet(t *testing.T) {
 		t.Error("expected an error for a refused token")
 	}
 }
+
+func TestPodSecurity(t *testing.T) {
+	const body = `{"items":[{"metadata":{"name":"agent-x","namespace":"ops"},
+  "spec":{"nodeName":"n1","hostPID":true,"hostNetwork":true,
+    "securityContext":{"runAsNonRoot":true},
+    "volumes":[{"name":"root","hostPath":{"path":"/"}},{"name":"sock","hostPath":{"path":"/run/containerd/containerd.sock"}},{"name":"tmp","emptyDir":{}}],
+    "containers":[
+      {"name":"probe","securityContext":{"privileged":true,"runAsUser":0,"capabilities":{"add":["SYS_ADMIN"]}},
+       "volumeMounts":[{"name":"root","readOnly":true},{"name":"sock"},{"name":"tmp"}]},
+      {"name":"web","securityContext":{"readOnlyRootFilesystem":true}},
+      {"name":"plain"}]},
+  "status":{"phase":"Running","containerStatuses":[
+    {"name":"probe","containerID":"containerd://p1","state":{"running":{}}},
+    {"name":"web","containerID":"containerd://w1","state":{"running":{}}},
+    {"name":"plain","containerID":"containerd://x1","state":{"running":{}}}]}},
+ {"metadata":{"name":"default","namespace":"ops"},"spec":{"containers":[{"name":"c"}]},
+  "status":{"containerStatuses":[{"name":"c","containerID":"containerd://d1","state":{"running":{}}}]}}]}`
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, body) }))
+	defer api.Close()
+	pods, err := (&Client{APIURL: api.URL, HTTP: api.Client()}).Pods(context.Background())
+	if err != nil || len(pods) != 2 {
+		t.Fatalf("%d pods, %v", len(pods), err)
+	}
+	p := pods[0]
+	if !p.HostPID || !p.HostNetwork || p.HostIPC {
+		t.Errorf("pod namespaces: %+v", p)
+	}
+	probe, web, plain := p.Containers[0], p.Containers[1], p.Containers[2]
+	if probe.ID != "p1" || !probe.Privileged || !probe.RunsAsRoot || len(probe.CapAdd) != 1 || len(probe.HostMounts) != 2 ||
+		probe.HostMounts[0] != (HostMount{Path: "/"}) || probe.HostMounts[1] != (HostMount{Path: "/run/containerd/containerd.sock", Writable: true}) {
+		t.Errorf("probe (container runAsUser 0 wins over the pod's runAsNonRoot): %+v", probe)
+	}
+	if web.RunsAsRoot || !web.ReadOnlyRoot || web.Privileged || plain.RunsAsRoot {
+		t.Errorf("web/plain inherit the pod's runAsNonRoot: %+v %+v", web, plain)
+	}
+	if c := pods[1].Containers[0]; !c.RunsAsRoot || c.Privileged {
+		t.Errorf("a container with nothing set is taken to run as root: %+v", c)
+	}
+}

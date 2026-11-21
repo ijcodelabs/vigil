@@ -33,6 +33,8 @@ type Pod struct {
 	NodeName, Phase, IP  string
 	Ports                []int // declared container ports, in order
 	Containers           []Container
+	// The pod shares the node's process, network or IPC namespace.
+	HostPID, HostNetwork, HostIPC bool
 }
 
 type Container struct {
@@ -43,6 +45,29 @@ type Container struct {
 	RestartCount int
 	State        string // running, waiting or terminated
 	Reason       string // e.g. CrashLoopBackOff, OOMKilled
+
+	// From the pod spec's securityContext, the container's over the pod's.
+	Privileged   bool
+	CapAdd       []string
+	RunsAsRoot   bool // runAsUser 0, or neither a non-zero runAsUser nor runAsNonRoot
+	ReadOnlyRoot bool
+	HostMounts   []HostMount // hostPath volumes mounted into the container
+}
+
+// HostMount is a node directory or file mounted into a container.
+type HostMount struct {
+	Path     string
+	Writable bool
+}
+
+type securityContext struct {
+	Privileged             *bool  `json:"privileged"`
+	RunAsUser              *int64 `json:"runAsUser"`
+	RunAsNonRoot           *bool  `json:"runAsNonRoot"`
+	ReadOnlyRootFilesystem *bool  `json:"readOnlyRootFilesystem"`
+	Capabilities           struct {
+		Add []string `json:"add"`
+	} `json:"capabilities"`
 }
 
 // Client lists the pods of one node, caching the answer briefly. It is
@@ -98,11 +123,27 @@ type podList struct {
 			Labels      map[string]string `json:"labels"`
 		} `json:"metadata"`
 		Spec struct {
-			NodeName   string `json:"nodeName"`
+			NodeName        string          `json:"nodeName"`
+			HostPID         bool            `json:"hostPID"`
+			HostNetwork     bool            `json:"hostNetwork"`
+			HostIPC         bool            `json:"hostIPC"`
+			SecurityContext securityContext `json:"securityContext"`
+			Volumes         []struct {
+				Name     string `json:"name"`
+				HostPath *struct {
+					Path string `json:"path"`
+				} `json:"hostPath"`
+			} `json:"volumes"`
 			Containers []struct {
+				Name  string `json:"name"`
 				Ports []struct {
 					ContainerPort int `json:"containerPort"`
 				} `json:"ports"`
+				SecurityContext securityContext `json:"securityContext"`
+				VolumeMounts    []struct {
+					Name     string `json:"name"`
+					ReadOnly bool   `json:"readOnly"`
+				} `json:"volumeMounts"`
 			} `json:"containers"`
 		} `json:"spec"`
 		Status struct {
@@ -163,14 +204,24 @@ func (c *Client) refresh(ctx context.Context) ([]Pod, error) {
 	for _, it := range pl.Items {
 		p := Pod{Name: it.Metadata.Name, Namespace: it.Metadata.Namespace, UID: it.Metadata.UID,
 			Annotations: it.Metadata.Annotations, Labels: it.Metadata.Labels,
-			NodeName: it.Spec.NodeName, Phase: it.Status.Phase, IP: it.Status.PodIP}
+			NodeName: it.Spec.NodeName, Phase: it.Status.Phase, IP: it.Status.PodIP,
+			HostPID: it.Spec.HostPID, HostNetwork: it.Spec.HostNetwork, HostIPC: it.Spec.HostIPC}
+		hostPaths := map[string]string{}
+		for _, v := range it.Spec.Volumes {
+			if v.HostPath != nil {
+				hostPaths[v.Name] = v.HostPath.Path
+			}
+		}
+		specs := map[string]Container{}
 		for _, ct := range it.Spec.Containers {
 			for _, port := range ct.Ports {
 				p.Ports = append(p.Ports, port.ContainerPort)
 			}
+			specs[ct.Name] = setupOf(it.Spec.SecurityContext, ct.SecurityContext, hostPaths, ct.VolumeMounts)
 		}
 		for _, st := range it.Status.ContainerStatuses {
-			ct := Container{Name: st.Name, Image: st.Image, Ready: st.Ready, RestartCount: st.RestartCount}
+			ct := specs[st.Name]
+			ct.Name, ct.Image, ct.Ready, ct.RestartCount = st.Name, st.Image, st.Ready, st.RestartCount
 			if i := strings.Index(st.ContainerID, "://"); i >= 0 {
 				ct.ID = st.ContainerID[i+3:]
 			}
@@ -184,6 +235,34 @@ func (c *Client) refresh(ctx context.Context) ([]Pod, error) {
 	}
 	c.pods, c.fetched = pods, time.Now()
 	return pods, nil
+}
+
+// setupOf reads a container's security settings; the container's
+// securityContext wins over the pod's for the fields both have.
+func setupOf(pod, ctr securityContext, hostPaths map[string]string, mounts []struct {
+	Name     string `json:"name"`
+	ReadOnly bool   `json:"readOnly"`
+}) Container {
+	var c Container
+	c.Privileged = ctr.Privileged != nil && *ctr.Privileged
+	c.CapAdd = ctr.Capabilities.Add
+	c.ReadOnlyRoot = ctr.ReadOnlyRootFilesystem != nil && *ctr.ReadOnlyRootFilesystem
+	user, nonRoot := pod.RunAsUser, pod.RunAsNonRoot
+	if ctr.RunAsUser != nil {
+		user = ctr.RunAsUser
+	}
+	if ctr.RunAsNonRoot != nil {
+		nonRoot = ctr.RunAsNonRoot
+	}
+	// The image's own user is not in the pod spec: without either setting
+	// the container is taken to run as root, which is what most images do.
+	c.RunsAsRoot = (user != nil && *user == 0) || (user == nil && (nonRoot == nil || !*nonRoot))
+	for _, m := range mounts {
+		if path, ok := hostPaths[m.Name]; ok {
+			c.HostMounts = append(c.HostMounts, HostMount{Path: path, Writable: !m.ReadOnly})
+		}
+	}
+	return c
 }
 
 // Pod finds a pod by namespace and name. A pod that is not in the cached

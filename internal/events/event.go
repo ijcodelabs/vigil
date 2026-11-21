@@ -19,6 +19,9 @@ const (
 	TypeListen  = "listen"  // a TCP socket started listening
 	TypeOpen    = "open"    // a file under a watched path was opened
 	TypeSetuid  = "setuid"  // the effective user id changed
+	// TypeContainer is not from the kernel: a container the agent saw start,
+	// with how it was started.
+	TypeContainer = "container"
 )
 
 var typeNames = map[uint32]string{1: TypeExec, 2: TypeExit, 3: TypeConnect, 4: TypeListen, 5: TypeOpen, 6: TypeSetuid}
@@ -50,6 +53,19 @@ type Event struct {
 	NewEUID  *uint32 `json:"new_euid,omitempty"`  // setuid
 	ExitCode *int32  `json:"exit_code,omitempty"` // exit
 	Signal   int32   `json:"signal,omitempty"`    // exit: killed by this signal
+
+	// container: how it was started.
+	Image         string   `json:"image,omitempty"`
+	Privileged    bool     `json:"privileged,omitempty"`
+	HostPID       bool     `json:"host_pid,omitempty"`
+	HostNetwork   bool     `json:"host_network,omitempty"`
+	HostIPC       bool     `json:"host_ipc,omitempty"`
+	CapAdd        []string `json:"cap_add,omitempty"`
+	HostMounts    []string `json:"host_mounts,omitempty"`    // host paths mounted in
+	HostMountsRW  []string `json:"host_mounts_rw,omitempty"` // the writable ones
+	RuntimeSocket string   `json:"runtime_socket,omitempty"` // a runtime's API socket, or its directory, mounted in
+	RunsAsRoot    bool     `json:"runs_as_root,omitempty"`
+	ReadOnlyRoot  bool     `json:"read_only_root,omitempty"`
 
 	cgroup uint64
 }

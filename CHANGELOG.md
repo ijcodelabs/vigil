@@ -29,6 +29,12 @@ after. How a release is made: [releasing.md](memory/context/releasing.md).
   GPU temperatures, throttling, clocks, disks, game sessions) and alert
   rules (CpuHot, GpuHotSpotHot, GpuThermalThrottling, DiskHot,
   DiskWearingOut) for Windows PCs that report through GameMon.
+- **Runtime events: how each container was started.** A `container` event
+  when the agent first sees a container, from Docker or the pod list:
+  privileged, host namespaces, added capabilities, host paths and the
+  runtime's socket mounted, root user, read-only filesystem. Security rules
+  run on it like on the kernel events, and also on hosts where the kernel
+  probes cannot. Two example rules in `configs/agent.example.yaml`.
 
 ### Security
 

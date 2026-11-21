@@ -15,12 +15,14 @@ const (
 	maxWatchLen    = 63 // PREFIX_LEN - 1
 	defaultPerMin  = 10
 	defaultSummary = "{type} by {comm}"
+	// A container event has no process: the default names the container.
+	containerSummary = "{container} started from {image}"
 )
 
 // Rule conditions are CEL expressions over these names. Fields that do not
 // apply to an event's type are empty, zero or false.
 var ruleVars = []cel.EnvOption{
-	cel.Variable("type", cel.StringType), // exec, exit, connect, listen, open, setuid
+	cel.Variable("type", cel.StringType), // exec, exit, connect, listen, open, setuid, container
 	cel.Variable("pid", cel.IntType),
 	cel.Variable("ppid", cel.IntType),
 	cel.Variable("uid", cel.IntType),
@@ -42,6 +44,18 @@ var ruleVars = []cel.EnvOption{
 	cel.Variable("new_euid", cel.IntType),  // setuid
 	cel.Variable("exit_code", cel.IntType), // exit
 	cel.Variable("signal", cel.IntType),    // exit
+	// container
+	cel.Variable("image", cel.StringType),
+	cel.Variable("privileged", cel.BoolType),
+	cel.Variable("host_pid", cel.BoolType),
+	cel.Variable("host_network", cel.BoolType),
+	cel.Variable("host_ipc", cel.BoolType),
+	cel.Variable("cap_add", cel.ListType(cel.StringType)),
+	cel.Variable("host_mounts", cel.ListType(cel.StringType)),
+	cel.Variable("host_mounts_rw", cel.ListType(cel.StringType)),
+	cel.Variable("runtime_socket", cel.StringType),
+	cel.Variable("runs_as_root", cel.BoolType),
+	cel.Variable("read_only_root", cel.BoolType),
 }
 
 func (ev *Event) vars() map[string]any {
@@ -52,6 +66,10 @@ func (ev *Event) vars() map[string]any {
 		"container": ev.Container, "container_id": ev.ContainerID,
 		"path": ev.Path, "write": ev.Write, "refused": ev.Refused, "addr": ev.Addr, "port": int64(ev.Port),
 		"old_euid": int64(0), "new_euid": int64(0), "exit_code": int64(0), "signal": int64(ev.Signal),
+		"image": ev.Image, "privileged": ev.Privileged, "host_pid": ev.HostPID, "host_network": ev.HostNetwork,
+		"host_ipc": ev.HostIPC, "cap_add": orEmpty(ev.CapAdd), "host_mounts": orEmpty(ev.HostMounts),
+		"host_mounts_rw": orEmpty(ev.HostMountsRW), "runtime_socket": ev.RuntimeSocket,
+		"runs_as_root": ev.RunsAsRoot, "read_only_root": ev.ReadOnlyRoot,
 	}
 	if ev.Args == nil {
 		v["args"] = []string{}
@@ -65,9 +83,18 @@ func (ev *Event) vars() map[string]any {
 	return v
 }
 
+// orEmpty gives CEL an empty list rather than a nil one.
+func orEmpty(l []string) []string {
+	if l == nil {
+		return []string{}
+	}
+	return l
+}
+
 type rule struct {
 	config.SecurityRule
-	prog cel.Program
+	prog      cel.Program
+	defaulted bool // Summary was not set
 }
 
 var (
@@ -105,7 +132,8 @@ func compileRules(cfg *config.Security) ([]*rule, error) {
 		if rc.MaxPerMinute == 0 {
 			rc.MaxPerMinute = defaultPerMin
 		}
-		if rc.Summary == "" {
+		defaulted := rc.Summary == ""
+		if defaulted {
 			rc.Summary = defaultSummary
 		}
 		known := (&Event{}).vars()
@@ -125,7 +153,7 @@ func compileRules(cfg *config.Security) ([]*rule, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%s: when: %w", where, err)
 		}
-		out = append(out, &rule{SecurityRule: rc, prog: prog})
+		out = append(out, &rule{SecurityRule: rc, prog: prog, defaulted: defaulted})
 	}
 	return out, nil
 }
@@ -155,7 +183,11 @@ func (r *rule) matches(vars map[string]any) bool {
 }
 
 func (r *rule) summary(vars map[string]any) string {
-	return placeholderRe.ReplaceAllStringFunc(r.Summary, func(m string) string {
+	text := r.Summary
+	if r.defaulted && vars["type"] == TypeContainer {
+		text = containerSummary
+	}
+	return placeholderRe.ReplaceAllStringFunc(text, func(m string) string {
 		return fmt.Sprint(vars[m[1:len(m)-1]])
 	})
 }

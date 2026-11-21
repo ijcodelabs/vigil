@@ -1627,6 +1627,40 @@ direction.md, with the rule file added because it has the same problem.
   against bugs, not stolen tokens, which can omit `kind`.
 - Not built: GameMon's side (in its own repository).
 
+## Runtime security, step 1: container setup (built 2026-11-21)
+
+Step 1 of "Runtime security" in direction.md.
+
+- `events.TypeContainer`: one event per container the agent sees running
+  (all running ones at agent start, then new ones; polled every 10 s;
+  a container is reported again once the agent has seen it stopped; a
+  restart quicker than the poll is not reported twice). Fields
+  `image`, `privileged`, `host_pid`, `host_network`, `host_ipc`, `cap_add`
+  (normalised, no `CAP_`), `host_mounts`, `host_mounts_rw`,
+  `runtime_socket` (a runtime socket by name, or a directory holding one:
+  /run, /var/run, …/containerd, …/crio, …/podman, …/docker), `runs_as_root`,
+  `read_only_root`. Rules without a summary get "{container} started from
+  {image}".
+- Sources (`agent/containers.go`): Docker inspect (`dockerapi.Setup`:
+  Config.User/Image, HostConfig, bind Mounts) and the pod list
+  (`kube.Container` gains Privileged, CapAdd, RunsAsRoot, ReadOnlyRoot,
+  HostMounts from hostPath volumes; `kube.Pod` HostPID/Network/IPC).
+  Kubernetes `runs_as_root` is true unless runAsNonRoot or a non-zero
+  runAsUser is set (the image user is not in the spec).
+- Without kernel probes (ErrUnsupported) and with Docker or pods, the
+  monitor runs on container events alone; the agent still reports the
+  reason on the Fleet page.
+- The server stores the container fields with the detection's log line.
+- Two example rules in `configs/agent.example.yaml`; the built-in pack is
+  step 2.
+- Live on the Lima Docker VM (arm64, 6.8) on 2026-11-21: six containers
+  (plain, privileged, `--pid host --cap-add CAP_SYS_ADMIN`, docker.sock,
+  `/:/host:ro`, `--user 1000 --read-only`) each reported within 15 s with
+  the right fields; the privileged, socket and host-root rules fired on
+  exactly theirs. The no-probes path and Kubernetes are covered by unit
+  tests only. (The VM's old `boop-live` profile was renamed to the Portun
+  integrations: the server refused every profile while it was stale.)
+
 ## Next
 
 - Foundations, build order in `direction.md`: step 1 on paper (data
