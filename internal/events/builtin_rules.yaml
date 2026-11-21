@@ -120,16 +120,22 @@
 
 # --- Inside running containers ---
 
+# A health check's `sh -c` (Docker's CMD-SHELL, or CMD ["sh", "-c", ...])
+# is started by runc, which is gone before the agent can name it: its
+# parent_comm is empty.
 - name: shell_in_container
   when: >-
     type == "exec" && container != ""
     && exe in ["/bin/sh", "/bin/bash", "/bin/dash", "/bin/ash", "/bin/zsh", "/bin/busybox", "/usr/bin/bash", "/usr/bin/sh"]
-    && !(parent_comm in ["runc", "containerd-shim", "conmon", "crun", "docker-init", "tini", "runc:[2:INIT]"])
+    && !(parent_comm in ["", "runc", "containerd-shim", "conmon", "crun", "docker-init", "tini", "runc:[2:INIT]"])
   severity: warning
   summary: "{exe} started in container {container} by {parent_comm}"
 
+# Health checks call curl or wget on the container itself; those are left out.
 - name: download_tool_in_container
-  when: type == "exec" && container != "" && comm in ["curl", "wget", "nc", "ncat", "socat"]
+  when: >-
+    type == "exec" && container != "" && comm in ["curl", "wget", "nc", "ncat", "socat"]
+    && !cmdline.matches("https?://(localhost|127\\.0\\.0\\.1|\\[::1\\])[:/]")
   severity: info
   summary: "{cmdline} in container {container}"
 
