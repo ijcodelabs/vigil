@@ -96,7 +96,11 @@ an advisory feed) are a separate plan after this one. Four PRs, in order:
    probes run is the metric `vigil_events_probe_up`, not the Fleet page.
 4. **Access from logs:** rule-file alerts over the `sshd` logs: a burst of
    failed logins by address, a root login, a password login where keys
-   are expected. "From an address never seen" needs state: later.
+   are expected. "From an address never seen" needs state: later. Built
+   (step 4, 2026-11-21) as `SshLoginAfterFailures` (failures then a login
+   from one address in an hour; the existing `SshPasswordGuessing` already
+   covers a burst), `SshRootLogin`, `SshPasswordLogin`. All four steps of
+   this plan are built.
 
 Tests on the Lima Docker VM with real attempts (privileged run, nsenter
 into PID 1, host disk mount, Docker socket from inside, strace, modprobe);
