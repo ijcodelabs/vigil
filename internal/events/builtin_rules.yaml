@@ -122,12 +122,14 @@
 
 # A health check's `sh -c` (Docker's CMD-SHELL, or CMD ["sh", "-c", ...])
 # is started by runc, which is gone before the agent can name it: its
-# parent_comm is empty.
+# parent_comm is empty. A cron daemon in a container runs every job
+# through sh -c too.
 - name: shell_in_container
   when: >-
     type == "exec" && container != ""
     && exe in ["/bin/sh", "/bin/bash", "/bin/dash", "/bin/ash", "/bin/zsh", "/bin/busybox", "/usr/bin/bash", "/usr/bin/sh"]
-    && !(parent_comm in ["", "runc", "containerd-shim", "conmon", "crun", "docker-init", "tini", "runc:[2:INIT]"])
+    && !(parent_comm in ["", "runc", "containerd-shim", "conmon", "crun", "docker-init", "tini", "runc:[2:INIT]",
+         "cron", "crond", "supercronic"])
   severity: warning
   summary: "{exe} started in container {container} by {parent_comm}"
 
