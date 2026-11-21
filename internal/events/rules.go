@@ -22,7 +22,8 @@ const (
 // Rule conditions are CEL expressions over these names. Fields that do not
 // apply to an event's type are empty, zero or false.
 var ruleVars = []cel.EnvOption{
-	cel.Variable("type", cel.StringType), // exec, exit, connect, listen, open, setuid, container
+	// exec, exit, connect, listen, open, setuid, container, namespace, mount, ptrace, module, bpf
+	cel.Variable("type", cel.StringType),
 	cel.Variable("pid", cel.IntType),
 	cel.Variable("ppid", cel.IntType),
 	cel.Variable("uid", cel.IntType),
@@ -40,6 +41,7 @@ var ruleVars = []cel.EnvOption{
 	cel.Variable("refused", cel.BoolType),  // open: the kernel denied it
 	cel.Variable("addr", cel.StringType),   // connect, listen
 	cel.Variable("port", cel.IntType),      // connect, listen
+	cel.Variable("unix", cel.BoolType),     // connect: to a runtime's unix socket (addr is its path)
 	cel.Variable("old_euid", cel.IntType),  // setuid
 	cel.Variable("new_euid", cel.IntType),  // setuid
 	cel.Variable("exit_code", cel.IntType), // exit
@@ -56,6 +58,23 @@ var ruleVars = []cel.EnvOption{
 	cel.Variable("runtime_socket", cel.StringType),
 	cel.Variable("runs_as_root", cel.BoolType),
 	cel.Variable("read_only_root", cel.BoolType),
+	// namespace
+	cel.Variable("namespaces", cel.ListType(cel.StringType)),      // mnt, uts, ipc, pid, net, cgroup
+	cel.Variable("host_namespaces", cel.ListType(cel.StringType)), // of those, the ones now the host's
+	cel.Variable("to_host", cel.BoolType),                         // host_namespaces is not empty
+	// mount
+	cel.Variable("source", cel.StringType),
+	cel.Variable("fstype", cel.StringType),
+	cel.Variable("target", cel.StringType),
+	cel.Variable("bind", cel.BoolType),
+	cel.Variable("remount", cel.BoolType),
+	// ptrace
+	cel.Variable("target_pid", cel.IntType),
+	cel.Variable("target_comm", cel.StringType),
+	// module, bpf
+	cel.Variable("module", cel.StringType),
+	cel.Variable("prog_name", cel.StringType),
+	cel.Variable("prog_type", cel.IntType),
 }
 
 func (ev *Event) vars() map[string]any {
@@ -69,7 +88,12 @@ func (ev *Event) vars() map[string]any {
 		"image": ev.Image, "privileged": ev.Privileged, "host_pid": ev.HostPID, "host_network": ev.HostNetwork,
 		"host_ipc": ev.HostIPC, "cap_add": orEmpty(ev.CapAdd), "host_mounts": orEmpty(ev.HostMounts),
 		"host_mounts_rw": orEmpty(ev.HostMountsRW), "runtime_socket": ev.RuntimeSocket,
-		"runs_as_root": ev.RunsAsRoot, "read_only_root": ev.ReadOnlyRoot,
+		"runs_as_root": ev.RunsAsRoot, "read_only_root": ev.ReadOnlyRoot, "unix": ev.Unix,
+		"namespaces": orEmpty(ev.Namespaces), "host_namespaces": orEmpty(ev.HostNamespaces),
+		"to_host": len(ev.HostNamespaces) > 0, "source": ev.Source, "fstype": ev.FSType, "target": ev.Target,
+		"bind": ev.MountFlags&msBind != 0, "remount": ev.MountFlags&msRemount != 0,
+		"target_pid": int64(ev.TargetPID), "target_comm": ev.TargetComm,
+		"module": ev.Module, "prog_name": ev.ProgName, "prog_type": int64(ev.ProgType),
 	}
 	if ev.Args == nil {
 		v["args"] = []string{}

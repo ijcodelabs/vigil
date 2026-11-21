@@ -80,8 +80,10 @@ large fleets. Expect rough edges, and please say what you find.
   per service, a page per service, and a view of each trace.
 - **Runtime events**: eBPF probes, security rules evaluated on the host
   (also on how each container was started: privileged, host namespaces,
-  host paths or the runtime's socket mounted), a built-in rule pack for
-  risky containers, changed system files, new root processes and shells
+  host paths or the runtime's socket mounted), probes for a container
+  reaching for its host (joining the host's namespaces, mounts, ptrace,
+  kernel modules, BPF programs, the runtime's socket), a built-in rule pack
+  for all of it and for changed system files, new root processes and shells
   in containers, and
   captures of what happened around a detection.
 - **Access**: SSH logins from the journal, and with Portun (access requests

@@ -147,3 +147,51 @@
     && comm in ["apt", "apt-get", "dpkg", "apk", "yum", "dnf", "rpm", "microdnf", "pip", "pip3"]
   severity: info
   summary: "{cmdline} in container {container}: software changing in a running container (or an image being built)"
+
+# --- A container reaching for its host (kernel 6.8 and 6.12 tested) ---
+# The container runtime itself (runc, crun) makes namespaces and mounts for
+# every container it starts: those processes are left out by name.
+
+- name: container_joined_host_namespace
+  when: type == "namespace" && container != "" && to_host && !comm.startsWith("runc")
+  severity: critical
+  summary: "{comm} in {container} joined the host's {host_namespaces} namespaces: it has left its container"
+
+- name: mount_in_container
+  when: >-
+    type == "mount" && container != ""
+    && !(comm.startsWith("runc") || comm in ["crun", "youki", "conmon", "containerd-shim"])
+  severity: warning
+  summary: "{comm} in {container} mounted {source} ({fstype}) on {target}"
+
+- name: ptrace_in_container
+  when: type == "ptrace" && container != ""
+  severity: critical
+  summary: "{comm} in {container} attached to {target_comm} (pid {target_pid}) with ptrace"
+
+- name: ptrace_of_system_process
+  when: >-
+    type == "ptrace" && container == ""
+    && target_comm in ["sshd", "sshd-session", "sudo", "su", "login", "systemd", "dockerd", "containerd", "vigil-agent"]
+  severity: warning
+  summary: "{comm} (uid {uid}) attached to {target_comm} (pid {target_pid}) with ptrace: it can read its memory"
+
+- name: module_loaded
+  when: type == "module" && container == ""
+  severity: info
+  summary: "kernel module {module} loaded by {comm}"
+
+- name: module_from_container
+  when: type == "module" && container != ""
+  severity: critical
+  summary: "{comm} in {container} loaded the kernel module {module}"
+
+- name: bpf_from_container
+  when: type == "bpf" && container != "" && comm != "vigil-agent"
+  severity: critical
+  summary: "{comm} in {container} loaded a BPF program ({prog_name}, type {prog_type}) into the host's kernel"
+
+- name: runtime_socket_used_in_container
+  when: type == "connect" && unix && container != "" && comm != "vigil-agent"
+  severity: critical
+  summary: "{comm} in {container} talked to the container runtime at {addr}: it can start a privileged container"

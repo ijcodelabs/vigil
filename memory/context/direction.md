@@ -89,7 +89,11 @@ an advisory feed) are a separate plan after this one. Four PRs, in order:
    in the kernel. Critical from inside a container, info from root on the
    host; runc's own setns for `docker exec` excluded. A probe whose
    function is inlined or missing is off alone, and the Fleet page says so.
-   Check the names against BTF on 6.8 and 6.12 first.
+   Check the names against BTF on 6.8 and 6.12 first. Built (step 3,
+   2026-11-21): `commit_nsset` is inlined on both, so `switch_task_namespaces`
+   (setns and unshare, exits leave at once); `to_host` compares inode numbers
+   with /proc/1/ns. Modules through the `module_load` tracepoint. Which
+   probes run is the metric `vigil_events_probe_up`, not the Fleet page.
 4. **Access from logs:** rule-file alerts over the `sshd` logs: a burst of
    failed logins by address, a root login, a password login where keys
    are expected. "From an address never seen" needs state: later.
