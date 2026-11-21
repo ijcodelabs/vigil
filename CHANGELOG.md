@@ -43,6 +43,12 @@ after. How a release is made: [releasing.md](memory/context/releasing.md).
   containers. Their files are added to `watch_paths`. A configured rule of
   the same name replaces a built-in one; `disable_rules` and
   `builtin_rules: false` turn them off. No captures by default.
+- **Runtime events: a container reaching for its host.** New kernel probes
+  report namespace changes (with which are now the host's), mounts, ptrace
+  attaches, kernel modules and BPF programs loaded, and connections to a
+  container runtime's socket. Eight built-in rules flag them from inside a
+  container (and ptrace of system processes, and modules, on the host).
+  Each probe loads on its own; `vigil_events_probe_up` says which run.
 
 ### Fixed
 

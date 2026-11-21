@@ -45,7 +45,8 @@ type Monitor struct {
 	SendDetections func([]Detection) error
 	SendCapture    func(*Capture) error
 
-	seen       [8]atomic.Uint64 // events by type index
+	seen       [13]atomic.Uint64 // events by type index
+	probes     atomic.Pointer[map[string]bool]
 	detections atomic.Uint64
 	suppressed atomic.Uint64
 	lost       atomic.Uint64
@@ -57,7 +58,7 @@ func NewMonitor(cfg *config.Security, log *slog.Logger) *Monitor {
 }
 
 var typeIndex = map[string]int{TypeExec: 1, TypeExit: 2, TypeConnect: 3, TypeListen: 4, TypeOpen: 5, TypeSetuid: 6,
-	TypeContainer: 7}
+	TypeContainer: 7, TypeNamespace: 8, TypeMount: 9, TypePtrace: 10, TypeModule: 11, TypeBPF: 12}
 
 // Run blocks until ctx is cancelled. It returns ErrUnsupported (wrapped
 // with the reason) when the kernel cannot run the probes.
@@ -103,6 +104,10 @@ func (m *Monitor) run(ctx context.Context, engine *Engine, src source) error {
 		defer src.Close()
 	} else {
 		m.log.Info("container setup checks on, without kernel events", "rules", len(engine.rules))
+	}
+	if p, ok := src.(interface{ Probes() map[string]bool }); ok && src != nil {
+		probes := p.Probes()
+		m.probes.Store(&probes)
 	}
 	var setups chan []*Event
 	if m.Containers != nil {
@@ -187,6 +192,15 @@ func (m *Monitor) Metrics(context.Context) ([]model.Sample, error) {
 		{Name: "vigil_events_detections_total", Labels: map[string]string{}, Value: float64(m.detections.Load()), TS: ts},
 		{Name: "vigil_events_suppressed_total", Labels: map[string]string{}, Value: float64(m.suppressed.Load()), TS: ts},
 		{Name: "vigil_events_lost_total", Labels: map[string]string{}, Value: float64(m.lost.Load()), TS: ts},
+	}
+	if p := m.probes.Load(); p != nil {
+		for name, up := range *p {
+			v := 0.0
+			if up {
+				v = 1
+			}
+			out = append(out, model.Sample{Name: "vigil_events_probe_up", Labels: map[string]string{"probe": name}, Value: v, TS: ts})
+		}
 	}
 	for name, i := range typeIndex {
 		out = append(out, model.Sample{Name: "vigil_events_seen_total", Labels: map[string]string{"type": name},

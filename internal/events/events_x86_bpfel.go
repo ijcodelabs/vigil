@@ -45,6 +45,23 @@ type eventsPrefix struct {
 	S   [64]int8
 }
 
+type eventsUnixEvent struct {
+	_ structs.HostLayout
+	H struct {
+		_      structs.HostLayout
+		Ts     uint64
+		Cgroup uint64
+		Type   uint32
+		Pid    uint32
+		Tid    uint32
+		Ppid   uint32
+		Uid    uint32
+		Euid   uint32
+		Comm   [16]int8
+	}
+	Path [128]int8
+}
+
 // Names of all BPF objects in the ELF.
 //
 // Used for safe lookups in a Collection or CollectionSpec.
@@ -52,16 +69,24 @@ const (
 	eventsMapCredBefore     = "cred_before"
 	eventsMapEvents         = "events"
 	eventsMapExited         = "exited"
+	eventsMapHostNs         = "host_ns"
 	eventsMapScratch        = "scratch"
+	eventsMapUnixScratch    = "unix_scratch"
 	eventsMapWatch          = "watch"
+	eventsProgOnBpfLoad     = "on_bpf_load"
 	eventsProgOnCommitCreds = "on_commit_creds"
 	eventsProgOnExec        = "on_exec"
 	eventsProgOnExit        = "on_exit"
 	eventsProgOnFileOpen    = "on_file_open"
+	eventsProgOnModuleLoad  = "on_module_load"
+	eventsProgOnMount       = "on_mount"
 	eventsProgOnOpenRefused = "on_open_refused"
+	eventsProgOnPtrace      = "on_ptrace"
 	eventsProgOnSockState   = "on_sock_state"
+	eventsProgOnSwitchNs    = "on_switch_ns"
 	eventsProgOnSysEnter    = "on_sys_enter"
 	eventsProgOnSysExit     = "on_sys_exit"
+	eventsProgOnUnixConnect = "on_unix_connect"
 	eventsVarInSetuid       = "in_setuid"
 	eventsVarLost           = "lost"
 )
@@ -108,25 +133,33 @@ type eventsSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type eventsProgramSpecs struct {
+	OnBpfLoad     *ebpf.ProgramSpec `ebpf:"on_bpf_load"`
 	OnCommitCreds *ebpf.ProgramSpec `ebpf:"on_commit_creds"`
 	OnExec        *ebpf.ProgramSpec `ebpf:"on_exec"`
 	OnExit        *ebpf.ProgramSpec `ebpf:"on_exit"`
 	OnFileOpen    *ebpf.ProgramSpec `ebpf:"on_file_open"`
+	OnModuleLoad  *ebpf.ProgramSpec `ebpf:"on_module_load"`
+	OnMount       *ebpf.ProgramSpec `ebpf:"on_mount"`
 	OnOpenRefused *ebpf.ProgramSpec `ebpf:"on_open_refused"`
+	OnPtrace      *ebpf.ProgramSpec `ebpf:"on_ptrace"`
 	OnSockState   *ebpf.ProgramSpec `ebpf:"on_sock_state"`
+	OnSwitchNs    *ebpf.ProgramSpec `ebpf:"on_switch_ns"`
 	OnSysEnter    *ebpf.ProgramSpec `ebpf:"on_sys_enter"`
 	OnSysExit     *ebpf.ProgramSpec `ebpf:"on_sys_exit"`
+	OnUnixConnect *ebpf.ProgramSpec `ebpf:"on_unix_connect"`
 }
 
 // eventsMapSpecs contains maps before they are loaded into the kernel.
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type eventsMapSpecs struct {
-	CredBefore *ebpf.MapSpec `ebpf:"cred_before"`
-	Events     *ebpf.MapSpec `ebpf:"events"`
-	Exited     *ebpf.MapSpec `ebpf:"exited"`
-	Scratch    *ebpf.MapSpec `ebpf:"scratch"`
-	Watch      *ebpf.MapSpec `ebpf:"watch"`
+	CredBefore  *ebpf.MapSpec `ebpf:"cred_before"`
+	Events      *ebpf.MapSpec `ebpf:"events"`
+	Exited      *ebpf.MapSpec `ebpf:"exited"`
+	HostNs      *ebpf.MapSpec `ebpf:"host_ns"`
+	Scratch     *ebpf.MapSpec `ebpf:"scratch"`
+	UnixScratch *ebpf.MapSpec `ebpf:"unix_scratch"`
+	Watch       *ebpf.MapSpec `ebpf:"watch"`
 }
 
 // eventsVariableSpecs contains global variables before they are loaded into the kernel.
@@ -157,11 +190,13 @@ func (o *eventsObjects) Close() error {
 //
 // It can be passed to loadEventsObjects or ebpf.CollectionSpec.LoadAndAssign.
 type eventsMaps struct {
-	CredBefore *ebpf.Map `ebpf:"cred_before"`
-	Events     *ebpf.Map `ebpf:"events"`
-	Exited     *ebpf.Map `ebpf:"exited"`
-	Scratch    *ebpf.Map `ebpf:"scratch"`
-	Watch      *ebpf.Map `ebpf:"watch"`
+	CredBefore  *ebpf.Map `ebpf:"cred_before"`
+	Events      *ebpf.Map `ebpf:"events"`
+	Exited      *ebpf.Map `ebpf:"exited"`
+	HostNs      *ebpf.Map `ebpf:"host_ns"`
+	Scratch     *ebpf.Map `ebpf:"scratch"`
+	UnixScratch *ebpf.Map `ebpf:"unix_scratch"`
+	Watch       *ebpf.Map `ebpf:"watch"`
 }
 
 func (m *eventsMaps) Close() error {
@@ -169,7 +204,9 @@ func (m *eventsMaps) Close() error {
 		m.CredBefore,
 		m.Events,
 		m.Exited,
+		m.HostNs,
 		m.Scratch,
+		m.UnixScratch,
 		m.Watch,
 	)
 }
@@ -186,26 +223,38 @@ type eventsVariables struct {
 //
 // It can be passed to loadEventsObjects or ebpf.CollectionSpec.LoadAndAssign.
 type eventsPrograms struct {
+	OnBpfLoad     *ebpf.Program `ebpf:"on_bpf_load"`
 	OnCommitCreds *ebpf.Program `ebpf:"on_commit_creds"`
 	OnExec        *ebpf.Program `ebpf:"on_exec"`
 	OnExit        *ebpf.Program `ebpf:"on_exit"`
 	OnFileOpen    *ebpf.Program `ebpf:"on_file_open"`
+	OnModuleLoad  *ebpf.Program `ebpf:"on_module_load"`
+	OnMount       *ebpf.Program `ebpf:"on_mount"`
 	OnOpenRefused *ebpf.Program `ebpf:"on_open_refused"`
+	OnPtrace      *ebpf.Program `ebpf:"on_ptrace"`
 	OnSockState   *ebpf.Program `ebpf:"on_sock_state"`
+	OnSwitchNs    *ebpf.Program `ebpf:"on_switch_ns"`
 	OnSysEnter    *ebpf.Program `ebpf:"on_sys_enter"`
 	OnSysExit     *ebpf.Program `ebpf:"on_sys_exit"`
+	OnUnixConnect *ebpf.Program `ebpf:"on_unix_connect"`
 }
 
 func (p *eventsPrograms) Close() error {
 	return _EventsClose(
+		p.OnBpfLoad,
 		p.OnCommitCreds,
 		p.OnExec,
 		p.OnExit,
 		p.OnFileOpen,
+		p.OnModuleLoad,
+		p.OnMount,
 		p.OnOpenRefused,
+		p.OnPtrace,
 		p.OnSockState,
+		p.OnSwitchNs,
 		p.OnSysEnter,
 		p.OnSysExit,
+		p.OnUnixConnect,
 	)
 }
 

@@ -121,6 +121,19 @@ func (s *Server) handleDetections(w http.ResponseWriter, r *http.Request) {
 		if ev.NewEUID != nil {
 			fields["old_euid"], fields["new_euid"] = strconv.Itoa(int(*ev.OldEUID)), strconv.Itoa(int(*ev.NewEUID))
 		}
+		for k, v := range map[string]string{"namespaces": strings.Join(ev.Namespaces, ","),
+			"host_namespaces": strings.Join(ev.HostNamespaces, ","), "source": ev.Source, "fstype": ev.FSType,
+			"target": ev.Target, "target_comm": ev.TargetComm, "module": ev.Module, "prog_name": ev.ProgName} {
+			if v != "" {
+				fields[k] = v
+			}
+		}
+		if ev.TargetPID != 0 {
+			fields["target_pid"] = strconv.Itoa(int(ev.TargetPID))
+		}
+		if ev.Unix {
+			fields["unix"] = "true"
+		}
 		if ev.Type == events.TypeContainer {
 			for k, v := range map[string]string{"image": ev.Image, "cap_add": strings.Join(ev.CapAdd, ","),
 				"host_mounts": strings.Join(ev.HostMounts, ","), "host_mounts_rw": strings.Join(ev.HostMountsRW, ","),
