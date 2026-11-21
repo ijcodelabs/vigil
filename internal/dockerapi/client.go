@@ -96,6 +96,61 @@ func (c *Client) HasTTY(ctx context.Context, id string) (bool, error) {
 	return v.Config.Tty, c.getJSON(ctx, "/containers/"+id+"/json", &v)
 }
 
+// Setup is how a container was started, as far as it matters for security.
+type Setup struct {
+	Image          string
+	User           string // "" when the image does not set one: root
+	Privileged     bool
+	PidMode        string // "host": the host's process namespace
+	NetworkMode    string
+	IpcMode        string
+	CapAdd         []string
+	ReadonlyRootfs bool
+	Binds          []Bind // host paths mounted into the container
+}
+
+// Bind is a host file or directory mounted into a container.
+type Bind struct {
+	Source string
+	RW     bool
+}
+
+// Setup reads a container's security-relevant settings from inspect.
+// Config.User is the image's user unless the run overrode it.
+func (c *Client) Setup(ctx context.Context, id string) (Setup, error) {
+	var v struct {
+		Config struct {
+			Image string
+			User  string
+		}
+		HostConfig struct {
+			Privileged     bool
+			PidMode        string
+			NetworkMode    string
+			IpcMode        string
+			CapAdd         []string
+			ReadonlyRootfs bool
+		}
+		Mounts []struct {
+			Type   string
+			Source string
+			RW     bool
+		}
+	}
+	if err := c.getJSON(ctx, "/containers/"+id+"/json", &v); err != nil {
+		return Setup{}, err
+	}
+	h := v.HostConfig
+	s := Setup{Image: v.Config.Image, User: v.Config.User, Privileged: h.Privileged, PidMode: h.PidMode,
+		NetworkMode: h.NetworkMode, IpcMode: h.IpcMode, CapAdd: h.CapAdd, ReadonlyRootfs: h.ReadonlyRootfs}
+	for _, m := range v.Mounts {
+		if m.Type == "bind" {
+			s.Binds = append(s.Binds, Bind{Source: m.Source, RW: m.RW})
+		}
+	}
+	return s, nil
+}
+
 // RunState is what the daemon knows about whether a container runs.
 type RunState struct {
 	Running      bool

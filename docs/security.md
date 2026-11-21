@@ -15,6 +15,7 @@ shortly after.
 | `listen` | a TCP socket starts listening | `addr`, `port` |
 | `open` | a file under a watched path is opened, or the kernel refused to open it | `path`, `write`, `refused` |
 | `setuid` | a process's effective user changes: a set*uid call, running a setuid program (`sudo`, `su`, …), or from inside the kernel | `old_euid`, `new_euid` |
+| `container` | the agent sees a container running for the first time: when it starts, and for every running container when the agent starts | see [Container setup](#container-setup) |
 
 `path` is the file the kernel opened, whatever name the program gave:
 `cd /etc && cat shadow`, `/etc/../etc/shadow` and a symlink to it all report
@@ -54,7 +55,7 @@ security:
       capture: true
 ```
 
-`configs/agent.example.yaml` has seven rules to start from.
+`configs/agent.example.yaml` has nine rules to start from.
 
 ### What it costs
 
@@ -86,6 +87,42 @@ select: ['ebpf="true"', 'env="prod"']
 
 Where it cannot run, the agent says so once in its log, the Fleet page shows
 the reason, and metrics and logs carry on.
+
+## Container setup
+
+A `container` event says how a container was started. It comes from Docker
+(with the agent's [Docker settings](configs.md#containers-on-a-docker-or-podman-host) on) or from the node's pod list
+on Kubernetes, not from the kernel, so it also works where the probes cannot
+run: there the agent logs that runtime events are off and keeps checking
+containers. It costs one question to Docker per new container; on
+Kubernetes the pod list is already there.
+
+| Field | True or set when |
+|---|---|
+| `privileged` | the container runs privileged |
+| `host_pid`, `host_network`, `host_ipc` | it shares the host's processes, network or IPC |
+| `cap_add` | capabilities added to the default set, as `SYS_ADMIN` (without `CAP_`) |
+| `host_mounts`, `host_mounts_rw` | host paths mounted into it; the second list holds only the writable ones |
+| `runtime_socket` | a container runtime's socket (Docker, containerd, CRI-O, Podman), or the directory holding it such as `/var/run`, is mounted: whoever reaches it can start a privileged container |
+| `runs_as_root` | it runs as root |
+| `read_only_root` | its own filesystem is read-only |
+| `image` | the image it runs |
+
+`container` and `container_id` are set as for the other events; the process
+fields are empty. A rule without a `summary` says
+"`shop-api` started from `acme/api:1`".
+
+```yaml
+- name: host_root_mounted
+  when: type == "container" && host_mounts.exists(m, m == "/" || m == "/etc")
+  severity: critical
+  summary: "{container} has the host's {host_mounts} mounted"
+```
+
+On Kubernetes `runs_as_root` is read from the pod spec: true unless
+`runAsNonRoot` or a non-zero `runAsUser` is set, because the image's own
+user is not in the spec. With Docker it is the user the container really
+runs as.
 
 ## Writing rules
 

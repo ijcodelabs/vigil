@@ -78,7 +78,9 @@ large fleets. Expect rough edges, and please say what you find.
   left on certificates and where the time of a request goes.
 - **Traces**: OpenTelemetry traces with request rate, errors and duration
   per service, a page per service, and a view of each trace.
-- **Runtime events**: eBPF probes, security rules evaluated on the host, and
+- **Runtime events**: eBPF probes, security rules evaluated on the host
+  (also on how each container was started: privileged, host namespaces,
+  host paths or the runtime's socket mounted), and
   captures of what happened around a detection.
 - **Access**: SSH logins from the journal, and with Portun (access requests
   and recorded server access) its health, its audit events and an alert for

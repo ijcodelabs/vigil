@@ -382,6 +382,13 @@ func (a *Agent) collect(ctx context.Context, col *config.Collection) {
 			}
 			return names
 		}
+		if docker != nil || pods != nil {
+			mon.Containers = containerSource{docker: docker, pods: pods}
+			mon.Unavailable = func(err error) {
+				a.log.Warn("runtime events are off on this host; container setup checks run without them", "reason", err)
+				a.setEventsErr(err.Error())
+			}
+		}
 		mon.SendDetections = func(ds []events.Detection) error {
 			return a.enqueue(a.events, events.EncodeDetections(ds))
 		}
