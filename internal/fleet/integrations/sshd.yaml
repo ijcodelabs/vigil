@@ -46,6 +46,25 @@ rules:
         labels: {severity: info}
         annotations:
           summary: '{{ $value }} failed SSH logins on {{ $labels.agent }} in 10 minutes'
+      # An address that kept failing and then got in: a guessed password or
+      # a stolen key that took a few tries. Order within the hour is not
+      # checked; a person who mistyped five times trips it too.
+      - alert: SshLoginAfterFailures
+        expr: '_time:1h unit:~"^sshd?(@.+)?[.]service$" ssh_result:* | stats by (agent, ssh_from) count() if (ssh_result:=Failed) as failures, count() if (ssh_result:=Accepted) as logins | filter failures:>=5 logins:>0 | fields agent, ssh_from, failures'
+        labels: {severity: critical}
+        annotations:
+          summary: '{{ $labels.ssh_from }} logged in to {{ $labels.agent }} after {{ $value }} failed SSH attempts in the last hour'
+      - alert: SshRootLogin
+        expr: '_time:10m unit:~"^sshd?(@.+)?[.]service$" ssh_result:=Accepted ssh_user:=root | stats by (agent, ssh_from, ssh_method) count() as logins'
+        labels: {severity: warning}
+        annotations:
+          summary: 'root logged in to {{ $labels.agent }} over SSH from {{ $labels.ssh_from }} ({{ $labels.ssh_method }})'
+      # For hosts where keys are the rule; turn it off where passwords are normal.
+      - alert: SshPasswordLogin
+        expr: '_time:10m unit:~"^sshd?(@.+)?[.]service$" ssh_result:=Accepted ssh_method:in(password, "keyboard-interactive/pam") | stats by (agent, ssh_user, ssh_from) count() as logins'
+        labels: {severity: warning}
+        annotations:
+          summary: '{{ $labels.ssh_user }} logged in to {{ $labels.agent }} with a password from {{ $labels.ssh_from }}'
 dashboard:
   title: SSH logins
   variables:

@@ -220,7 +220,14 @@ by sshd's own unit and takes `Accepted` and `Failed` lines apart: user,
 method, source address, key type, and for a certificate its Key ID, serial
 and CA (`ssh_user`, `ssh_method`, `ssh_from`, `ssh_key_type`, `ssh_key_id`,
 `ssh_cert_serial`, `ssh_ca_fp`, …). It is not detected by itself, since
-sshd runs nearly everywhere; switch it on where you want it.
+sshd runs nearly everywhere; switch it on where you want it. Its alerts:
+
+| Alert | Severity | Fires when |
+|---|---|---|
+| `SshPasswordGuessing` | info | more than 100 failed logins on a host in 10 minutes |
+| `SshLoginAfterFailures` | critical | an address with at least 5 failed logins in the last hour also logged in: a guessed password, or a person who mistyped (the order is not checked) |
+| `SshRootLogin` | warning | root logged in over SSH |
+| `SshPasswordLogin` | warning | someone logged in with a password; where passwords are normal, turn it off in the rule file |
 
 HAProxy needs no exporter: it has one built in (2.0 and newer). Give it a
 frontend for it, reachable by the agent only, and point `metrics_target`
