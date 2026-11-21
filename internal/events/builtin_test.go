@@ -1,6 +1,7 @@
 package events
 
 import (
+	"encoding/binary"
 	"slices"
 	"strings"
 	"testing"
@@ -38,7 +39,7 @@ func TestBuiltinPackShape(t *testing.T) {
 			t.Errorf("%s: every built-in rule has a severity and a summary and captures nothing by default", r.Name)
 		}
 	}
-	if len(names) < 15 {
+	if len(names) < 25 {
 		t.Errorf("only %d built-in rules", len(names))
 	}
 }
@@ -95,6 +96,26 @@ func TestBuiltinRules(t *testing.T) {
 			&Event{Type: TypeExec, Comm: "curl", Container: "web", Args: []string{"curl", "http://localhost.example.com/x"}},
 			&Event{Type: TypeExec, Comm: "curl", Container: "web", Args: []string{"curl", "-f", "http://localhost:8001/health"}}},
 		{"package_manager_in_container", exec("apk", "/sbin/apk", "sh", "web"), exec("apk", "/sbin/apk", "sh", "")},
+		{"container_joined_host_namespace",
+			&Event{Type: TypeNamespace, Comm: "nsenter", Container: "web", Namespaces: []string{"mnt"}, HostNamespaces: []string{"mnt"}},
+			&Event{Type: TypeNamespace, Comm: "runc:[1:CHILD]", Container: "web", Namespaces: []string{"mnt"}, HostNamespaces: []string{"mnt"}}},
+		{"container_joined_host_namespace",
+			&Event{Type: TypeNamespace, Comm: "nsenter", Container: "web", Namespaces: []string{"net"}, HostNamespaces: []string{"net"}},
+			&Event{Type: TypeNamespace, Comm: "dockerd", Namespaces: []string{"net"}, HostNamespaces: []string{"net"}}}, // on the host
+		{"mount_in_container", &Event{Type: TypeMount, Comm: "mount", Container: "web", Source: "/dev/sda1", FSType: "ext4", Target: "/mnt"},
+			&Event{Type: TypeMount, Comm: "runc:[2:INIT]", Container: "web", Target: "/"}},
+		{"ptrace_in_container", &Event{Type: TypePtrace, Comm: "gdb", Container: "web", TargetComm: "node"},
+			&Event{Type: TypePtrace, Comm: "gdb", TargetComm: "node"}},
+		{"ptrace_of_system_process", &Event{Type: TypePtrace, Comm: "python3", TargetComm: "sshd"},
+			&Event{Type: TypePtrace, Comm: "strace", TargetComm: "sleep"}},
+		{"module_loaded", &Event{Type: TypeModule, Comm: "modprobe", Module: "dummy"},
+			&Event{Type: TypeModule, Comm: "modprobe", Module: "dummy", Container: "web"}},
+		{"module_from_container", &Event{Type: TypeModule, Comm: "insmod", Module: "rk", Container: "web"},
+			&Event{Type: TypeModule, Comm: "modprobe", Module: "overlay"}},
+		{"bpf_from_container", &Event{Type: TypeBPF, Comm: "loader", Container: "web", ProgName: "x"},
+			&Event{Type: TypeBPF, Comm: "vigil-agent", Container: "vigil", ProgName: "on_exec"}},
+		{"runtime_socket_used_in_container", &Event{Type: TypeConnect, Unix: true, Addr: "/var/run/docker.sock", Comm: "curl", Container: "web"},
+			&Event{Type: TypeConnect, Unix: true, Addr: "/var/run/docker.sock", Comm: "docker"}},
 	} {
 		e, got := pack(t, nil)
 		c.fire.Time, c.not.Time = time.Now(), time.Now()
@@ -171,5 +192,66 @@ func TestWatchPaths(t *testing.T) {
 	cfg.BuiltinRules = &no
 	if paths, _ := watchPaths(cfg); len(paths) != 14 {
 		t.Errorf("builtin_rules: false still adds paths: %v", paths)
+	}
+}
+
+func TestDecodeEscapes(t *testing.T) {
+	le := binary.LittleEndian
+	boot := time.Unix(0, 0)
+	dec := func(typ uint32, comm string, payload []byte) *Event {
+		t.Helper()
+		ev, err := decode(record(typ, 1, 10, 1, 0, 0, comm, payload), boot)
+		if err != nil {
+			t.Fatalf("record %d: %v", typ, err)
+		}
+		return ev
+	}
+	ns := make([]byte, 8)
+	le.PutUint32(ns, 1<<0|1<<4) // mnt and net changed
+	le.PutUint32(ns[4:], 1<<0)  // mnt is the host's
+	if ev := dec(7, "nsenter", ns); ev.Type != TypeNamespace || !slices.Equal(ev.Namespaces, []string{"mnt", "net"}) ||
+		!slices.Equal(ev.HostNamespaces, []string{"mnt"}) {
+		t.Errorf("namespace: %+v", ev)
+	}
+	m := make([]byte, 8+128+32+64+64)
+	le.PutUint64(m, msBind)
+	copy(m[8:], "/dev/sda1")
+	copy(m[136:], "ext4")
+	copy(m[168:], "host")
+	copy(m[232:], "etc")
+	if ev := dec(8, "mount", m); ev.Type != TypeMount || ev.Source != "/dev/sda1" || ev.FSType != "ext4" ||
+		ev.Target != ".../host/etc" || ev.vars()["bind"] != true {
+		t.Errorf("mount: %+v", ev)
+	}
+	copy(m[168:], "/\x00\x00\x00")
+	copy(m[232:], "mnt\x00")
+	if ev := dec(8, "mount", m); ev.Target != "/mnt" {
+		t.Errorf("mount under /: %q", ev.Target)
+	}
+	p := make([]byte, 24)
+	le.PutUint32(p, 77)
+	copy(p[8:], "sshd")
+	if ev := dec(9, "gdb", p); ev.Type != TypePtrace || ev.TargetPID != 77 || ev.TargetComm != "sshd" {
+		t.Errorf("ptrace: %+v", ev)
+	}
+	mod := make([]byte, 72)
+	le.PutUint32(mod, 1)
+	copy(mod[8:], "dummy")
+	if ev := dec(10, "modprobe", mod); ev.Type != TypeModule || ev.Module != "dummy" {
+		t.Errorf("module: %+v", ev)
+	}
+	le.PutUint32(mod, 2)
+	le.PutUint32(mod[4:], 26)
+	copy(mod[8:], "sd_devices\x00")
+	if ev := dec(10, "systemd", mod); ev.Type != TypeBPF || ev.ProgType != 26 || ev.ProgName != "sd_devices" {
+		t.Errorf("bpf: %+v", ev)
+	}
+	u := make([]byte, 128)
+	copy(u, "/var/run/docker.sock")
+	if ev := dec(11, "curl", u); ev.Type != TypeConnect || !ev.Unix || ev.Addr != "/var/run/docker.sock" || ev.Port != 0 {
+		t.Errorf("unix connect: %+v", ev)
+	}
+	if _, err := decode(record(8, 1, 1, 1, 0, 0, "x", make([]byte, 20)), boot); err == nil {
+		t.Error("a short mount record decoded")
 	}
 }

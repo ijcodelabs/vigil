@@ -184,6 +184,9 @@ security:
   #   container events (a container seen starting, from Docker or the pod list):
   #   image, privileged, host_pid, host_network, host_ipc, cap_add, host_mounts,
   #   host_mounts_rw, runtime_socket, runs_as_root, read_only_root
+  #   namespaces, host_namespaces, to_host (namespace)   source, fstype, target, bind,
+  #   remount (mount)   target_pid, target_comm (ptrace)   module (module)
+  #   prog_name, prog_type (bpf)   unix (connect: to a container runtime's socket)
   # `summary` may use {field} placeholders. A rule reports at most
   # `max_per_minute` detections (default 10).
   # The agent has built-in rules (docs/security.md lists them): on with

@@ -1695,6 +1695,42 @@ Step 1 of "Runtime security" in direction.md.
 - Not tried: Kubernetes, a busy host (event cost of the extra paths), a
   host without eBPF.
 
+## Runtime security, step 3: escape probes (built 2026-11-21)
+
+- `bpf/events.c`: `on_switch_ns` (fentry switch_task_namespaces; bit sets
+  of changed namespaces and of those equal to the host's, inode numbers
+  from /proc/1/ns put in map `host_ns` by the loader), `on_mount` (fentry
+  path_mount: source, fstype, flags, mount point's last two dentry names),
+  `on_ptrace` (fexit ptrace_attach, success only), `on_module_load`
+  (tp_btf module_load), `on_bpf_load` (fentry bpf_prog_load, prog_type and
+  name read from the raw bpf_attr), `on_unix_connect` (fentry
+  unix_stream_connect, kept only for names ending in docker/containerd/
+  crio/podman .sock, abstract sockets out). Records 7–11; 10 is module or
+  bpf by a kind field, 11 decodes as `connect` with `unix`.
+- Loader: each escape program loaded alone (`loadOne`, a reflect-built
+  struct for LoadAndAssign) with `events`, `.bss` and `host_ns` replaced,
+  so they share the ring buffer and `lost`; a failure leaves that probe
+  off, logged, `vigil_events_probe_up{probe}` 0.
+- 8 rules added to the pack (25 in all).
+- Kernel functions checked on 6.8 (Lima arm64) and 6.12 (trial host):
+  all there except `commit_nsset` (inlined), hence switch_task_namespaces.
+- Raw events seen live on the Lima VM: nsenter -t 1 from a privileged
+  container (to_host), mount in a container, modprobe, strace, Docker
+  socket from host and container. Normal noise: runc's `runc:[1:CHILD]`
+  and `runc:[2:INIT]` namespaces and mounts, dockerd switching net
+  namespaces on the host, runc and systemd loading BPF programs.
+- Live with the agent and the pack (25 rules) on the Lima Docker VM: quiet
+  minute 0 detections; all six probes `vigil_events_probe_up` 1; nsenter
+  -t 1 from a privileged `--pid=host` container, mount in it, modprobe on
+  the host, strace on sshd, curl to docker.sock from a container: each
+  fired its rule. On the x86-64 VM (6.8, emulated) the amd64 object loaded
+  every probe and reported unshare, mount, modprobe, strace.
+- Gap seen: a container that lives less than the 10 s poll (`docker run
+  --rm`) gets no `container` event; its processes are still seen.
+- Not tried: 6.12 with these probes (functions checked there only),
+  Kubernetes, the syscall fallback with them (only `module` can attach
+  there), cost on a busy host.
+
 ## Next
 
 - Foundations, build order in `direction.md`: step 1 on paper (data

@@ -18,6 +18,11 @@
 // probes (on_sys_enter, on_sys_exit), which read the name the program
 // passed, see only absolute ones, and report every attempt without knowing
 // whether it was refused. One of the two sets is loaded, never both.
+// The escape probes (on_switch_ns, on_mount, on_ptrace, on_module_load,
+// on_bpf_load, on_unix_connect) watch what a process in a container needs
+// to reach its host. They are loaded one by one, after the rest, and a
+// kernel that cannot take one (a function inlined or renamed) goes without
+// that one alone.
 // Rebuild with `make bpf` after changing this file. It is compiled once per
 // CPU architecture, because system-call numbers and the registers holding
 // their arguments differ.
@@ -60,9 +65,26 @@ typedef struct { int counter; } atomic_t;
 struct cred { kuid_t uid; kuid_t euid; };
 struct mm_struct { unsigned long arg_start; unsigned long arg_end; };
 struct signal_struct { atomic_t live; };
+struct ns_common { unsigned int inum; };
+struct mnt_namespace { struct ns_common ns; };
+struct uts_namespace { struct ns_common ns; };
+struct ipc_namespace { struct ns_common ns; };
+struct pid_namespace { struct ns_common ns; };
+struct net { struct ns_common ns; };
+struct cgroup_namespace { struct ns_common ns; };
+struct nsproxy {
+	struct uts_namespace *uts_ns;
+	struct ipc_namespace *ipc_ns;
+	struct mnt_namespace *mnt_ns;
+	struct pid_namespace *pid_ns_for_children;
+	struct net *net_ns;
+	struct cgroup_namespace *cgroup_ns;
+};
 struct task_struct {
 	int pid;
 	int tgid;
+	char comm[16];
+	struct nsproxy *nsproxy;
 	struct task_struct *real_parent;
 	struct task_struct *group_leader;
 	__u64 start_time;
@@ -71,7 +93,10 @@ struct task_struct {
 	struct signal_struct *signal;
 	int exit_code;
 };
-struct path { void *mnt; void *dentry; };
+struct qstr { const unsigned char *name; };
+struct dentry { struct qstr d_name; struct dentry *d_parent; };
+struct path { void *mnt; struct dentry *dentry; };
+struct module { char name[56]; };
 struct file { struct path f_path; unsigned int f_flags; unsigned int f_mode; };
 struct filename { const char *name; };
 struct open_flags { int open_flag; };
@@ -127,7 +152,8 @@ struct pt_regs { struct user_pt_regs user_regs; };
 #define TCP_CLOSE 7
 #define TCP_LISTEN 10
 
-enum { EV_EXEC = 1, EV_EXIT = 2, EV_CONNECT = 3, EV_LISTEN = 4, EV_OPEN = 5, EV_SETUID = 6 };
+enum { EV_EXEC = 1, EV_EXIT = 2, EV_CONNECT = 3, EV_LISTEN = 4, EV_OPEN = 5, EV_SETUID = 6,
+	EV_NAMESPACE = 7, EV_MOUNT = 8, EV_PTRACE = 9, EV_MODULE = 10, EV_UNIX = 11 };
 
 // Every record starts with this header (56 bytes).
 struct hdr {
@@ -147,6 +173,16 @@ struct net_event { struct hdr h; __u16 family; __u16 sport; __u16 dport; __u16 p
 // err is 0 for an open that happened, else the error it was refused with.
 struct open_event { struct hdr h; __s32 flags; __s32 err; char path[PATH_LEN]; };
 struct cred_event { struct hdr h; __u32 old_euid; __u32 new_euid; };
+// changed and host are bit sets of NS_*: the namespaces that changed, and
+// those of them that are now the host's.
+struct ns_event { struct hdr h; __u32 changed; __u32 host; };
+struct mount_event { struct hdr h; __u64 flags; char source[128]; char fstype[32]; char parent[64]; char name[64]; };
+struct ptrace_event { struct hdr h; __u32 target_pid; __u32 pad; char target_comm[COMM_LEN]; };
+// kind 1: a kernel module (name); kind 2: a BPF program (prog_type, name).
+struct module_event { struct hdr h; __u32 kind; __u32 prog_type; char name[64]; };
+struct unix_event { struct hdr h; char path[128]; };
+
+enum { NS_MNT = 0, NS_UTS = 1, NS_IPC = 2, NS_PID = 3, NS_NET = 4, NS_CGROUP = 5 };
 
 struct { __uint(type, BPF_MAP_TYPE_RINGBUF); __uint(max_entries, 8 << 20); } events SEC(".maps");
 
@@ -167,6 +203,13 @@ struct { __uint(type, BPF_MAP_TYPE_HASH); __uint(max_entries, 4096); __type(key,
 // pid apart; old entries simply age out.
 struct exit_key { __u32 tgid; __u32 pad; __u64 start; };
 struct { __uint(type, BPF_MAP_TYPE_LRU_HASH); __uint(max_entries, 4096); __type(key, struct exit_key); __type(value, __u8); } exited SEC(".maps");
+
+// The host's namespaces by NS_*, as inode numbers: the agent reads them
+// from /proc/1/ns before attaching on_switch_ns.
+struct { __uint(type, BPF_MAP_TYPE_ARRAY); __uint(max_entries, 8); __type(key, __u32); __type(value, __u32); } host_ns SEC(".maps");
+
+// A unix socket address is built here before it is matched.
+struct { __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY); __uint(max_entries, 1); __type(key, __u32); __type(value, struct unix_event); } unix_scratch SEC(".maps");
 
 // Records dropped because the ring buffer was full.
 __u64 lost = 0;
@@ -476,6 +519,186 @@ int BPF_PROG(on_sys_exit, struct pt_regs *regs, long ret)
 	e->old_euid = old;
 	e->new_euid = now;
 	bpf_ringbuf_submit(e, 0);
+	return 0;
+}
+
+// --- Escape probes ---
+
+#define NS_CHECK(bit, field)                                                         \
+	{                                                                                \
+		__u32 a = BPF_CORE_READ(old, field, ns.inum);                                \
+		__u32 b = BPF_CORE_READ(new, field, ns.inum);                                \
+		if (a != b) {                                                                \
+			changed |= 1 << bit;                                                     \
+			__u32 k = bit;                                                           \
+			__u32 *h = bpf_map_lookup_elem(&host_ns, &k);                            \
+			if (h && *h != 0 && *h == b)                                             \
+				host |= 1 << bit;                                                    \
+		}                                                                            \
+	}
+
+// A process joins other namespaces (setns, nsenter) or makes new ones
+// (unshare). Both end here; so does every exit, with new == NULL, which
+// leaves at once. A process in a container whose new namespaces are the
+// host's has left its container.
+SEC("fentry/switch_task_namespaces")
+int BPF_PROG(on_switch_ns, struct task_struct *p, struct nsproxy *new)
+{
+	if (!new)
+		return 0;
+	struct nsproxy *old = BPF_CORE_READ(p, nsproxy);
+	if (!old)
+		return 0;
+	__u32 changed = 0, host = 0;
+	NS_CHECK(NS_MNT, mnt_ns)
+	NS_CHECK(NS_UTS, uts_ns)
+	NS_CHECK(NS_IPC, ipc_ns)
+	NS_CHECK(NS_PID, pid_ns_for_children)
+	NS_CHECK(NS_NET, net_ns)
+	NS_CHECK(NS_CGROUP, cgroup_ns)
+	if (!changed)
+		return 0;
+	struct ns_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+	if (!e) {
+		__sync_fetch_and_add(&lost, 1);
+		return 0;
+	}
+	fill(&e->h, EV_NAMESPACE);
+	e->changed = changed;
+	e->host = host;
+	bpf_ringbuf_submit(e, 0);
+	return 0;
+}
+
+// A mount by the mount(2) system call: every argument is a kernel copy by
+// now. The mount point is given as its last two path components; the full
+// path would need bpf_d_path, which the kernel allows only in a few places.
+// The newer fsopen/fsmount calls do not pass here.
+SEC("fentry/path_mount")
+int BPF_PROG(on_mount, const char *dev_name, struct path *path, const char *type_page, unsigned long flags)
+{
+	struct mount_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+	if (!e) {
+		__sync_fetch_and_add(&lost, 1);
+		return 0;
+	}
+	fill(&e->h, EV_MOUNT);
+	e->flags = flags;
+	e->source[0] = 0;
+	e->fstype[0] = 0;
+	e->parent[0] = 0;
+	e->name[0] = 0;
+	if (dev_name)
+		bpf_probe_read_kernel_str(e->source, sizeof(e->source), dev_name);
+	if (type_page)
+		bpf_probe_read_kernel_str(e->fstype, sizeof(e->fstype), type_page);
+	struct dentry *d = BPF_CORE_READ(path, dentry);
+	bpf_probe_read_kernel_str(e->name, sizeof(e->name), BPF_CORE_READ(d, d_name.name));
+	struct dentry *up = BPF_CORE_READ(d, d_parent);
+	if (up && up != d)
+		bpf_probe_read_kernel_str(e->parent, sizeof(e->parent), BPF_CORE_READ(up, d_name.name));
+	bpf_ringbuf_submit(e, 0);
+	return 0;
+}
+
+// A process attached to another with ptrace (PTRACE_ATTACH or SEIZE): it
+// can now read and change the other's memory. Reported once it succeeded.
+SEC("fexit/ptrace_attach")
+int BPF_PROG(on_ptrace, struct task_struct *task, long request, unsigned long addr, unsigned long flags, int ret)
+{
+	if (ret != 0)
+		return 0;
+	struct ptrace_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+	if (!e) {
+		__sync_fetch_and_add(&lost, 1);
+		return 0;
+	}
+	fill(&e->h, EV_PTRACE);
+	e->target_pid = BPF_CORE_READ(task, tgid);
+	e->pad = 0;
+	BPF_CORE_READ_STR_INTO(&e->target_comm, task, comm);
+	bpf_ringbuf_submit(e, 0);
+	return 0;
+}
+
+// A kernel module was loaded: code running in the kernel itself.
+SEC("tp_btf/module_load")
+int BPF_PROG(on_module_load, struct module *mod)
+{
+	struct module_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+	if (!e) {
+		__sync_fetch_and_add(&lost, 1);
+		return 0;
+	}
+	fill(&e->h, EV_MODULE);
+	e->kind = 1;
+	e->prog_type = 0;
+	e->name[0] = 0;
+	BPF_CORE_READ_STR_INTO(&e->name, mod, name);
+	bpf_ringbuf_submit(e, 0);
+	return 0;
+}
+
+// A BPF program is being loaded. The attributes are the system call's
+// (union bpf_attr, kernel copy), laid out by the stable user-space API:
+// prog_type first, prog_name at byte 48.
+SEC("fentry/bpf_prog_load")
+int BPF_PROG(on_bpf_load, void *attr)
+{
+	struct module_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+	if (!e) {
+		__sync_fetch_and_add(&lost, 1);
+		return 0;
+	}
+	fill(&e->h, EV_MODULE);
+	e->kind = 2;
+	e->prog_type = 0;
+	__builtin_memset(e->name, 0, sizeof(e->name));
+	bpf_probe_read_kernel(&e->prog_type, sizeof(e->prog_type), attr);
+	bpf_probe_read_kernel(e->name, 16, (char *)attr + 48);
+	e->name[15] = 0;
+	bpf_ringbuf_submit(e, 0);
+	return 0;
+}
+
+static __always_inline bool ends_with(const char *p, __u32 n, const char *s, __u32 k)
+{
+	if (n < k)
+		return false;
+	for (__u32 i = 0; i < k; i++) {
+		if (p[(n - k + i) & 127] != s[i])
+			return false;
+	}
+	return true;
+}
+
+// A connection to a unix socket named like a container runtime's API
+// (docker.sock, containerd.sock, ...): whoever talks to it can start a
+// privileged container. Every other unix connection leaves after the name
+// comparison; abstract sockets (no file) at once.
+SEC("fentry/unix_stream_connect")
+int BPF_PROG(on_unix_connect, void *sock, void *uaddr, int addr_len)
+{
+	__u32 zero = 0;
+	struct unix_event *e = bpf_map_lookup_elem(&unix_scratch, &zero);
+	if (!e)
+		return 0;
+	__builtin_memset(e->path, 0, sizeof(e->path));
+	// struct sockaddr_un: a 2-byte family, then up to 108 bytes of path.
+	if (bpf_probe_read_kernel(e->path, 108, (char *)uaddr + 2) != 0 || e->path[0] == 0)
+		return 0;
+	__u32 n = 0;
+	for (__u32 i = 0; i < 108; i++) {
+		if (e->path[i] == 0)
+			break;
+		n++;
+	}
+	if (!(ends_with(e->path, n, "docker.sock", 11) || ends_with(e->path, n, "containerd.sock", 15) ||
+	      ends_with(e->path, n, "crio.sock", 9) || ends_with(e->path, n, "podman.sock", 11)))
+		return 0;
+	fill(&e->h, EV_UNIX);
+	if (bpf_ringbuf_output(&events, e, sizeof(*e), 0))
+		__sync_fetch_and_add(&lost, 1);
 	return 0;
 }
 
