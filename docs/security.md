@@ -15,6 +15,12 @@ shortly after.
 | `listen` | a TCP socket starts listening | `addr`, `port` |
 | `open` | a file under a watched path is opened, or the kernel refused to open it | `path`, `write`, `refused` |
 | `setuid` | a process's effective user changes: a set*uid call, running a setuid program (`sudo`, `su`, …), or from inside the kernel | `old_euid`, `new_euid` |
+| `namespace` | a process joins other namespaces (`setns`, `nsenter`) or makes new ones (`unshare`) | `namespaces` (those that changed: `mnt`, `uts`, `ipc`, `pid`, `net`, `cgroup`), `host_namespaces` (of those, the ones that are now the host's), `to_host` |
+| `mount` | something is mounted with `mount(2)` | `source`, `fstype`, `target` (the mount point's last two parts, as `.../host/etc`), `bind`, `remount` |
+| `ptrace` | a process attaches to another with ptrace (a debugger, `strace`, or code injection) | `target_pid`, `target_comm` |
+| `module` | a kernel module is loaded | `module` |
+| `bpf` | a BPF program is loaded into the kernel | `prog_name`, `prog_type` |
+| `connect` with `unix` | a connection to a container runtime's socket (a name ending in `docker.sock`, `containerd.sock`, `crio.sock` or `podman.sock`) | `addr` is the socket's path, `unix` is true |
 | `container` | the agent sees a container running for the first time: when it starts, and for every running container when the agent starts | see [Container setup](#container-setup) |
 
 `path` is the file the kernel opened, whatever name the program gave:
@@ -127,6 +133,14 @@ then replace it with your own version, narrowed and with `capture: true`.
 | `unexpected_listener` | warning | something other than the usual servers listens on a port below 1024 |
 | `shell_in_container` | warning | a program in a container starts a shell: a web app running one is the classic sign of a break-in (`docker exec`, health checks, cron jobs and the container's first process are left out) |
 | `download_tool_in_container` | info | `curl`, `wget`, `nc`, `ncat` or `socat` runs in a container, other than towards `localhost` (health checks) |
+| `container_joined_host_namespace` | critical | a process in a container joins one of the host's namespaces (`nsenter -t 1`): it has left its container |
+| `mount_in_container` | warning | a process in a container mounts something (the runtime's own mounts left out). Storage drivers in privileged pods do this all the time: turn it off on such nodes |
+| `ptrace_in_container` | critical | a process in a container attaches to another with ptrace |
+| `ptrace_of_system_process` | warning | on the host, something attaches to `sshd`, `sudo`, `su`, `login`, `systemd`, `dockerd`, `containerd` or the agent: it can read their memory, passwords included |
+| `module_loaded` | info | a kernel module is loaded on the host (at boot and when Docker starts, too) |
+| `module_from_container` | critical | a process in a container loads a kernel module |
+| `bpf_from_container` | critical | a process in a container loads a BPF program into the host's kernel |
+| `runtime_socket_used_in_container` | critical | a process in a container talks to the container runtime's socket. Tools that are meant to (Traefik, Portainer) do this too: replace the rule with one that leaves them out |
 | `package_manager_in_container` | info | `apt`, `apk`, `yum`, `dnf`, `pip` and the like run in a container; also what `docker build` does, so it is noisy on build hosts |
 
 The container rules leave out the vigil agent's own image, which needs the
@@ -238,6 +252,20 @@ with an error code or a signal), whatever event types are ticked.
   and removes the oldest first.
 
 ## Limits to know
+
+- **The escape probes** (`namespace`, `mount`, `ptrace`, `module`, `bpf`,
+  runtime sockets) are each loaded on their own; a kernel that lacks one's
+  function goes without that one, says so in the agent's log, and the
+  metric `vigil_events_probe_up{probe="..."}` is 0 for it. All but
+  `module` need the fentry probes (see Requirements). Tested on Linux 6.8
+  (arm64) and 6.12 (x86-64).
+- **Mounts** made with the newer `fsopen`/`fsmount` calls are not seen, and
+  a mount point is given by its last two path components only.
+- **A container that lives less than about ten seconds** (`docker run
+  --rm` of a quick command) may get no `container` event: the agent asks
+  the runtime every ten seconds. Its processes are still seen.
+- **Runtime sockets** are recognised by name: a socket mounted into a
+  container under another name is not.
 
 - **With the system-call probes** (older kernels, see Requirements), file
   opens are matched on the name as given: an open relative to a directory

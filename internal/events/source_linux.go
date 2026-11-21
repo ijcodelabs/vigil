@@ -8,7 +8,9 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"reflect"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/cilium/ebpf"
@@ -29,6 +31,7 @@ type probeMaps struct {
 	Scratch *ebpf.Map      `ebpf:"scratch"`
 	Exited  *ebpf.Map      `ebpf:"exited"`
 	Lost    *ebpf.Variable `ebpf:"lost"`
+	Bss     *ebpf.Map      `ebpf:".bss"` // holds lost; shared with the escape probes
 	OnExec  *ebpf.Program  `ebpf:"on_exec"`
 	OnExit  *ebpf.Program  `ebpf:"on_exit"`
 	OnSock  *ebpf.Program  `ebpf:"on_sock_state"`
@@ -56,7 +59,84 @@ type kernelSource struct {
 	boot   time.Time
 	// Mode is "fentry" or "syscalls", for the log and the agent's status.
 	mode string
+	// probes says which escape probes run.
+	probes map[string]bool
 }
+
+// escapeProbes are loaded one by one after the others: a kernel without
+// one of their functions goes without that probe alone.
+var escapeProbes = []struct{ name, prog string }{
+	{"namespace", "on_switch_ns"},
+	{"mount", "on_mount"},
+	{"ptrace", "on_ptrace"},
+	{"module", "on_module_load"},
+	{"bpf", "on_bpf_load"},
+	{"runtime_socket", "on_unix_connect"},
+}
+
+// loadEscapes loads and attaches the escape probes, sharing the ring
+// buffer and the lost counter with the rest.
+func (s *kernelSource) loadEscapes(spec *ebpf.CollectionSpec, log *slog.Logger) {
+	s.probes = map[string]bool{}
+	repl := map[string]*ebpf.Map{"events": s.maps.Events}
+	if s.maps.Bss != nil {
+		repl[".bss"] = s.maps.Bss
+	}
+	if hs, ok := spec.Maps["host_ns"]; ok {
+		if m, err := ebpf.NewMap(hs); err == nil {
+			for i, name := range nsNames {
+				if ino := hostNamespace(name); ino != 0 {
+					m.Put(uint32(i), ino)
+				}
+			}
+			repl["host_ns"] = m
+			s.closer = append(s.closer, m)
+		}
+	}
+	var off []string
+	for _, p := range escapeProbes {
+		prog, err := loadOne(spec, p.prog, repl)
+		if err == nil {
+			var l link.Link
+			if l, err = link.AttachTracing(link.TracingOptions{Program: prog}); err == nil {
+				s.links = append(s.links, l)
+				s.closer = append(s.closer, prog)
+			} else {
+				prog.Close()
+			}
+		}
+		s.probes[p.name] = err == nil
+		if err != nil {
+			off = append(off, p.name+": "+firstLine(err))
+		}
+	}
+	if len(off) > 0 {
+		log.Warn("runtime events: some escape probes are off on this kernel", "probes", strings.Join(off, "; "))
+	}
+}
+
+// loadOne loads one program of spec, with the maps it shares replaced.
+func loadOne(spec *ebpf.CollectionSpec, name string, repl map[string]*ebpf.Map) (*ebpf.Program, error) {
+	t := reflect.StructOf([]reflect.StructField{{Name: "P", Type: reflect.TypeFor[*ebpf.Program](),
+		Tag: reflect.StructTag(`ebpf:"` + name + `"`)}})
+	v := reflect.New(t)
+	if err := spec.LoadAndAssign(v.Interface(), &ebpf.CollectionOptions{MapReplacements: repl}); err != nil {
+		return nil, err
+	}
+	return v.Elem().Field(0).Interface().(*ebpf.Program), nil
+}
+
+// hostNamespace is the inode number of one of the host's namespaces, from
+// its first process: the agent runs in the host's process namespace.
+func hostNamespace(name string) uint32 {
+	st, err := os.Stat(envOr("HOST_PROC", "/proc") + "/1/ns/" + name)
+	if err != nil {
+		return 0
+	}
+	return uint32(st.Sys().(*syscall.Stat_t).Ino)
+}
+
+func (s *kernelSource) Probes() map[string]bool { return s.probes }
 
 // openSource loads the probes into the kernel and attaches them.
 func openSource(cfg *config.Security, log *slog.Logger) (source, error) {
@@ -97,7 +177,7 @@ func openSource(cfg *config.Security, log *slog.Logger) (source, error) {
 		err = spec.LoadAndAssign(&fe, nil)
 	}
 	if err == nil {
-		s.maps, s.closer, s.mode = &fe.probeMaps, []io.Closer{fe.Events, fe.Watch, fe.Scratch, fe.Exited,
+		s.maps, s.closer, s.mode = &fe.probeMaps, []io.Closer{fe.Events, fe.Watch, fe.Scratch, fe.Exited, fe.Bss,
 			fe.OnExec, fe.OnExit, fe.OnSock, fe.OnFileOpen, fe.OnOpenRefused, fe.OnCommitCreds}, "fentry"
 		progs := base(&fe.probeMaps)
 		progs["file open"], progs["refused open"], progs["privilege change"] = fe.OnFileOpen, fe.OnOpenRefused, fe.OnCommitCreds
@@ -122,7 +202,7 @@ func openSource(cfg *config.Security, log *slog.Logger) (source, error) {
 			}
 			return nil, fmt.Errorf("%w: loading the probe failed (Linux 5.8 or newer is needed): %v", ErrUnsupported, err)
 		}
-		s.maps, s.closer, s.mode = &sc.probeMaps, []io.Closer{sc.Events, sc.Watch, sc.Scratch, sc.Exited, sc.CredBefore,
+		s.maps, s.closer, s.mode = &sc.probeMaps, []io.Closer{sc.Events, sc.Watch, sc.Scratch, sc.Exited, sc.Bss, sc.CredBefore,
 			sc.OnExec, sc.OnExit, sc.OnSock, sc.OnSysEnter, sc.OnSysExit}, "syscalls"
 		progs := base(&sc.probeMaps)
 		progs["system call entry"], progs["system call exit"] = sc.OnSysEnter, sc.OnSysExit
@@ -144,6 +224,8 @@ func openSource(cfg *config.Security, log *slog.Logger) (source, error) {
 			return fail(fmt.Errorf("setting watch paths: %w", err))
 		}
 	}
+
+	s.loadEscapes(spec, log)
 
 	rd, err := ringbuf.NewReader(s.maps.Events)
 	if err != nil {
