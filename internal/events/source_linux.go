@@ -131,7 +131,11 @@ func openSource(cfg *config.Security, log *slog.Logger) (source, error) {
 		}
 	}
 
-	for i, p := range cfg.WatchPaths {
+	paths, skipped := watchPaths(cfg)
+	if len(skipped) > 0 {
+		log.Warn("watch_paths is full: these paths of the built-in rules are not watched", "paths", skipped)
+	}
+	for i, p := range paths {
 		v := eventsPrefix{Len: uint32(len(p))}
 		for j := 0; j < len(p) && j < len(v.S); j++ {
 			v.S[j] = int8(p[j])

@@ -75,10 +75,12 @@ an advisory feed) are a separate plan after this one. Four PRs, in order:
    (privileged, host namespaces, runtime socket, sensitive host mounts,
    SYS_ADMIN/SYS_PTRACE/SYS_MODULE), access rules (writes to
    authorized_keys, passwd/shadow/sudoers, cron, systemd units,
-   ld.so.preload; becoming root outside the usual programs; any user change
-   in a container; programs run from /tmp or /dev/shm), and inside
-   containers (shell, download tool, package manager in a running one).
-   Each rule with its known-good exceptions; no captures at first.
+   ld.so.preload; becoming root outside the usual programs; programs run
+   from /tmp or /dev/shm), and inside containers (shell, download tool,
+   package manager in a running one). Each rule with its known-good
+   exceptions; no captures at first. Built (step 2, 2026-11-21): "any user
+   change in a container" left out, since entrypoints and nginx drop from
+   root on every start; `became_root` covers gaining root there.
 3. **Escape probes** (fentry on rarely called kernel functions):
    `namespace` (`commit_nsset`, `ksys_unshare`; `to_host` when the new
    namespace is init's), `mount` (`path_mount`), `ptrace`
