@@ -125,7 +125,7 @@ then replace it with your own version, narrowed and with `capture: true`.
 | `became_root` | critical | a process whose real user is not root becomes root other than through `sudo`, `su`, `sshd`, `cron`, `login` or `pkexec` (a root process taking root back after dropping it for a while, as apt does, is left out) |
 | `run_from_temp_dir` | warning | a program runs from `/tmp`, `/var/tmp` or `/dev/shm` |
 | `unexpected_listener` | warning | something other than the usual servers listens on a port below 1024 |
-| `shell_in_container` | warning | a program in a container starts a shell: a web app running one is the classic sign of a break-in (`docker exec`, health checks and the container's first process are left out) |
+| `shell_in_container` | warning | a program in a container starts a shell: a web app running one is the classic sign of a break-in (`docker exec`, health checks, cron jobs and the container's first process are left out) |
 | `download_tool_in_container` | info | `curl`, `wget`, `nc`, `ncat` or `socat` runs in a container, other than towards `localhost` (health checks) |
 | `package_manager_in_container` | info | `apt`, `apk`, `yum`, `dnf`, `pip` and the like run in a container; also what `docker build` does, so it is noisy on build hosts |
 

