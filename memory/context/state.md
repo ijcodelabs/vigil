@@ -1731,6 +1731,19 @@ Step 1 of "Runtime security" in direction.md.
   Kubernetes, the syscall fallback with them (only `module` can attach
   there), cost on a busy host.
 
+## Runtime security, step 4: SSH alerts (built 2026-11-21)
+
+- `internal/fleet/integrations/sshd.yaml`: `SshLoginAfterFailures`
+  (critical; `count() if (...)` for failures and logins by agent and
+  address over 1 h, filter, then `fields` down to one number: VictoriaLogs'
+  stats_query makes a series of every stats result, and a rule with two
+  would fire twice), `SshRootLogin`, `SshPasswordLogin` (warning, 10 min).
+- Live on the Lima VM with real logins (sshpass, a throwaway user, root
+  with a password; all reverted): the three alerts fired with the right
+  summaries, one series each.
+- With this the runtime security plan (direction.md) is built; vulnerabilities
+  are the next plan.
+
 ## Next
 
 - Foundations, build order in `direction.md`: step 1 on paper (data

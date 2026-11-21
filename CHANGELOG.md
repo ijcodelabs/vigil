@@ -49,6 +49,9 @@ after. How a release is made: [releasing.md](memory/context/releasing.md).
   container runtime's socket. Eight built-in rules flag them from inside a
   container (and ptrace of system processes, and modules, on the host).
   Each probe loads on its own; `vigil_events_probe_up` says which run.
+- **SSH logins: three more alerts** in the `sshd` integration:
+  `SshLoginAfterFailures` (an address that failed at least five times in
+  an hour and then got in), `SshRootLogin` and `SshPasswordLogin`.
 
 ### Fixed
 
