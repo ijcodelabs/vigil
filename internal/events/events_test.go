@@ -112,6 +112,8 @@ func security(t *testing.T, rules ...config.SecurityRule) *config.Security {
 		t.Fatal(err)
 	}
 	c.Security.Rules = rules
+	off := false
+	c.Security.BuiltinRules = &off // these tests are about the rules they give; builtin_test.go has the pack
 	return &c.Security
 }
 

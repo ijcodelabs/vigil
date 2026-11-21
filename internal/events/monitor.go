@@ -83,7 +83,8 @@ func (m *Monitor) run(ctx context.Context, engine *Engine, src source) error {
 	// raw stays nil without kernel probes: that case never fires.
 	var raw chan []byte
 	if src != nil {
-		m.log.Info("runtime events on", "rules", len(m.cfg.Rules), "watch_paths", len(m.cfg.WatchPaths))
+		paths, _ := watchPaths(m.cfg)
+		m.log.Info("runtime events on", "rules", len(engine.rules), "watch_paths", len(paths))
 		raw = make(chan []byte, 8192)
 		go func() {
 			defer close(raw)
@@ -101,7 +102,7 @@ func (m *Monitor) run(ctx context.Context, engine *Engine, src source) error {
 		}()
 		defer src.Close()
 	} else {
-		m.log.Info("container setup checks on, without kernel events", "rules", len(m.cfg.Rules))
+		m.log.Info("container setup checks on, without kernel events", "rules", len(engine.rules))
 	}
 	var setups chan []*Event
 	if m.Containers != nil {

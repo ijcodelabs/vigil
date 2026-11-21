@@ -210,6 +210,11 @@ type Security struct {
 	CaptureAfter    Duration       `yaml:"capture_after"`
 	CaptureCooldown Duration       `yaml:"capture_cooldown"` // per rule
 	Rules           []SecurityRule `yaml:"rules"`
+	// BuiltinRules switches the agent's built-in rule pack; on unless false.
+	// A rule in Rules with the same name as a built-in one replaces it.
+	BuiltinRules *bool `yaml:"builtin_rules"`
+	// DisableRules names built-in rules to leave out.
+	DisableRules []string `yaml:"disable_rules"`
 }
 
 type SecurityRule struct {

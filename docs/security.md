@@ -42,7 +42,7 @@ In the agent's configuration, usually through a profile:
 ```yaml
 security:
   enabled: true
-  watch_paths: [/etc/shadow, /etc/sudoers, /etc/ssh/, /root/.ssh/]   # at most 16, absolute
+  watch_paths: [/srv/app/config/]   # yours, besides the built-in rules' files; at most 16 in all
   capture_before: 30s
   capture_after: 30s
   capture_cooldown: 5m          # per rule, between captures
@@ -55,7 +55,8 @@ security:
       capture: true
 ```
 
-`configs/agent.example.yaml` has nine rules to start from.
+With `enabled: true` the [built-in rules](#built-in-rules) are on as well;
+`configs/agent.example.yaml` shows how to replace one and add your own.
 
 ### What it costs
 
@@ -87,6 +88,52 @@ select: ['ebpf="true"', 'env="prod"']
 
 Where it cannot run, the agent says so once in its log, the Fleet page shows
 the reason, and metrics and logs carry on.
+
+## Built-in rules
+
+The agent ships with the rules below. They are on whenever runtime events
+are, and the files they look at are added to `watch_paths` (your paths
+first; at most 16 in all, and the agent logs any it had to leave out).
+
+```yaml
+security:
+  enabled: true
+  disable_rules: [package_manager_in_container]   # leave some out
+  # builtin_rules: false                          # or all of them
+  rules:
+    - name: shell_in_container    # the same name replaces the built-in rule
+      when: ...
+      capture: true
+```
+
+None saves a capture: see what a rule catches on your hosts for a day,
+then replace it with your own version, narrowed and with `capture: true`.
+
+| Rule | Severity | Fires when |
+|---|---|---|
+| `privileged_container` | warning | a container runs privileged |
+| `host_namespace_container` | warning | a container shares the host's processes or IPC |
+| `runtime_socket_in_container` | warning | a container has a runtime's socket mounted |
+| `dangerous_capability` | warning | a container was given `ALL`, `SYS_ADMIN`, `SYS_PTRACE`, `SYS_MODULE`, `SYS_RAWIO`, `DAC_READ_SEARCH` or `BPF` |
+| `sensitive_host_mount` | warning | a container has `/`, `/etc`, `/root`, `/home`, `/boot`, `/dev`, `/proc`, `/sys` or a runtime's data directory mounted |
+| `sensitive_host_mount_writable` | critical | the same, writable |
+| `system_config_changed` | critical | a file under `/etc/sudoers*`, `/etc/ssh/`, `/root/.ssh/` or `/etc/ld.so.preload` is opened for writing on the host, not by a package manager |
+| `scheduled_task_changed` | warning | the same for `/etc/cron*`, `/var/spool/cron/` and `/etc/systemd/system/` |
+| `password_file_changed` | critical | `/etc/shadow` is written by something other than the account tools or a package manager |
+| `user_account_changed` | info | `useradd`, `usermod`, `passwd` and the like run on the host |
+| `sensitive_file_read` | critical | `/etc/shadow` is opened on the host by anything but the login and account programs and package configuration |
+| `became_root` | critical | a process whose real user is not root becomes root other than through `sudo`, `su`, `sshd`, `cron`, `login` or `pkexec` (a root process taking root back after dropping it for a while, as apt does, is left out) |
+| `run_from_temp_dir` | warning | a program runs from `/tmp`, `/var/tmp` or `/dev/shm` |
+| `unexpected_listener` | warning | something other than the usual servers listens on a port below 1024 |
+| `shell_in_container` | warning | a program in a container starts a shell: a web app running one is the classic sign of a break-in (`docker exec` and the container's first process are left out) |
+| `download_tool_in_container` | info | `curl`, `wget`, `nc`, `ncat` or `socat` runs in a container |
+| `package_manager_in_container` | info | `apt`, `apk`, `yum`, `dnf`, `pip` and the like run in a container; also what `docker build` does, so it is noisy on build hosts |
+
+The container rules leave out the vigil agent's own image, which needs the
+host's processes and root to do its work. `authorized_keys` in users' home
+folders is not watched: a prefix of `/home/` would report every open
+there. Add `/home/USER/.ssh/` to `watch_paths` for the accounts that
+matter; `system_config_changed` does not look there, so add a rule too.
 
 ## Container setup
 

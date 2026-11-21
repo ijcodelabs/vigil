@@ -167,7 +167,8 @@ logs:
 security:
   enabled: false
   # Opens of files under these absolute paths are reported (at most 16).
-  watch_paths: [/etc/shadow, /etc/sudoers, /etc/ssh/, /root/.ssh/, /etc/cron, /etc/ld.so.preload]
+  # The built-in rules' files are added; list your own here.
+  watch_paths: [/srv/app/config/]
   # A rule with `capture: true` saves the host's activity around the event:
   capture_before: 30s
   capture_after: 30s
@@ -185,6 +186,13 @@ security:
   #   host_mounts_rw, runtime_socket, runs_as_root, read_only_root
   # `summary` may use {field} placeholders. A rule reports at most
   # `max_per_minute` detections (default 10).
+  # The agent has built-in rules (docs/security.md lists them): on with
+  # `enabled`, their files added to watch_paths. Turn some off by name, or
+  # all with builtin_rules: false.
+  # disable_rules: [package_manager_in_container, unexpected_listener]
+  # builtin_rules: true
+  #
+  # A rule here with a built-in rule's name replaces it, e.g. to capture:
   rules:
     - name: shell_in_container
       when: type == "exec" && container != "" && exe in ["/bin/sh", "/bin/bash", "/bin/dash", "/bin/ash", "/bin/zsh", "/bin/busybox"]
@@ -193,45 +201,8 @@ security:
       summary: "{exe} started in container {container} by {parent_comm}"
       capture: true
 
-    - name: sensitive_file_read
-      when: type == "open" && path.startsWith("/etc/shadow") && !(comm in ["sshd", "sshd-session", "login", "su", "sudo", "passwd", "unix_chkpwd", "systemd-userwor", "cron"])
+    # Your own: a container that should never reach the database's port.
+    - name: web_to_database
+      when: type == "connect" && container == "shop-web" && port == 5432
       severity: critical
-      summary: "{comm} (uid {uid}) opened {path} (refused: {refused})"
-      capture: true
-
-    - name: system_config_changed
-      when: type == "open" && write && !refused && (path.startsWith("/etc/sudoers") || path.startsWith("/etc/ssh/") || path.startsWith("/root/.ssh/") || path.startsWith("/etc/ld.so.preload"))
-      severity: critical
-      summary: "{comm} opened {path} for writing"
-      capture: true
-
-    - name: became_root
-      when: type == "setuid" && new_euid == 0 && old_euid != 0 && !(comm in ["sudo", "su", "sshd", "sshd-session", "cron", "login", "polkit-agent-he", "pkexec"])
-      severity: critical
-      summary: "{comm} changed from user {old_euid} to root"
-      capture: true
-
-    - name: run_from_temp_dir
-      when: type == "exec" && (exe.startsWith("/tmp/") || exe.startsWith("/dev/shm/") || exe.startsWith("/var/tmp/"))
-      severity: warning
-      summary: "{exe} was run from a temporary directory by {parent_comm}"
-
-    - name: download_tool_in_container
-      when: type == "exec" && container != "" && comm in ["curl", "wget", "nc", "ncat", "socat"]
-      severity: info
-      summary: "{cmdline} in container {container}"
-
-    - name: unexpected_listener
-      when: type == "listen" && port < 1024 && !(comm in ["sshd", "nginx", "haproxy", "systemd", "named", "chronyd"])
-      severity: warning
-      summary: "{comm} started listening on port {port}"
-
-    - name: privileged_container
-      when: type == "container" && (privileged || host_pid || "SYS_ADMIN" in cap_add)
-      severity: warning
-      summary: "{container} ({image}) can reach the host: privileged, host PIDs or SYS_ADMIN"
-
-    - name: runtime_socket_in_container
-      when: type == "container" && runtime_socket != ""
-      severity: critical
-      summary: "{container} ({image}) has the container runtime's socket {runtime_socket} mounted"
+      summary: "{comm} in {container} connected to {addr}:{port}"

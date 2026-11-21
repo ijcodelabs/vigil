@@ -1,0 +1,141 @@
+# The built-in rule pack: on with `security.enabled`. A rule in the config
+# with the same name replaces one of these; `security.disable_rules` turns
+# some off, `security.builtin_rules: false` all of them.
+#
+# Exceptions repeat on purpose: each rule reads on its own. Package managers
+# change system files during upgrades; the container runtimes start every
+# container's first process. Nothing captures by default: look at what a
+# rule catches on your hosts first, then override it with `capture: true`.
+
+# --- How containers were started (type "container") ---
+
+- name: privileged_container
+  when: type == "container" && privileged && !image.contains("vigil-agent")
+  severity: warning
+  summary: "{container} ({image}) runs privileged: it can do anything the host's root can"
+
+- name: host_namespace_container
+  when: type == "container" && (host_pid || host_ipc) && !image.contains("vigil-agent")
+  severity: warning
+  summary: "{container} ({image}) shares the host's processes (host_pid {host_pid}) or IPC (host_ipc {host_ipc})"
+
+- name: runtime_socket_in_container
+  when: type == "container" && runtime_socket != "" && !image.contains("vigil-agent")
+  severity: warning
+  summary: "{container} ({image}) has the container runtime's socket {runtime_socket}: it can start a privileged container"
+
+- name: dangerous_capability
+  when: >-
+    type == "container" && !image.contains("vigil-agent")
+    && cap_add.exists(c, c in ["ALL", "SYS_ADMIN", "SYS_PTRACE", "SYS_MODULE", "SYS_RAWIO", "DAC_READ_SEARCH", "BPF"])
+  severity: warning
+  summary: "{container} ({image}) was given {cap_add}"
+
+- name: sensitive_host_mount
+  when: >-
+    type == "container" && !image.contains("vigil-agent")
+    && host_mounts.exists(m, m in ["/", "/etc", "/root", "/home", "/boot", "/dev", "/proc", "/sys",
+       "/var/lib/docker", "/var/lib/containerd", "/var/lib/kubelet"])
+  severity: warning
+  summary: "{container} ({image}) has host paths mounted: {host_mounts} (writable: {host_mounts_rw})"
+
+- name: sensitive_host_mount_writable
+  when: >-
+    type == "container" && !image.contains("vigil-agent")
+    && host_mounts_rw.exists(m, m in ["/", "/etc", "/root", "/home", "/boot", "/dev", "/proc", "/sys",
+       "/var/lib/docker", "/var/lib/containerd", "/var/lib/kubelet"])
+  severity: critical
+  summary: "{container} ({image}) can write to host paths: {host_mounts_rw}"
+
+# --- Access to the host (its own files: container == "") ---
+
+- name: system_config_changed
+  when: >-
+    type == "open" && write && !refused && container == ""
+    && (path.startsWith("/etc/sudoers") || path.startsWith("/etc/ssh/") || path.startsWith("/root/.ssh/")
+        || path == "/etc/ld.so.preload")
+    && !(comm in ["dpkg", "rpm", "apk", "yum", "dnf", "apt", "apt-get", "unattended-upgr", "ssh-keygen", "sshd-keygen"])
+  severity: critical
+  summary: "{comm} (uid {uid}) opened {path} for writing"
+
+- name: scheduled_task_changed
+  when: >-
+    type == "open" && write && !refused && container == ""
+    && (path.startsWith("/etc/cron") || path.startsWith("/var/spool/cron/") || path.startsWith("/etc/systemd/system/"))
+    && !(comm in ["dpkg", "rpm", "apk", "yum", "dnf", "apt", "apt-get", "unattended-upgr", "systemd", "systemctl"])
+  severity: warning
+  summary: "{comm} (uid {uid}) wrote {path}: something that runs on its own"
+
+- name: password_file_changed
+  when: >-
+    type == "open" && write && !refused && container == "" && path.startsWith("/etc/shadow")
+    && !(comm in ["passwd", "chpasswd", "useradd", "usermod", "userdel", "groupadd", "groupmod", "groupdel",
+         "gpasswd", "adduser", "deluser", "chage", "vipw", "dpkg", "rpm", "apk", "yum", "dnf", "apt", "apt-get",
+         "systemd-sysuser"])
+  severity: critical
+  summary: "{comm} (uid {uid}) wrote {path} without the account tools"
+
+- name: user_account_changed
+  when: >-
+    type == "exec" && container == ""
+    && comm in ["useradd", "adduser", "usermod", "userdel", "deluser", "chpasswd", "gpasswd", "groupadd", "passwd"]
+  severity: info
+  summary: "{cmdline} by uid {uid}"
+
+# Package configuration (debconf) reads it too, under dpkg or apt.
+- name: sensitive_file_read
+  when: >-
+    type == "open" && container == "" && path.startsWith("/etc/shadow")
+    && !(comm in ["sshd", "sshd-session", "login", "su", "sudo", "passwd", "unix_chkpwd", "systemd-userwor", "cron",
+         "chpasswd", "useradd", "usermod", "userdel", "chage", "vipw", "dpkg", "systemd-sysuser", "dpkg-preconfigu",
+         "frontend", "debconf-communi", "dpkg-reconfigur"])
+    && !(parent_comm in ["dpkg", "apt", "apt-get", "apt.systemd.dai", "unattended-upgr"])
+  severity: critical
+  summary: "{comm} (uid {uid}) opened {path} (refused: {refused})"
+
+# uid is the real user: a root process that dropped to another user for a
+# while (apt downloads as _apt) and takes root back is not gaining it.
+# systemd names the process it sets up for a service "(name)" until the
+# service's program starts.
+- name: became_root
+  when: >-
+    type == "setuid" && new_euid == 0 && old_euid != 0 && uid != 0
+    && !(comm in ["sudo", "su", "sshd", "sshd-session", "cron", "login", "polkit-agent-he", "pkexec", "systemd"])
+    && !(parent_comm == "systemd" && comm.startsWith("("))
+  severity: critical
+  summary: "{comm} changed from user {old_euid} to root (container: {container})"
+
+- name: run_from_temp_dir
+  when: type == "exec" && (exe.startsWith("/tmp/") || exe.startsWith("/dev/shm/") || exe.startsWith("/var/tmp/"))
+  severity: warning
+  summary: "{exe} was run from a temporary directory by {parent_comm}"
+
+- name: unexpected_listener
+  when: >-
+    type == "listen" && port < 1024
+    && !(comm in ["sshd", "nginx", "haproxy", "systemd", "named", "chronyd", "apache2", "httpd", "caddy", "traefik",
+         "envoy", "docker-proxy", "dnsmasq", "systemd-resolve", "unbound", "postfix", "master", "dovecot"])
+  severity: warning
+  summary: "{comm} started listening on port {port}"
+
+# --- Inside running containers ---
+
+- name: shell_in_container
+  when: >-
+    type == "exec" && container != ""
+    && exe in ["/bin/sh", "/bin/bash", "/bin/dash", "/bin/ash", "/bin/zsh", "/bin/busybox", "/usr/bin/bash", "/usr/bin/sh"]
+    && !(parent_comm in ["runc", "containerd-shim", "conmon", "crun", "docker-init", "tini", "runc:[2:INIT]"])
+  severity: warning
+  summary: "{exe} started in container {container} by {parent_comm}"
+
+- name: download_tool_in_container
+  when: type == "exec" && container != "" && comm in ["curl", "wget", "nc", "ncat", "socat"]
+  severity: info
+  summary: "{cmdline} in container {container}"
+
+- name: package_manager_in_container
+  when: >-
+    type == "exec" && container != ""
+    && comm in ["apt", "apt-get", "dpkg", "apk", "yum", "dnf", "rpm", "microdnf", "pip", "pip3"]
+  severity: info
+  summary: "{cmdline} in container {container}: software changing in a running container (or an image being built)"

@@ -108,20 +108,25 @@ func compileRules(cfg *config.Security) ([]*rule, error) {
 		return nil, err
 	}
 	seen := map[string]bool{}
-	var out []*rule
 	for i, rc := range cfg.Rules {
+		if !ruleNameRe.MatchString(rc.Name) {
+			return nil, fmt.Errorf("security.rules[%d]: name must be letters, digits and _ (it becomes the alert name)", i)
+		}
+		if seen[rc.Name] {
+			return nil, fmt.Errorf("security rule %s is defined twice", rc.Name)
+		}
+		seen[rc.Name] = true
+	}
+	all, err := effectiveRules(cfg)
+	if err != nil {
+		return nil, err
+	}
+	var out []*rule
+	for _, rc := range all {
 		if config.Off(rc.Enabled) {
 			continue
 		}
-		where := fmt.Sprintf("security.rules[%d]", i)
-		if !ruleNameRe.MatchString(rc.Name) {
-			return nil, fmt.Errorf("%s: name must be letters, digits and _ (it becomes the alert name)", where)
-		}
-		where = "security rule " + rc.Name
-		if seen[rc.Name] {
-			return nil, fmt.Errorf("%s is defined twice", where)
-		}
-		seen[rc.Name] = true
+		where := "security rule " + rc.Name
 		switch rc.Severity {
 		case "":
 			rc.Severity = "warning"
