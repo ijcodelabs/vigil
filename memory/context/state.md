@@ -1751,6 +1751,22 @@ Step 1 of "Runtime security" in direction.md.
   sh: all three left out in the pack. Then 0 detections, 0 lost, about 55
   events/s (12/s namespace changes from health checks), agent about 8% of
   a core. Escape probes all loaded on 6.12.
+- Its first day there (2026-11-22): 47 detections from two rules, all
+  routine jobs inside containers, nothing lost. shell_in_container: shells
+  of anacron, logrotate's postrotate scripts and pg_dumpall's `pg_dump -V`
+  (now left out in the pack), plus fail2ban's `nft` calls and logwatch in
+  a mail container (host-specific, left to that host's profile).
+  package_manager_in_container: the daily apt job's read-only
+  `dpkg --print-foreign-architectures` and `apt-get check` (left out in
+  the pack). Agent flat at about 9% of a core for the day (about 5% with
+  runtime events off), at 57 events/s; it rose to about 15% only while the
+  host itself went from 1.8 to 3.3 busy cores. The agent has no profiling
+  endpoint, so which part of its work grows with host load is not known.
+- Open, to decide after a week of the pack on that host (about
+  2026-11-29): unexpected_listener fired ten times for `dockerd` opening a
+  container's published low ports when the container restarted. Leaving
+  `dockerd` out like `docker-proxy` would quiet it on every Docker host;
+  first see how often it comes up.
 
 ## Next
 
