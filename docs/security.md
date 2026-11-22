@@ -131,7 +131,7 @@ then replace it with your own version, narrowed and with `capture: true`.
 | `became_root` | critical | a process whose real user is not root becomes root other than through `sudo`, `su`, `sshd`, `cron`, `login` or `pkexec` (a root process taking root back after dropping it for a while, as apt does, is left out) |
 | `run_from_temp_dir` | warning | a program runs from `/tmp`, `/var/tmp` or `/dev/shm` |
 | `unexpected_listener` | warning | something other than the usual servers listens on a port below 1024 |
-| `shell_in_container` | warning | a program in a container starts a shell: a web app running one is the classic sign of a break-in (`docker exec`, health checks, cron jobs and the container's first process are left out) |
+| `shell_in_container` | warning | a program in a container starts a shell: a web app running one is the classic sign of a break-in (`docker exec`, health checks, the container's first process, and jobs of `cron`, `anacron` and `logrotate` are left out, as is `pg_dumpall` asking `pg_dump` for its version) |
 | `download_tool_in_container` | info | `curl`, `wget`, `nc`, `ncat` or `socat` runs in a container, other than towards `localhost` (health checks) |
 | `container_joined_host_namespace` | critical | a process in a container joins one of the host's namespaces (`nsenter -t 1`): it has left its container |
 | `mount_in_container` | warning | a process in a container mounts something (the runtime's own mounts left out). Storage drivers in privileged pods do this all the time: turn it off on such nodes |
@@ -141,7 +141,7 @@ then replace it with your own version, narrowed and with `capture: true`.
 | `module_from_container` | critical | a process in a container loads a kernel module |
 | `bpf_from_container` | critical | a process in a container loads a BPF program into the host's kernel |
 | `runtime_socket_used_in_container` | critical | a process in a container talks to the container runtime's socket. Tools that are meant to (Traefik, Portainer) do this too: replace the rule with one that leaves them out |
-| `package_manager_in_container` | info | `apt`, `apk`, `yum`, `dnf`, `pip` and the like run in a container; also what `docker build` does, so it is noisy on build hosts |
+| `package_manager_in_container` | info | `apt`, `apk`, `yum`, `dnf`, `pip` and the like run in a container; also what `docker build` does, so it is noisy on build hosts. Questions that change nothing, as a daily apt job inside a container asks them (`dpkg --print-architecture`, `--print-foreign-architectures`, `apt-get check`), are left out |
 
 The container rules leave out the vigil agent's own image, which needs the
 host's processes and root to do its work. `authorized_keys` in users' home

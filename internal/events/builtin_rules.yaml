@@ -123,13 +123,16 @@
 # A health check's `sh -c` (Docker's CMD-SHELL, or CMD ["sh", "-c", ...])
 # is started by runc, which is gone before the agent can name it: its
 # parent_comm is empty. A cron daemon in a container runs every job
-# through sh -c too.
+# through sh -c too, and so do anacron and logrotate (its postrotate
+# scripts). pg_dumpall asks pg_dump for its version through sh -c at every
+# backup; only that command is left out.
 - name: shell_in_container
   when: >-
     type == "exec" && container != ""
     && exe in ["/bin/sh", "/bin/bash", "/bin/dash", "/bin/ash", "/bin/zsh", "/bin/busybox", "/usr/bin/bash", "/usr/bin/sh"]
     && !(parent_comm in ["", "runc", "containerd-shim", "conmon", "crun", "docker-init", "tini", "runc:[2:INIT]",
-         "cron", "crond", "supercronic"])
+         "cron", "crond", "supercronic", "anacron", "logrotate"])
+    && !(parent_comm == "pg_dumpall" && size(args) > 0 && args[size(args) - 1].matches('^"?[^ "]*/pg_dump"? -V$'))
   severity: warning
   summary: "{exe} started in container {container} by {parent_comm}"
 
@@ -141,10 +144,17 @@
   severity: info
   summary: "{cmdline} in container {container}"
 
+# A daily apt job inside a container (apt.systemd.daily) only asks
+# questions: dpkg for its architectures, apt-get check for broken
+# dependencies. Those change no software and are left out.
 - name: package_manager_in_container
   when: >-
     type == "exec" && container != ""
     && comm in ["apt", "apt-get", "dpkg", "apk", "yum", "dnf", "rpm", "microdnf", "pip", "pip3"]
+    && !(comm == "dpkg" && size(args) > 1
+         && args.all(a, a == args[0] || a in ["--print-architecture", "--print-foreign-architectures"]))
+    && !(comm in ["apt", "apt-get"] && args.exists(a, a == "check")
+         && args.all(a, a == args[0] || a == "check" || a.startsWith("-")))
   severity: info
   summary: "{cmdline} in container {container}: software changing in a running container (or an image being built)"
 
