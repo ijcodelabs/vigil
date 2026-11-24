@@ -1601,6 +1601,32 @@ direction.md, with the rule file added because it has the same problem.
   The rule file editor was not tried in the browser (saving it needs the
   stores).
 
+## Other programs as agents; CPU temperature; Gaming PCs (built 2026-11-24)
+
+- The agent protocol is a documented contract for programs other than
+  vigil-agent (`docs/agent-protocol.md`). The first is GameMon, a Windows
+  hardware monitor and game overlay (separate project), which enrols,
+  remote-writes, sends game sessions and alerts as log lines and reports
+  facts with `kind: gamemon`. The metric list was agreed with that project:
+  shared names where vigil has one, `gamemon_*` for the rest.
+- Fact `kind`: anything but empty or `vigil-agent` makes `Profile.Matches`
+  false, so no profile, rollout or effective config waits on such an
+  agent; Fleet shows the kind and "not managed" and hides Config.
+- `host_cpu_temperature_celsius{cpu, sensor}` from hwmon (k10temp,
+  zenpower, coretemp, cpu_thermal); per-core sensors left out on purpose.
+  Tested on a fake sysfs only; no real AMD/Intel host yet.
+- Integration `gaming_pc`: dashboard and rules over the agreed names. It
+  has no detection (GameMon reports no inventory); a profile that names it
+  switches it on, typically with `select: ['kind="gamemon"']`, which
+  matches no host and only serves to install it.
+- Security review of both sides (2026-11-24): log lines can no longer carry
+  `source=security` (renamed `exported_source` on `/api/v1/logs`); `kind`
+  must be a short lower-case name; a per-agent cap on different series an
+  hour (`series_per_hour`, default 10 000 only for other kinds, because a
+  Kubernetes cluster agent can need far more). The kind default guards
+  against bugs, not stolen tokens, which can omit `kind`.
+- Not built: GameMon's side (in its own repository).
+
 ## Next
 
 - Foundations, build order in `direction.md`: step 1 on paper (data

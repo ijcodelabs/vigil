@@ -29,6 +29,7 @@ labels: {env: prod, role: db}
 | `ebpf` | `true` when runtime events can work on this kernel |
 | `gpu` | `nvidia`, `amd` or both, on hosts whose GPUs the agent can read; absent otherwise |
 | `version` | the agent's version |
+| `kind` | set only by programs that are not a vigil-agent but send like one (e.g. `gamemon`); profiles never apply to them, see [Sending from your own software](agent-protocol.md) |
 | `detected_<integration>` | `true` when that technology was found running (see below) |
 
 A label cannot override a fact. Both show on the **Fleet → Agents** page.
@@ -176,7 +177,7 @@ Things to know:
 
 An integration bundles what one technology needs: how to recognise it, what
 to collect, alert rules and a dashboard. Built in: Docker, Kubernetes node,
-Kubernetes cluster, GPUs, HAProxy, nginx, PostgreSQL, Redis, VictoriaMetrics,
+Kubernetes cluster, GPUs, Gaming PCs (for [GameMon](agent-protocol.md#an-example-gamemon)), HAProxy, nginx, PostgreSQL, Redis, VictoriaMetrics,
 SSH logins, and Portun, Portun Jump gateway, Portun Jump agent and Portun Chat (see
 [Portun and Portun Jump](portun.md)).
 

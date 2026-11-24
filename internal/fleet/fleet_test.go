@@ -209,6 +209,12 @@ func TestParseProfileErrors(t *testing.T) {
 		p.Matches(map[string]string{"env": "prod", "kernel": "4.18.0"}) || p.Matches(map[string]string{"env": "prod", "kernel": "6.8", "zone": "a"}) {
 		t.Error("selector matching")
 	}
+	// Profiles are vigil-agent config: an agent of another kind gets none,
+	// not even from a profile that selects everyone.
+	empty := profile(t, "empty", "")
+	if empty.Matches(map[string]string{"kind": "gamemon"}) || !empty.Matches(map[string]string{"kind": "vigil-agent"}) {
+		t.Error("an agent of another kind should match no profile")
+	}
 }
 
 // Probes and process groups are top-level lists that merge by name too.

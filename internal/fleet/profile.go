@@ -113,13 +113,28 @@ func ParseProfile(name, text string) (*Profile, error) {
 
 // Matches reports whether the profile applies to an agent with these
 // attributes. A label the agent does not have counts as empty.
+//
+// A profile is vigil-agent config, so it never applies to an agent of
+// another kind (an application that enrols and pushes on its own, such as
+// a gaming PC's monitor): it would ignore the config, and the Fleet page and
+// rollouts would wait for ever for it to be picked up.
 func (p *Profile) Matches(attrs map[string]string) bool {
+	if !OwnKind(attrs) {
+		return false
+	}
 	for _, m := range p.matchers {
 		if !m.Matches(attrs[m.Name]) {
 			return false
 		}
 	}
 	return true
+}
+
+// OwnKind reports whether an agent is a vigil-agent. Other agents say what
+// they are in the fact "kind"; a vigil-agent does not send it.
+func OwnKind(attrs map[string]string) bool {
+	k := attrs["kind"]
+	return k == "" || k == "vigil-agent"
 }
 
 // Matching returns the profiles that apply, in the order they are merged.

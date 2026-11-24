@@ -12,6 +12,7 @@ In **Explore → Metrics**, **Show metrics** lists what actually has data.
 |---|---|---|
 | `host_cpu_seconds_total` | CPU time spent | `mode`: user, system, idle, iowait, nice, irq, softirq, steal |
 | `host_cpu_count` | number of CPUs | |
+| `host_cpu_temperature_celsius` | CPU temperature, from the kernel's sensors (`k10temp`, `zenpower`, `coretemp`, `cpu_thermal`); absent in virtual machines and where no sensor driver is loaded | `cpu` (socket, from 0), `sensor`: `package` (the whole CPU: Tdie or Tctl on AMD, Package on Intel), `ccd1`, `ccd2`… (AMD core dies) |
 | `host_load1`, `host_load5`, `host_load15` | load average | |
 | `host_memory_total_bytes`, `host_memory_available_bytes`, `host_memory_used_bytes` | memory | |
 | `host_swap_total_bytes`, `host_swap_used_bytes` | swap | |

@@ -36,6 +36,18 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad log batch: "+err.Error(), code)
 		return
 	}
+	// source=security marks runtime detections, which only arrive through
+	// /api/v1/events. A log line saying the same (an application's JSON log
+	// with a "source" field, or a program speaking the agent protocol) is
+	// renamed, so it cannot pass for a detection on the security pages.
+	for i := range entries {
+		for _, m := range []map[string]string{entries[i].Stream, entries[i].Fields} {
+			if m != nil && m["source"] == "security" {
+				delete(m, "source")
+				m["exported_source"] = "security"
+			}
+		}
+	}
 	if rate := s.cfg.Limits.For(id).LogBytesPerSecond; rate > 0 {
 		size := 0
 		for _, e := range entries {

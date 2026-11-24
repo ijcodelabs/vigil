@@ -38,7 +38,7 @@ config:
     #    paths: [/var/log/nginx/access.log]
 `;
 
-const STATE = { 'in sync': 'ok', pending: 'warn', error: 'bad' };
+const STATE = { 'in sync': 'ok', pending: 'warn', error: 'bad', 'not managed': 'off' };
 
 export function Fleet({ route, admin }) {
   const adminOnly = ['enrolment', 'identities'];
@@ -75,11 +75,11 @@ function Agents({ admin }) {
       : html`<table>
         <thead><tr><th>Agent</th><th>Labels</th><th>Host</th><th>Profiles</th><th>Config</th><th></th></tr></thead>
         <tbody>${shown.map(a => html`<tr>
-          <td style="white-space: nowrap"><span class="dot ${a.up ? 'ok' : 'bad'}" title=${a.up ? 'reporting' : 'not reporting'}></span><strong>${a.id}</strong>
+          <td style="white-space: nowrap"><span class="dot ${a.up ? 'ok' : 'bad'}" title=${a.up ? 'reporting' : 'not reporting'}></span><strong>${a.id}</strong>${a.kind && html` <span class="chip" title="Not a vigil-agent: an application that enrols and sends on its own (docs: Agent protocol)">${a.kind}</span>`}
             <div class="muted" style="font-size: 12px">${ago(a.last_seen)} · ${a.version}${a.via ? html` · <span title="Its data reaches the server through this relay">via ${a.via.split(',').join(' → ')}</span>` : ''}</div></td>
           <td><${Chips} labels=${a.labels} /></td>
           <td class="muted" style="font-size: 12.5px">${a.facts ? html`${a.facts.distro || a.facts.os} ${a.facts.distro_version || ''}<br />${a.facts.kernel || ''} ${a.facts.arch || ''}` : 'not reported yet'}</td>
-          <td>${a.profiles.length ? a.profiles.map(p => html`<span class="chip" title=${(a.rollouts || []).includes(p) ? 'This agent has the new version of this profile ahead of the others' : ''}>${p}${(a.rollouts || []).includes(p) ? ' ◆ new' : ''}</span>`) : html`<span class="muted">none: its own file</span>`}
+          <td>${a.config_source === 'own' ? html`<span class="muted" title="Profiles are vigil-agent config; this agent keeps its settings itself">its own settings</span>` : a.profiles.length ? a.profiles.map(p => html`<span class="chip" title=${(a.rollouts || []).includes(p) ? 'This agent has the new version of this profile ahead of the others' : ''}>${p}${(a.rollouts || []).includes(p) ? ' ◆ new' : ''}</span>`) : html`<span class="muted">none: its own file</span>`}
             ${a.unmonitored.length > 0 && html`<div style="margin-top: 4px"><a href="#/fleet/integrations" title="Found running on this host, but no profile switches it on">
               <${Badge} kind="warn">not monitored: ${a.unmonitored.join(', ')}<//></a></div>`}</td>
           <td><${Badge} kind=${STATE[a.config_state]}>${a.config_state}<//>
@@ -90,7 +90,7 @@ function Agents({ admin }) {
             ${(a.config_skipped || []).length > 0 && html`<div style="margin-top: 4px" title="Settings from a newer server that this agent version does not know: skipped, the rest applied. Upgrade the agent to use them.">
               <${Badge} kind="warn">skipped: ${a.config_skipped.join(', ')}<//></div>`}</td>
           <td style="text-align: right; white-space: nowrap">
-            <button class="small" onClick=${() => setDialog({ kind: 'config', agent: a })}>Config</button>${' '}
+            ${!a.kind && html`<button class="small" onClick=${() => setDialog({ kind: 'config', agent: a })}>Config</button>`}${' '}
             ${admin && html`<button class="small" onClick=${() => setDialog({ kind: 'agent', agent: a })}>Manage</button>`}</td>
         </tr>`)}</tbody></table>`}</div>
     <p class="muted">An agent's config is the merge of every profile whose selector matches its labels and facts. With no matching profile

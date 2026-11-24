@@ -70,7 +70,7 @@ large fleets. Expect rough edges, and please say what you find.
 
 - **Metrics**: host and container figures, Prometheus scraping (static
   lists, Kubernetes pods by annotation, tokens kept in a file on the host),
-  process groups, systemd units, GPUs, OpenTelemetry (OTLP).
+  process groups, systemd units, GPUs, CPU temperatures, OpenTelemetry (OTLP).
 - **Logs**: files, journald, Docker containers, Kubernetes pods and events,
   with parsing templates. A log volume page shows who writes the most, and
   lines not worth keeping are dropped by a rule you preview first.
@@ -135,6 +135,9 @@ large fleets. Expect rough edges, and please say what you find.
   token.
 - **Relays** for sites that cannot reach the server, and **limits** on what
   one agent may send, kept by the agent and by the server.
+- **Your own software as an agent**: the protocol agents speak is
+  documented, so a program can enrol and send on its own, e.g. GameMon
+  on a Windows gaming PC, with a Gaming PCs dashboard and alert rules.
 
 ### Looking at it
 
@@ -164,6 +167,7 @@ pages under `/docs/` (the **Docs** link in the interface).
 | [Fleet](docs/fleet.md) | labels, profiles, integrations, rollouts, `vigil apply` |
 | [Kubernetes](docs/kubernetes.md) | node agents and the cluster agent |
 | [Relays](docs/relay.md) | for agents that cannot reach the server |
+| [Sending from your own software](docs/agent-protocol.md) | enrol, metrics, logs, TLS for programs other than vigil-agent |
 | [Home](docs/home.md) | incidents, forecasts, AI explanations |
 | [Secrets](docs/secrets.md) | the AI key from your OpenBao or Vault |
 | [Explore](docs/explore.md) | PromQL and LogsQL with examples, saved queries |

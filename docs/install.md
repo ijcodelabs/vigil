@@ -270,11 +270,25 @@ that is not yours, cannot fill the stores or starve the others:
 limits:
   samples_per_second: 20000        # per agent, averaged over a minute
   log_bytes_per_second: 4194304    # per agent, averaged over a minute
+  series_per_hour: 0               # different series per agent in an hour; 0: no cap
+  other_kinds_series_per_hour: 10000   # the same, for programs that are not vigil-agent
   max_in_flight: 512               # batches being stored at the same time, all agents
   agents:                          # other values for the agents named
     big-db-01: {samples_per_second: 100000}
     lab-07: {log_bytes_per_second: -1}   # negative: no limit
+    gaming-pc: {series_per_hour: 2000}
 ```
+
+`series_per_hour` caps how many *different* series one agent writes within
+an hour, which is what costs the metrics store memory: a program that puts
+an id or a time into a label creates a new series with every sample, however
+few samples it sends. Writing the same series again costs nothing. For
+vigil-agents there is no cap unless you set one, since a Kubernetes cluster
+agent can legitimately write hundreds of thousands. Programs that report
+another [kind](agent-protocol.md#5-say-what-you-are) get
+`other_kinds_series_per_hour`. That default protects against a program's
+mistakes, not against a stolen token: whoever holds one can leave `kind`
+out. For an agent you do not trust, set `series_per_hour` for its id.
 
 The values shown are the defaults. They are well above what an agent sends
 with its own defaults (100,000 series every 15 seconds is under 7,000
@@ -285,7 +299,7 @@ It falls behind, its spool fills, and it then drops its own oldest data:
 the server takes no more than the limit, and nothing is dropped silently.
 It shows in three places:
 
-- **Fleet → Agents**: "over limit: metrics" on the agent.
+- **Fleet → Agents**: "over limit: metrics" (or `logs`, `series`) on the agent.
 - The agent's log: `push failed, will retry … HTTP 429`.
 - Metrics: `vigil_agent_limited_batches_total{signal}` (written by the
   server) and `vigil_agent_dropped_total{reason="spool_full"}` (by the

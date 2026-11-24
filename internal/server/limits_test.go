@@ -140,3 +140,60 @@ func TestServerSideLimits(t *testing.T) {
 		t.Errorf("revoked token: %d", code)
 	}
 }
+
+// A cap on the different series an agent writes: on by default for agents
+// of another kind, settable for any agent. Writing the same series again
+// costs nothing; a batch that would go over is refused whole.
+func TestSeriesLimit(t *testing.T) {
+	store := &fakeStore{}
+	backend := httptest.NewServer(store)
+	defer backend.Close()
+	cfg := &config.Server{DataDir: t.TempDir(), IngestToken: "ingest", AdminToken: "admin-token-secret", HeartbeatTimeout: config.Duration(time.Minute)}
+	cfg.Storage.MetricsURL, cfg.Storage.LogsURL = backend.URL, backend.URL
+	cfg.Limits.OtherKindsSeriesPerHour = 5
+	cfg.Limits.Agents = map[string]config.IngestLimit{"capped": {SeriesPerHour: 3}}
+	srv, err := server.New(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+	central := httptest.NewServer(srv.Handler())
+	defer central.Close()
+	c := &client{t: t, base: central.URL, hc: http.DefaultClient}
+	write := func(agent string, from, to int) int {
+		var ss []model.Sample
+		for i := from; i < to; i++ {
+			ss = append(ss, model.Sample{Name: "m", Labels: map[string]string{"id": string(rune('a' + i))}, Value: 1, TS: time.Now().UnixMilli()},
+				model.Sample{Name: "m", Labels: map[string]string{"id": string(rune('a' + i))}, Value: 2, TS: time.Now().UnixMilli() + 1})
+		}
+		code, _, _ := c.do("POST", "/api/v1/write", string(promwire.Encode(ss)), "Authorization", "Bearer ingest", "X-Vigil-Agent", agent)
+		return code
+	}
+	c.do("POST", "/api/v1/agent/config", `{"facts":{"kind":"gamemon"}}`, "Authorization", "Bearer ingest", "X-Vigil-Agent", "pc")
+
+	// Another kind: 5 series. Two samples of one series count once.
+	if code := write("pc", 0, 4); code != http.StatusNoContent {
+		t.Errorf("4 series: %d", code)
+	}
+	if code := write("pc", 0, 4); code != http.StatusNoContent {
+		t.Errorf("the same 4 again: %d", code)
+	}
+	if code := write("pc", 3, 6); code != http.StatusTooManyRequests { // 4 known + 2 new = 6 > 5
+		t.Errorf("over the cap: %d", code)
+	}
+	if code := write("pc", 4, 5); code != http.StatusNoContent { // the refused batch stored nothing
+		t.Errorf("one more after a refusal: %d", code)
+	}
+	// A vigil-agent has no cap unless one is set; one that is set holds.
+	if code := write("linux-01", 0, 20); code != http.StatusNoContent {
+		t.Errorf("vigil-agent: %d", code)
+	}
+	if code := write("capped", 0, 4); code != http.StatusTooManyRequests {
+		t.Errorf("an agent's own cap: %d", code)
+	}
+	// It shows on the Fleet page like the other limits.
+	_, body, _ := c.do("GET", "/api/v1/agents", "", "Authorization", "Bearer admin-token-secret")
+	if !strings.Contains(body, `"limited":["series"]`) {
+		t.Errorf("fleet does not show the series limit: %s", body)
+	}
+}
