@@ -58,7 +58,10 @@ dashboard:
     - {title: CPU (°C), type: stat, w: 2, h: 2, warn: 85, crit: 95, queries: [{expr: 'round(max(host_cpu_temperature_celsius{agent=~"$agent", sensor="package"}))'}]}
     - {title: GPU (°C), type: stat, w: 2, h: 2, warn: 80, crit: 88, queries: [{expr: 'round(max(gpu_temperature_celsius{agent=~"$agent"}))'}]}
     - {title: GPU hot spot (°C), type: stat, w: 2, h: 2, warn: 95, crit: 105, queries: [{expr: 'round(max(gamemon_gpu_hotspot_celsius{agent=~"$agent"}))'}]}
-    - {title: FPS now, type: stat, w: 2, h: 2, queries: [{expr: 'round(avg(gamemon_fps{agent=~"$agent"})) or vector(0)'}]}
+    # Only the last 15 s: a program that stops sending leaves its last value
+    # visible for five minutes to a plain query, so a game just closed would
+    # still show its frame rate.
+    - {title: FPS now, type: stat, w: 2, h: 2, queries: [{expr: 'round(avg(last_over_time(gamemon_fps{agent=~"$agent"}[15s]))) or vector(0)'}]}
     - {title: GPU memory used, type: stat, w: 2, h: 2, unit: ratio, warn: 0.9, crit: 0.97, queries: [{expr: 'max(gpu_memory_used_bytes{agent=~"$agent"} / gpu_memory_total_bytes)'}]}
     - {title: RAM used, type: stat, w: 2, h: 2, unit: ratio, warn: 0.85, crit: 0.95, queries: [{expr: 'max(1 - host_memory_available_bytes{agent=~"$agent"} / host_memory_total_bytes)'}]}
     - title: Frame rate
