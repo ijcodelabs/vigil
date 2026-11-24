@@ -2,9 +2,14 @@ package server
 
 import (
 	"fmt"
+	"hash/fnv"
 	"net/http"
+	"sort"
 	"sync"
 	"time"
+
+	"github.com/ijcodelabs/vigil/internal/fleet"
+	"github.com/ijcodelabs/vigil/internal/promwire"
 )
 
 const (
@@ -120,4 +125,116 @@ func (s *Server) forgetTokens() {
 	s.tokenMu.Lock()
 	s.tokens = map[string]string{}
 	s.tokenMu.Unlock()
+}
+
+// signalSeries is a limit on how many different series an agent creates,
+// next to how many samples it sends: a program that puts an id or a time
+// into a label makes a new series with every sample, which costs the
+// metrics store memory however few samples there are.
+const signalSeries = "series"
+
+// seriesWindow is how long the series an agent wrote are remembered. Within
+// it, writing the same series again costs nothing; after it, the count
+// starts over.
+const seriesWindow = time.Hour
+
+type seriesSeen struct {
+	since time.Time
+	ids   map[uint64]struct{}
+}
+
+// seriesLimiter counts the different series each limited agent wrote in
+// the current window. Only agents with a limit are tracked.
+type seriesLimiter struct {
+	mu     sync.Mutex
+	agents map[string]*seriesSeen
+}
+
+// allow reports whether an agent may write a batch with these series
+// without going over max different series in the window. A batch is taken
+// or refused whole, so what is stored stays consistent.
+func (l *seriesLimiter) allow(agent string, ids []uint64, max int, now time.Time) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	s := l.agents[agent]
+	if s == nil || now.Sub(s.since) >= seriesWindow {
+		s = &seriesSeen{since: now, ids: map[uint64]struct{}{}}
+		l.agents[agent] = s
+	}
+	fresh := 0
+	for _, id := range ids {
+		if _, ok := s.ids[id]; !ok {
+			fresh++
+		}
+	}
+	if len(s.ids)+fresh > max {
+		return false
+	}
+	for _, id := range ids {
+		s.ids[id] = struct{}{}
+	}
+	return true
+}
+
+// refused records a batch refused for a limit kept outside the limiter's
+// own buckets, so it shows with the others on the Fleet page and in
+// vigil_agent_limited_batches_total.
+func (l *ingestLimiter) refused(agent, signal string, now time.Time) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	key := agent + "\x00" + signal
+	b := l.buckets[key]
+	if b == nil {
+		b = &bucket{at: now}
+		l.buckets[key] = b
+	}
+	b.rejected++
+	b.last = now
+}
+
+// seriesLimit is the series_per_hour of an agent: its own, or for an agent
+// of another kind the default for those. 0 means no limit.
+func (s *Server) seriesLimit(id string) int {
+	max := s.cfg.Limits.For(id).SeriesPerHour
+	if max == 0 {
+		s.fleet.mu.Lock()
+		attrs := s.fleet.attrs[id]
+		s.fleet.mu.Unlock()
+		if attrs != nil && !fleet.OwnKind(attrs) {
+			max = s.cfg.Limits.OtherKindsSeriesPerHour
+		}
+	}
+	return max
+}
+
+// seriesIDs returns a hash of every different series in a write request.
+func seriesIDs(body []byte) ([]uint64, error) {
+	samples, err := promwire.Decode(body)
+	if err != nil {
+		return nil, err
+	}
+	seen := map[uint64]struct{}{}
+	out := []uint64{}
+	keys := []string{}
+	for _, smp := range samples {
+		keys = keys[:0]
+		for k := range smp.Labels {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		h := fnv.New64a()
+		h.Write([]byte(smp.Name))
+		for _, k := range keys {
+			h.Write([]byte{0xff})
+			h.Write([]byte(k))
+			h.Write([]byte{0xfe})
+			h.Write([]byte(smp.Labels[k]))
+		}
+		id := h.Sum64()
+		if _, ok := seen[id]; !ok {
+			seen[id] = struct{}{}
+			out = append(out, id)
+		}
+	}
+	return out, nil
 }

@@ -884,6 +884,9 @@ type GPUPrice struct {
 type IngestLimit struct {
 	SamplesPerSecond  int `yaml:"samples_per_second"`
 	LogBytesPerSecond int `yaml:"log_bytes_per_second"`
+	// SeriesPerHour caps the different series one agent may write within
+	// an hour. No default for vigil-agents; see OtherKindsSeriesPerHour.
+	SeriesPerHour int `yaml:"series_per_hour"`
 }
 
 type ServerLimits struct {
@@ -893,6 +896,10 @@ type ServerLimits struct {
 	MaxInFlight int `yaml:"max_in_flight"`
 	// Agents overrides the per-agent limits for the agent ids named.
 	Agents map[string]IngestLimit `yaml:"agents"`
+	// OtherKindsSeriesPerHour is series_per_hour for agents that report a
+	// kind other than vigil-agent (programs speaking the agent protocol)
+	// and have none of their own. Default 10000; negative, no limit.
+	OtherKindsSeriesPerHour int `yaml:"other_kinds_series_per_hour"`
 }
 
 // For returns the limits of one agent. Zero or less means no limit.
@@ -904,6 +911,9 @@ func (l *ServerLimits) For(agent string) IngestLimit {
 		}
 		if o.LogBytesPerSecond != 0 {
 			out.LogBytesPerSecond = o.LogBytesPerSecond
+		}
+		if o.SeriesPerHour != 0 {
+			out.SeriesPerHour = o.SeriesPerHour
 		}
 	}
 	return out
@@ -1000,6 +1010,9 @@ func LoadServer(path string) (*Server, error) {
 	}
 	if c.Limits.LogBytesPerSecond == 0 {
 		c.Limits.LogBytesPerSecond = 4 << 20
+	}
+	if c.Limits.OtherKindsSeriesPerHour == 0 {
+		c.Limits.OtherKindsSeriesPerHour = 10000
 	}
 	if c.Limits.MaxInFlight == 0 {
 		c.Limits.MaxInFlight = 512

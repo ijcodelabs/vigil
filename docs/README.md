@@ -38,6 +38,7 @@ events and dashboards. It is a few static Go binaries: the **agent**
 | manage many agents | [Fleet: profiles and integrations](fleet.md) |
 | monitor Kubernetes | [Kubernetes](kubernetes.md) |
 | reach the server from a site that cannot connect to it | [Relays](relay.md) |
+| send from my own program, or connect a gaming PC through GameMon | [Sending from your own software](agent-protocol.md) |
 | look at data | [Explore](explore.md), [Dashboards](dashboards.md), or your own [Grafana](grafana.md) |
 | see how your applications do: requests, errors, latency, traces | [Services and traces](apm.md); set-up for [Python](apm-python.md) and [Go](apm-go.md) |
 | watch GPUs and what AI use costs | [GPUs and AI machines](gpu.md), [AI costs](finops.md) |
@@ -56,6 +57,8 @@ events and dashboards. It is a few static Go binaries: the **agent**
 
 - **Agent**: `vigil-agent`, running on a host. It has an id (its host name
   by default).
+  A program that sends the same way, such as GameMon on a Windows PC, is
+  an agent too, of another **kind** ([Sending from your own software](agent-protocol.md)).
 - **Labels**: what you say a host is, in its own file: `env: prod`,
   `role: db`. Added to everything it sends.
 - **Facts**: what an agent finds out about its host itself: `os`, `kernel`,

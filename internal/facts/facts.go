@@ -17,7 +17,7 @@ import (
 
 // Names are the fact keys. A label in an agent's file cannot use them.
 var Names = []string{"agent", "os", "arch", "kernel", "distro", "distro_version", "hostname",
-	"cpus", "memory_gb", "kubernetes", "kubernetes_role", "runtime", "ebpf", "gpu", "version"}
+	"cpus", "memory_gb", "kubernetes", "kubernetes_role", "runtime", "ebpf", "gpu", "version", "kind"}
 
 func envOr(name, def string) string {
 	if v := os.Getenv(name); v != "" {

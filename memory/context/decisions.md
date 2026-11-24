@@ -171,3 +171,16 @@ off the MPTCP default Go has had since 1.24: vigil gains nothing from it,
 and the known root exploit of the kernel TCP flaw CVE-2026-98432 went
 through an MPTCP listener. Checked live: with Go's default `ss -Mlnp`
 lists the relay, with this setting it does not.
+
+**Programs that are not vigil-agent use the agent protocol as it is, and
+say what they are in a fact (2026-11-24).** A Windows gaming-PC monitor
+wanted to be a host of its own. Enrolment, remote-write and the log format
+already took any client; what broke was profiles: one selecting every host
+would be sent to a program that ignores it, and the Fleet page and rollouts
+would wait for ever. A fact `kind` (absent for vigil-agent) turns profiles
+off for that agent in one place, `Profile.Matches`, rather than a new
+agent type in the store. Shared metric names (`host_*`, `gpu_*`, and the
+new `host_cpu_temperature_celsius`) are used across systems so one
+dashboard and one rule serve Linux hosts and Windows PCs alike. A
+dashboard for that program comes as an integration, not a starter, so
+servers without such PCs do not get it.

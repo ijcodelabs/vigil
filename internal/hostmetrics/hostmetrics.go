@@ -135,5 +135,6 @@ func Collect(ctx context.Context) ([]model.Sample, error) {
 		add("host_boot_time_seconds", float64(boot))
 	}
 	extra(add)
+	cpuTemperatures(sysPath(), add)
 	return out, lastErr
 }

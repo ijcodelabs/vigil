@@ -66,6 +66,8 @@ type resolveResult struct {
 	err error
 }
 
+var kindRe = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,39}$`)
+
 // FleetAgent is an agent as the Fleet page shows it.
 type FleetAgent struct {
 	AgentInfo
@@ -78,10 +80,14 @@ type FleetAgent struct {
 	Integrations []string `json:"integrations"`
 	Detected     []string `json:"detected"`
 	Unmonitored  []string `json:"unmonitored"`
-	// ConfigSource is "managed" (profiles apply) or "local" (none do; the
-	// agent uses its own file).
+	// Kind is set for an agent that is not a vigil-agent (its fact "kind").
+	Kind string `json:"kind,omitempty"`
+	// ConfigSource is "managed" (profiles apply), "local" (none do; the
+	// agent uses its own file) or "own" (not a vigil-agent: it keeps its
+	// settings itself and profiles never apply).
 	ConfigSource string `json:"config_source"`
-	// ConfigState is "in sync", "pending" (not picked up yet) or "error".
+	// ConfigState is "in sync", "pending" (not picked up yet), "error" or,
+	// for an agent of another kind, "not managed".
 	ConfigState string `json:"config_state"`
 	ConfigError string `json:"config_error,omitempty"`
 	// ConfigSkipped are settings of its managed config the agent does not
@@ -364,7 +370,7 @@ func (s *Server) handleAgents(w http.ResponseWriter, _ *http.Request) {
 				fa.Integrations = res.Integrations
 			}
 		}
-		for _, signal := range []string{signalMetrics, signalLogs} {
+		for _, signal := range []string{signalMetrics, signalLogs, signalSeries} {
 			if _, recent := s.limiter.state(a.ID, signal, now); recent {
 				fa.Limited = append(fa.Limited, signal)
 			}
@@ -379,6 +385,9 @@ func (s *Server) handleAgents(w http.ResponseWriter, _ *http.Request) {
 			if !slices.Contains(fa.Integrations, name) {
 				fa.Unmonitored = append(fa.Unmonitored, name)
 			}
+		}
+		if !fleet.OwnKind(attrs) {
+			fa.Kind, fa.ConfigSource, fa.ConfigState = attrs["kind"], "own", "not managed"
 		}
 		if fa.ConfigState == "" {
 			fa.ConfigState = "pending"
@@ -691,6 +700,12 @@ func (s *Server) handleAgentConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 512<<10)).Decode(&in); err != nil {
 		http.Error(w, "invalid report: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	// kind takes an agent out of profile management (fleet.OwnKind) and is
+	// shown on the Fleet page: a short name, nothing else.
+	if k, ok := in.Facts["kind"]; ok && !kindRe.MatchString(k) {
+		http.Error(w, "fact kind must be a short name: lower-case letters, digits, . _ -, at most 40", http.StatusBadRequest)
 		return
 	}
 	// A label may not use a fact's name; the agent's own id is not negotiable.

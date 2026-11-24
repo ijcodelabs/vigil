@@ -1,0 +1,175 @@
+title: Gaming PCs
+description: "Temperatures, frame rates, throttling and disk health of gaming PCs that report through GameMon, a Windows hardware monitor that enrols as an agent of its own (see the Agent protocol page of the docs). Switching it on installs the dashboard and the alert rules; GameMon itself is set up in its own settings, not by a profile. The CPU temperature rule also covers Linux hosts, whose agents report the same metric."
+params:
+  cpu_hot_celsius:
+    default: "90"
+    description: A CPU package hotter than this for a minute raises a warning.
+  hotspot_celsius:
+    default: "100"
+    description: A GPU hot spot hotter than this for a minute raises a warning.
+  throttle_share:
+    default: "0.5"
+    description: A GPU held back by heat for more than this share of five minutes raises a warning (0.5 is half the time).
+  disk_hot_celsius:
+    default: "70"
+    description: A disk hotter than this for five minutes raises a warning.
+  disk_life_ratio:
+    default: "0.1"
+    description: A disk with less than this share of its rated life left raises a warning (0.1 is 10 %).
+config: {}
+rules:
+  - name: alerts
+    interval: 1m
+    rules:
+      - alert: CpuHot
+        expr: host_cpu_temperature_celsius{sensor="package"} > ${cpu_hot_celsius}
+        for: 1m
+        labels: {severity: warning}
+        annotations:
+          summary: 'The CPU of {{ $labels.agent }} is at {{ $value }} °C'
+      - alert: GpuHotSpotHot
+        expr: gamemon_gpu_hotspot_celsius > ${hotspot_celsius}
+        for: 1m
+        labels: {severity: warning}
+        annotations:
+          summary: 'The hot spot of GPU {{ $labels.gpu }} of {{ $labels.agent }} is at {{ $value }} °C'
+      - alert: GpuThermalThrottling
+        expr: avg_over_time(gamemon_gpu_throttle{reason="thermal"}[5m]) > ${throttle_share}
+        labels: {severity: warning}
+        annotations:
+          summary: 'GPU {{ $labels.gpu }} of {{ $labels.agent }} was slowed down by heat for {{ $value | humanizePercentage }} of the last five minutes'
+      - alert: DiskHot
+        expr: gamemon_disk_temperature_celsius > ${disk_hot_celsius}
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: 'Disk {{ $labels.device }} of {{ $labels.agent }} is at {{ $value }} °C'
+      - alert: DiskWearingOut
+        expr: gamemon_disk_life_remaining_ratio < ${disk_life_ratio}
+        for: 1h
+        labels: {severity: warning}
+        annotations:
+          summary: 'Disk {{ $labels.device }} of {{ $labels.agent }} has {{ $value | humanizePercentage }} of its rated life left'
+dashboard:
+  title: Gaming PCs
+  variables:
+    - {name: agent, label: agent, match: gamemon_info}
+  panels:
+    - {title: CPU (°C), type: stat, w: 2, h: 2, warn: 85, crit: 95, queries: [{expr: 'round(max(host_cpu_temperature_celsius{agent=~"$agent", sensor="package"}))'}]}
+    - {title: GPU (°C), type: stat, w: 2, h: 2, warn: 80, crit: 88, queries: [{expr: 'round(max(gpu_temperature_celsius{agent=~"$agent"}))'}]}
+    - {title: GPU hot spot (°C), type: stat, w: 2, h: 2, warn: 95, crit: 105, queries: [{expr: 'round(max(gamemon_gpu_hotspot_celsius{agent=~"$agent"}))'}]}
+    - {title: FPS now, type: stat, w: 2, h: 2, queries: [{expr: 'round(avg(gamemon_fps{agent=~"$agent"})) or vector(0)'}]}
+    - {title: GPU memory used, type: stat, w: 2, h: 2, unit: ratio, warn: 0.9, crit: 0.97, queries: [{expr: 'max(gpu_memory_used_bytes{agent=~"$agent"} / gpu_memory_total_bytes)'}]}
+    - {title: RAM used, type: stat, w: 2, h: 2, unit: ratio, warn: 0.85, crit: 0.95, queries: [{expr: 'max(1 - host_memory_available_bytes{agent=~"$agent"} / host_memory_total_bytes)'}]}
+    - title: Frame rate
+      type: timeseries
+      w: 6
+      h: 3
+      min: 0
+      queries:
+        - {expr: 'gamemon_fps{agent=~"$agent"}', legend: '{{agent}} {{game}}'}
+        - {expr: 'gamemon_fps_low1{agent=~"$agent"}', legend: '{{agent}} {{game}} 1% low'}
+    - title: Frame time (ms)
+      type: timeseries
+      w: 6
+      h: 3
+      min: 0
+      queries: [{expr: 'gamemon_frametime_ms{agent=~"$agent"}', legend: '{{agent}} {{game}}'}]
+    - title: CPU temperature (°C)
+      type: timeseries
+      w: 6
+      h: 3
+      queries: [{expr: 'host_cpu_temperature_celsius{agent=~"$agent"}', legend: '{{agent}} cpu {{cpu}} {{sensor}}'}]
+    - title: GPU temperatures (°C)
+      type: timeseries
+      w: 6
+      h: 3
+      queries:
+        - {expr: 'gpu_temperature_celsius{agent=~"$agent"}', legend: '{{agent}} gpu {{gpu}} core'}
+        - {expr: 'gamemon_gpu_hotspot_celsius{agent=~"$agent"}', legend: '{{agent}} gpu {{gpu}} hot spot'}
+        - {expr: 'gamemon_gpu_memory_temperature_celsius{agent=~"$agent"}', legend: '{{agent}} gpu {{gpu}} memory'}
+    - title: Load
+      type: timeseries
+      w: 6
+      h: 3
+      unit: ratio
+      min: 0
+      queries:
+        - {expr: 'gpu_utilization_ratio{agent=~"$agent"}', legend: '{{agent}} gpu {{gpu}}'}
+        - {expr: 'gamemon_cpu_utilization_ratio{agent=~"$agent"}', legend: '{{agent}} cpu {{scope}}'}
+    - title: GPU power (W)
+      type: timeseries
+      w: 6
+      h: 3
+      min: 0
+      queries:
+        - {expr: 'gpu_power_watts{agent=~"$agent"}', legend: '{{agent}} gpu {{gpu}}'}
+        - {expr: 'gpu_power_limit_watts{agent=~"$agent"}', legend: '{{agent}} gpu {{gpu}} limit'}
+        - {expr: 'gamemon_cpu_power_watts{agent=~"$agent"}', legend: '{{agent}} cpu'}
+    - title: GPU held back (share of the time)
+      type: timeseries
+      w: 6
+      h: 3
+      unit: ratio
+      min: 0
+      # Only what slows a working GPU down. NVIDIA also reports idle, sync
+      # boost and application clocks, which are no brake.
+      queries: [{expr: 'avg_over_time(gamemon_gpu_throttle{agent=~"$agent", reason=~"thermal|power|hw_slowdown|psu_brake"}[1m]) > 0', legend: '{{agent}} gpu {{gpu}} {{reason}}'}]
+    - title: Clocks (MHz)
+      type: timeseries
+      w: 6
+      h: 3
+      min: 0
+      queries:
+        - {expr: 'gamemon_gpu_clock_mhz{agent=~"$agent"}', legend: '{{agent}} gpu {{gpu}} {{domain}}'}
+        - {expr: 'gamemon_cpu_clock_mhz{agent=~"$agent"}', legend: '{{agent}} cpu'}
+    - title: Memory
+      type: timeseries
+      w: 6
+      h: 3
+      unit: bytes
+      min: 0
+      queries:
+        - {expr: 'host_memory_used_bytes{agent=~"$agent"}', legend: '{{agent}} RAM used'}
+        - {expr: 'gamemon_memory_commit_used_bytes{agent=~"$agent"}', legend: '{{agent}} commit'}
+        - {expr: 'gpu_memory_used_bytes{agent=~"$agent"}', legend: '{{agent}} gpu {{gpu}} memory'}
+    - title: Disk throughput
+      type: timeseries
+      w: 6
+      h: 3
+      unit: bytes/s
+      min: 0
+      queries:
+        - {expr: 'rate(host_disk_read_bytes_total{agent=~"$agent"}[1m])', legend: '{{agent}} {{device}} read'}
+        - {expr: 'rate(host_disk_written_bytes_total{agent=~"$agent"}[1m])', legend: '{{agent}} {{device}} write'}
+    - title: Disks
+      type: table
+      w: 6
+      h: 3
+      queries:
+        - {expr: 'gamemon_disk_temperature_celsius{agent=~"$agent"}', legend: 'Temperature (°C)'}
+        - {expr: '100 * gamemon_disk_life_remaining_ratio{agent=~"$agent"}', legend: 'Life left (%)'}
+    - title: Fullest drives
+      type: table
+      w: 6
+      h: 3
+      unit: percent
+      queries: [{expr: 'sort_desc(100 * (1 - host_filesystem_free_bytes{agent=~"$agent"} / host_filesystem_size_bytes))', legend: '{{agent}} {{mountpoint}}'}]
+    - title: Game sessions
+      type: logs
+      source: logs
+      w: 12
+      h: 4
+      queries: [{expr: 'source:gamemon kind:game_session agent:~"$agent"'}]
+queries:
+  - name: CPU temperature (°C)
+    query: host_cpu_temperature_celsius
+  - name: Frame rate and 1% lows
+    query: '{__name__=~"gamemon_fps|gamemon_fps_low1"}'
+  - name: GPU hot spot (°C)
+    query: gamemon_gpu_hotspot_celsius
+  - name: GPU throttling (share of the last 5 minutes)
+    query: avg_over_time(gamemon_gpu_throttle[5m])
+  - name: Game sessions
+    type: logs
+    query: 'source:gamemon kind:game_session'

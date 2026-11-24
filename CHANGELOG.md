@@ -14,6 +14,40 @@ after. How a release is made: [releasing.md](memory/context/releasing.md).
 
 ## Unreleased
 
+### Added
+
+- **Programs other than vigil-agent can be hosts of their own.** The
+  protocol agents speak (enrol, metrics, logs, facts, TLS pinning) is
+  documented for other programs: [Sending from your own software](docs/agent-protocol.md).
+  Such a program reports a fact `kind` (e.g. `gamemon`); Fleet shows the
+  kind next to its id and its configuration as "not managed", and profiles
+  never apply to it.
+- **CPU temperature** on Linux: `host_cpu_temperature_celsius{cpu, sensor}`
+  from the kernel's sensors, the whole CPU (`sensor="package"`) and AMD's
+  core dies (`ccd1`, …). Absent in virtual machines.
+- **Gaming PCs integration**: a dashboard (frame rate, frame time, CPU and
+  GPU temperatures, throttling, clocks, disks, game sessions) and alert
+  rules (CpuHot, GpuHotSpotHot, GpuThermalThrottling, DiskHot,
+  DiskWearingOut) for Windows PCs that report through GameMon.
+
+### Security
+
+- **A cap on the different series one agent writes** (`limits.series_per_hour`,
+  per agent under `limits.agents`). Off for vigil-agents unless set; 10 000
+  an hour for programs that report another kind
+  (`other_kinds_series_per_hour`). An agent over it gets `429` and shows as
+  "over limit: series" on the Fleet page.
+- A log line sent with `source="security"` (as a stream label or a
+  field) is stored as `exported_source`. Only runtime detections, which
+  come through their own endpoint, carry `source=security` now, so an
+  application log or another program cannot make lines that pass for
+  detections on the security pages or on Home.
+
+### Upgrade notes
+
+- `kind` is now a fact: a label of that name in an agent's file is dropped,
+  as labels named like other facts already are.
+
 ## v0.3.0 (2026-11-12)
 
 ### Fixed

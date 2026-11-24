@@ -82,6 +82,7 @@ type Server struct {
 	started time.Time
 	proxies []*net.IPNet // trusted_proxies, parsed
 	limiter ingestLimiter
+	series  seriesLimiter
 	slots   chan struct{} // nil: no bound on batches in flight
 	busy    atomic.Uint64
 	tokenMu sync.Mutex
@@ -156,6 +157,7 @@ func New(cfg *config.Server, log *slog.Logger) (*Server, error) {
 		logins:  loginLimiter{fails: map[string][]time.Time{}},
 		started: time.Now(),
 		limiter: ingestLimiter{buckets: map[string]*bucket{}},
+		series:  seriesLimiter{agents: map[string]*seriesSeen{}},
 		tokens:  map[string]string{}, touched: map[string]touchState{},
 		http: &http.Client{Timeout: 30 * time.Second}}
 	s.openVault()
@@ -361,6 +363,20 @@ func (s *Server) handleWrite(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if max := s.seriesLimit(id); max > 0 {
+		ids, err := seriesIDs(body)
+		if err != nil {
+			http.Error(w, "bad write request: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		if now := time.Now(); !s.series.allow(id, ids, max, now) {
+			s.limiter.refused(id, signalSeries, now)
+			w.Header().Set("Retry-After", "300")
+			http.Error(w, fmt.Sprintf("this agent writes more than the server's limit of %d different series an hour; the batch was not stored, send it again later", max),
+				http.StatusTooManyRequests)
+			return
+		}
+	}
 	if err := s.forward(r.Context(), id, body); err != nil {
 		s.log.Warn("forward to metrics store failed", "agent", id, "err", err)
 		http.Error(w, "metrics store unavailable", http.StatusServiceUnavailable) // agent retries
@@ -520,7 +536,7 @@ func (s *Server) writeHeartbeats(ctx context.Context) {
 		}
 		// Only for agents the server has ever held back, so a quiet fleet
 		// costs no series.
-		for _, signal := range []string{signalMetrics, signalLogs} {
+		for _, signal := range []string{signalMetrics, signalLogs, signalSeries} {
 			if n, _ := s.limiter.state(a.ID, signal, now); n > 0 {
 				b = append(b, model.Sample{Name: "vigil_agent_limited_batches_total", Labels: map[string]string{"signal": signal},
 					Value: float64(n), TS: now.UnixMilli()})

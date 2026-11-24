@@ -232,7 +232,8 @@ Names that may hold a certificate from the server's authority (APM,
 
 ## What agents send
 
-For completeness; you do not normally call these yourself.
+For completeness; you do not normally call these yourself. To write a
+program that sends this way, see [Sending from your own software](agent-protocol.md).
 
 | | |
 |---|---|
@@ -241,7 +242,7 @@ For completeness; you do not normally call these yourself.
 | `POST /api/v1/events` | security detections |
 | `POST /api/v1/captures` | a capture |
 | `POST /api/v1/traces` | spans, as a gzip-compressed OTLP trace request |
-| `POST /api/v1/agent/config` | the agent says who it is and gets its configuration |
+| `POST /api/v1/agent/config` | the agent says who it is and gets its configuration; an agent whose fact `kind` is not `vigil-agent` gets none (`204`) |
 | `POST /api/v1/enroll` | `{"token": "vge_…", "agent_id": "..."}` → `{"token": "vgl_…"}`. Needs no other credential |
 | `GET /api/v1/ca` | the certificate of the server's own authority (PEM), public |
 
